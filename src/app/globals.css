@@ -1,0 +1,101 @@
+@import "tailwindcss";
+@import "@fontsource/shippori-mincho/japanese-400.css";
+@import "@fontsource/shippori-mincho/japanese-600.css";
+@import "@fontsource/shippori-mincho/japanese-800.css";
+
+:root {
+  --background: #06070a;
+  --background-elevated: #0d0f13;
+  --panel: #0f1116;
+  --panel-soft: #12141a;
+  --panel-border: #23262f;
+  --foreground: #eef0f4;
+  --muted: #8b8f9c;
+
+  /* Fríos: platino + acero + azul hielo. Sin dorado, sin morado neón. */
+  --accent-from: #7fa8c9;
+  --accent-via: #4d6f96;
+  --accent-to: #1a2636;
+  --accent-solid: #6a94bd;
+  --ice: #a9c6e0;
+  --platinum: #c7ccd6;
+
+  --official: #4d9b7a;
+  --confirmed: #6d93c4;
+  --rumor: #b7965f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-border: var(--panel-border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent-solid);
+  --color-ice: var(--ice);
+  --color-platinum: var(--platinum);
+  --font-serif-jp: "Shippori Mincho", "Noto Serif JP", serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  letter-spacing: 0.005em;
+  scrollbar-color: var(--panel-border) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 999px;
+  border: 2px solid var(--background);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #34394a; background-clip: padding-box; }
+
+.font-heading {
+  font-family: var(--font-serif-jp);
+  letter-spacing: 0.01em;
+}
+
+.accent-gradient {
+  background-image: linear-gradient(135deg, var(--accent-from), var(--accent-via) 65%, var(--accent-to));
+}
+
+.accent-gradient-text {
+  background-image: linear-gradient(120deg, var(--platinum), var(--ice));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ice-text { color: var(--ice); }
+
+.panel {
+  background: linear-gradient(160deg, var(--panel-soft), var(--panel));
+  border: 1px solid var(--panel-border);
+}
+
+.panel-elevated {
+  background: var(--background-elevated);
+  border: 1px solid var(--panel-border);
+}
+
+.hairline { border-color: var(--panel-border); }
+
+.rule-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--panel-border), transparent);
+}
+
+.scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 999px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

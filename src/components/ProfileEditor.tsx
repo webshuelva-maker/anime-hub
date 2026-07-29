@@ -1,0 +1,161 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { DEFAULT_PREFERENCES, getPreferences, savePreferences } from "@/lib/storage";
+import { UserPreferences } from "@/types/news";
+import { AVATAR_OPTIONS } from "@/data/options";
+import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
+import { TagInput } from "./TagInput";
+
+export function ProfileEditor() {
+  const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPrefs(getPreferences());
+  }, []);
+
+  const handleSave = () => {
+    savePreferences(prefs);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const currentMeaning = AVATAR_OPTIONS.find((a) => a.id === prefs.avatarId)?.meaning;
+
+  const stats = [
+    { label: "Géneros seguidos", value: prefs.genres.length },
+    { label: "Estudios seguidos", value: prefs.studios.length },
+    { label: "Plataformas", value: prefs.platforms.length + prefs.customPlatforms.length },
+    { label: "Animes favoritos", value: prefs.favoriteTitles.length },
+  ];
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 ">
+      {/* Cabecera de perfil: banner con textura + avatar circular flotando sobre la costura */}
+      <div className="panel overflow-hidden rounded-2xl pt-12 text-center">
+        <div className="relative mx-auto -mb-2 w-fit">
+          <div className="relative rounded-full p-[3px]" style={{ background: "linear-gradient(135deg, var(--ice), var(--accent-from))" }}>
+            <div className="rounded-full bg-background p-1">
+              <Avatar
+                avatarId={prefs.avatarId}
+                photoDataUrl={prefs.avatarPhotoDataUrl}
+                size="xl"
+                rounded="full"
+              />
+            </div>
+            <PhotoUploadButton
+              variant="badge"
+              onSelect={(dataUrl) =>
+                setPrefs((p) => ({ ...p, avatarPhotoDataUrl: dataUrl }))
+              }
+            />
+          </div>
+        </div>
+
+        <div className="px-6 pb-8 pt-4">
+          <input
+            type="text"
+            value={prefs.displayName}
+            maxLength={24}
+            onChange={(e) => setPrefs((p) => ({ ...p, displayName: e.target.value }))}
+            placeholder="Tu nombre"
+            className="font-heading w-full bg-transparent text-center text-2xl font-semibold text-foreground outline-none placeholder:text-muted"
+          />
+          {!prefs.avatarPhotoDataUrl && currentMeaning && (
+            <p className="mt-1 text-sm text-muted">emblema · {currentMeaning}</p>
+          )}
+          {prefs.avatarPhotoDataUrl && (
+            <button
+              type="button"
+              onClick={() => setPrefs((p) => ({ ...p, avatarPhotoDataUrl: null }))}
+              className="mt-1 text-xs font-medium text-muted transition-colors hover:text-accent"
+            >
+              Quitar foto y volver al emblema
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 ">
+        {stats.map((s) => (
+          <div key={s.label} className="panel rounded-xl p-4 text-center card-hover">
+            <p className="font-heading accent-gradient-text text-2xl font-bold">{s.value}</p>
+            <p className="mt-1 text-xs text-muted">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="panel mt-6 rounded-2xl p-6">
+        <h2 className="font-heading text-lg font-semibold">Emblema</h2>
+        <p className="mt-1 text-sm text-muted">
+          Cada emblema tiene un significado en japonés. Pulsa el icono de cámara sobre tu avatar para subir una foto en su lugar.
+        </p>
+        <div className="mt-4">
+          <AvatarPicker
+            selectedId={prefs.avatarId}
+            onSelect={(avatarId) => setPrefs((p) => ({ ...p, avatarId, avatarPhotoDataUrl: null }))}
+          />
+        </div>
+      </div>
+
+      <div className="panel mt-6 rounded-2xl p-6">
+        <h2 className="font-heading text-lg font-semibold">Animes favoritos</h2>
+        <p className="mt-1 text-sm text-muted">
+          Te priorizamos noticias sobre estos títulos en tu feed.
+        </p>
+        <div className="mt-3">
+          <TagInput
+            values={prefs.favoriteTitles}
+            onChange={(favoriteTitles) => setPrefs((p) => ({ ...p, favoriteTitles }))}
+            placeholder="Ej: One Piece"
+          />
+        </div>
+      </div>
+
+      <div className="panel mt-6 rounded-2xl p-6">
+        <h2 className="font-heading text-lg font-semibold">Cuenta</h2>
+        <p className="mt-1 text-sm text-muted">
+          De momento tu perfil vive solo en este navegador (sin servidor todavía),
+          así que no hay usuario y contraseña reales — sería una seguridad falsa.
+          En cuanto conectemos un backend, aquí mismo añadiremos inicio de sesión de verdad.
+        </p>
+      </div>
+
+      <div className="mt-8 flex justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          className="accent-gradient rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-[1.03] active:scale-95"
+        >
+          {saved ? "Guardado ✓" : "Guardar cambios"}
+        </button>
+      </div>
+
+      <div className="panel-elevated relative mt-10 overflow-hidden rounded-2xl border border-ice/25 p-6">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <span className="inline-block rounded-full bg-ice px-3 py-1 text-xs font-bold text-black">
+              PREMIUM
+            </span>
+            <h2 className="font-heading mt-3 text-lg font-semibold">
+              Desbloquea la experiencia completa
+            </h2>
+            <p className="mt-1 max-w-md text-sm text-muted">
+              Feed sin límites, alertas instantáneas, asistente de IA personal y
+              emblemas exclusivos. Próximamente, desde 0,99 €/mes.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled
+            className="cursor-not-allowed whitespace-nowrap rounded-full border border-ice/40 px-5 py-2.5 text-sm font-semibold text-ice/70"
+          >
+            Próximamente
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
