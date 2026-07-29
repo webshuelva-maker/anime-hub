@@ -85,6 +85,15 @@ body {
   border: 1px solid var(--panel-border);
 }
 
+.card-hover {
+  transition: transform 150ms ease-out, border-color 150ms ease-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgba(169, 198, 224, 0.35);
+}
+
 .hairline { border-color: var(--panel-border); }
 
 .rule-line {

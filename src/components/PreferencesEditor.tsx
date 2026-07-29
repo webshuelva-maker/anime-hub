@@ -74,12 +74,12 @@ export function PreferencesEditor() {
                   Géneros
                 </h2>
                 <div className="flex flex-col gap-3">
-                  {topGenres.map((g, i) => (
+                  {topGenres.map((g) => (
                     <motion.div
                       key={g.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.22, delay: i * 0.04, ease: "easeOut" }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
                     >
                       <AffinityBar name={g.name} count={g.count} max={maxCount} />
                     </motion.div>
@@ -93,12 +93,12 @@ export function PreferencesEditor() {
                   Estudios
                 </h2>
                 <div className="flex flex-col gap-3">
-                  {topStudios.map((s, i) => (
+                  {topStudios.map((s) => (
                     <motion.div
                       key={s.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.22, delay: i * 0.04, ease: "easeOut" }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
                     >
                       <AffinityBar name={s.name} count={s.count} max={maxCount} />
                     </motion.div>

@@ -1,6 +1,4 @@
 import { NewsCategory } from "@/types/news";
-import { colorFromTitle } from "@/lib/colorFromTitle";
-import { NewsScene } from "./NewsScene";
 
 const CATEGORY_LABELS: Record<NewsCategory, string> = {
   estreno: "Estreno",
@@ -11,6 +9,14 @@ const CATEGORY_LABELS: Record<NewsCategory, string> = {
   adaptacion: "Adaptación",
 };
 
+// Fotografía real con licencia libre de uso comercial (Picsum, que sirve
+// fotos de Unsplash), no arte ni fotogramas de ningún anime. Cada título
+// obtiene siempre la misma foto (semilla fija = su propio nombre).
+function photoUrl(relatedTitle: string, width: number, height: number) {
+  const seed = encodeURIComponent(relatedTitle);
+  return `https://picsum.photos/seed/${seed}/${width}/${height}`;
+}
+
 export function NewsCover({
   category,
   relatedTitle,
@@ -20,9 +26,6 @@ export function NewsCover({
   relatedTitle: string;
   tall?: boolean;
 }) {
-  const accent = colorFromTitle(relatedTitle);
-  const uid = `${category}-${relatedTitle}`.replace(/[^a-zA-Z0-9]/g, "");
-
   return (
     <div
       className={`relative w-full overflow-hidden ${
@@ -32,28 +35,22 @@ export function NewsCover({
       }`}
       style={{ background: "var(--panel)" }}
     >
-      <svg viewBox="0 0 400 300" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <clipPath id={`clip-${uid}`}>
-            <rect width="400" height="300" />
-          </clipPath>
-          <linearGradient id={`scrim-${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#000000" stopOpacity="0" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0.65" />
-          </linearGradient>
-        </defs>
-        <g clipPath={`url(#clip-${uid})`}>
-          <rect width="400" height="300" fill="var(--panel)" />
-          <NewsScene category={category} accent={accent} />
-          <rect x="0" y="190" width="400" height="110" fill={`url(#scrim-${uid})`} />
-        </g>
-        <rect x="1" y="1" width="398" height="298" fill="none" stroke={accent} strokeOpacity="0.3" strokeWidth="1" />
-      </svg>
+      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum/Unsplash), no cabe en next/image sin configurar dominios remotos */}
+      <img
+        src={photoUrl(relatedTitle, 640, 420)}
+        alt=""
+        loading="lazy"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div
+        className="absolute inset-0"
+        style={{ background: "linear-gradient(180deg, rgba(6,7,10,0.15) 0%, rgba(6,7,10,0.15) 55%, rgba(6,7,10,0.85) 100%)" }}
+      />
 
       <div className="absolute inset-0 flex flex-col justify-between p-4">
         <span
           className="w-fit border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.15em] text-white/85"
-          style={{ borderColor: "rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.3)" }}
+          style={{ borderColor: "rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.35)" }}
         >
           {CATEGORY_LABELS[category]}
         </span>

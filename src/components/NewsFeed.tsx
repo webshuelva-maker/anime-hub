@@ -102,11 +102,10 @@ export function NewsFeed() {
               Historias principales
             </p>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              {mainStories.map(({ item, score }, index) => (
+              {mainStories.map(({ item, score }) => (
                 <NewsCard
                   key={item.id}
                   item={item}
-                  index={index}
                   highlight={hasLearned && score > 0}
                   liked={prefs.likedNewsIds.includes(item.id)}
                   onToggleLike={() => handleToggleLike(item.id)}
@@ -123,18 +122,17 @@ export function NewsFeed() {
               Más noticias
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {tail.slice(0, visibleTail).map(({ item }, index) => (
+              {tail.slice(0, visibleTail).map(({ item }) => (
                 <motion.button
                   key={item.id}
                   type="button"
                   onClick={() => handleOpenDetail(item.id, item)}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.22, delay: Math.min(index, 6) * 0.025 }}
-                  whileHover={{ y: -2 }}
-                  className="panel flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left transition-colors hover:border-ice/30"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="card-hover panel flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left hover:border-ice/30"
                 >
-                  <NewsThumb category={item.category} relatedTitle={item.relatedTitle} />
+                  <NewsThumb relatedTitle={item.relatedTitle} />
                   <div className="min-w-0 flex-1">
                     <div className="mb-1.5 flex items-center gap-2">
                       <ReliabilityBadge reliability={item.reliability} />

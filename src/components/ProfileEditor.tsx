@@ -6,10 +6,12 @@ import { UserPreferences } from "@/types/news";
 import { AVATAR_OPTIONS } from "@/data/options";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
 import { TagInput } from "./TagInput";
+import { Toast } from "./Toast";
 
 export function ProfileEditor() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [saved, setSaved] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -20,6 +22,11 @@ export function ProfileEditor() {
     savePreferences(prefs);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handlePremiumClick = () => {
+    setToast("Próximamente: implementaremos los pagos en cuanto conectemos un backend real. ¡Gracias por tu paciencia!");
+    setTimeout(() => setToast(null), 3500);
   };
 
   const currentMeaning = AVATAR_OPTIONS.find((a) => a.id === prefs.avatarId)?.meaning;
@@ -149,13 +156,15 @@ export function ProfileEditor() {
           </div>
           <button
             type="button"
-            disabled
-            className="cursor-not-allowed whitespace-nowrap rounded-full border border-ice/40 px-5 py-2.5 text-sm font-semibold text-ice/70"
+            onClick={handlePremiumClick}
+            className="whitespace-nowrap rounded-full border border-ice/40 px-5 py-2.5 text-sm font-semibold text-ice transition-colors hover:bg-ice/10"
           >
             Próximamente
           </button>
         </div>
       </div>
+
+      <Toast message={toast} />
     </div>
   );
 }

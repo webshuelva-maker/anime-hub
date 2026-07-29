@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 import { siteConfig } from "@/config/site";
 import { getPreferences } from "@/lib/storage";
 import { Avatar } from "./AvatarPicker";
+import { FullscreenButton } from "./FullscreenButton";
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
@@ -44,21 +44,15 @@ export function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`relative py-1 text-sm font-medium transition-colors ${
-                  active ? "text-foreground" : "text-muted hover:text-foreground"
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                  active ? "bg-panel-soft text-foreground" : "text-muted hover:text-foreground"
                 }`}
               >
                 {link.label}
-                {active && (
-                  <motion.span
-                    layoutId="nav-indicator"
-                    className="absolute -bottom-[17px] left-0 right-0 h-[2px] bg-ice"
-                    transition={{ type: "spring", stiffness: 320, damping: 34 }}
-                  />
-                )}
               </Link>
             );
           })}
+          <FullscreenButton />
           <Link href="/perfil" className="transition-transform hover:scale-105">
             <Avatar avatarId={avatarId} photoDataUrl={photoDataUrl} size="sm" rounded="full" />
           </Link>
