@@ -11,6 +11,19 @@ function stripTags(html: string): string {
     .trim();
 }
 
+function stripNonContentBlocks(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "");
+}
+
+/** Descarta "párrafos" que en realidad son CSS colado (llaves, dos puntos con ;, etc.) */
+function looksLikeCode(text: string): boolean {
+  const codeSignals = (text.match(/[{};]/g) || []).length;
+  return codeSignals >= 3 || /^\.[a-zA-Z-]+\s*\{/.test(text) || /:\s*\d+px/.test(text);
+}
+
 function extractOgImage(html: string): string | null {
   const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
     ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
@@ -36,10 +49,11 @@ export async function fetchArticlePage(url: string): Promise<{ text: string | nu
     });
     if (!res.ok) return { text: null, image: null };
     const html = await res.text();
+    const cleanHtml = stripNonContentBlocks(html);
 
-    const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    const paragraphs = [...cleanHtml.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
       .map((m) => stripTags(m[1]))
-      .filter((text) => text.length > 40);
+      .filter((text) => text.length > 40 && !looksLikeCode(text));
 
     const combined = paragraphs.length > 0 ? paragraphs.join("\n\n") : null;
     const text = combined && combined.length > 4000 ? `${combined.slice(0, 4000)}…` : combined;

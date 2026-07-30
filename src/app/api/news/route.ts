@@ -95,7 +95,8 @@ async function fetchFeed(feed: { url: string; platform: string; label: string })
     const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "Sin título";
     const title = stripHtml(rawTitle);
     const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? "").trim();
-    const pubDateRaw = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim();
+    const pubDateRaw = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]
+      ?? block.match(/<dc:date>([\s\S]*?)<\/dc:date>/)?.[1])?.trim();
     const rawDescription = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? "";
     const description = dedupeAgainstTitle(stripHtml(rawDescription), title);
     const embeddedImage = extractEmbeddedImage(block, rawDescription);

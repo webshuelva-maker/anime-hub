@@ -287,7 +287,9 @@ export function NewsFeed() {
                       <div className="min-w-0">
                         <p className="font-heading text-sm font-semibold text-foreground">{a.title}</p>
                         <p className="mt-0.5 text-[11px] uppercase tracking-wide text-ice">
-                          {[a.format, a.status].filter(Boolean).join(" · ")}
+                          {[a.format, a.status, a.startYear ? (a.endYear && a.endYear !== a.startYear ? `${a.startYear}–${a.endYear}` : `${a.startYear}`) : null]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </p>
                         {a.description && (
                           <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted">{a.description}</p>
@@ -304,7 +306,16 @@ export function NewsFeed() {
             </p>
             {searchResults.length === 0 ? (
               <p className="panel rounded-xl p-8 text-center text-sm text-muted">
-                No hay noticias recientes disponibles sobre &quot;{searchTerm}&quot; ahora mismo.
+                {(() => {
+                  const known = animeResults[0];
+                  if (known?.status === "FINISHED" && known.endYear) {
+                    return `No hay noticias recientes sobre "${searchTerm}" — "${known.title}" terminó en ${known.endYear}, así que ya no suele salir en la actualidad. Puedes buscarla directamente en el feed de noticias si sale algo nuevo (spin-offs, reediciones...).`;
+                  }
+                  if (known?.status === "NOT_YET_RELEASED") {
+                    return `"${known.title}" todavía no se ha estrenado, así que de momento no hay noticias recientes sobre ella — en cuanto se acerque la fecha, debería empezar a aparecer cobertura.`;
+                  }
+                  return `No hay noticias recientes disponibles sobre "${searchTerm}" ahora mismo.`;
+                })()}
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

@@ -57,6 +57,8 @@ export interface AnimeSearchResult {
   description: string | null;
   format: string | null;
   status: string | null;
+  startYear: number | null;
+  endYear: number | null;
   genres: string[];
   type: "ANIME" | "MANGA";
 }
@@ -71,6 +73,8 @@ query ($search: String) {
       description(asHtml: false)
       format
       status
+      startDate { year }
+      endDate { year }
       genres
     }
   }
@@ -125,6 +129,8 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutc
       description?: string;
       format?: string;
       status?: string;
+      startDate?: { year?: number };
+      endDate?: { year?: number };
       genres?: string[];
     }) => ({
       id: m.id,
@@ -133,6 +139,8 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutc
       description: m.description ? m.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : null,
       format: m.format ?? null,
       status: m.status ?? null,
+      startYear: m.startDate?.year ?? null,
+      endYear: m.endDate?.year ?? null,
       genres: m.genres ?? [],
       type: "ANIME" as const,
     }));
