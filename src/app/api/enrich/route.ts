@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findCoverImage, guessSeriesName } from "@/lib/anilist";
-import { fetchFullArticle } from "@/lib/articleReader";
+import { fetchArticlePage } from "@/lib/articleReader";
 import { translateNewsFields } from "@/lib/translate";
 
 export const runtime = "nodejs";
 
+/**
+ * Enriquecimiento RÁPIDO para una tarjeta de la lista: carátula + título y
+ * resumen traducidos. El artículo completo (más lento) se pide aparte,
+ * solo cuando el usuario abre esa noticia — ver /api/enrich-detail.
+ */
 export async function GET(req: NextRequest) {
   const relatedTitle = req.nextUrl.searchParams.get("relatedTitle") ?? "";
   const title = req.nextUrl.searchParams.get("title") ?? "";
@@ -12,22 +17,21 @@ export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url") ?? "";
   const alreadyHasImage = req.nextUrl.searchParams.get("hasImage") === "1";
 
-  // La carátula y el artículo completo son independientes entre sí, así
-  // que se piden en paralelo — pero solo para ESTA noticia, no para todas
-  // a la vez, para no disparar de golpe decenas de peticiones a AniList.
-  const [cover, fullArticle] = await Promise.all([
+  const [aniListCover, article] = await Promise.all([
     alreadyHasImage ? Promise.resolve(null) : findCoverImage(guessSeriesName(relatedTitle)),
-    fetchFullArticle(url),
+    alreadyHasImage ? Promise.resolve({ text: null, image: null }) : fetchArticlePage(url),
   ]);
 
-  const bodyForTranslation = fullArticle || summary || title;
-  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, bodyForTranslation);
+  // Preferimos la carátula oficial de AniList; si no hay, la propia imagen
+  // de la página del artículo (og:image, casi siempre presente).
+  const coverImageUrl = aniListCover || article.image || null;
+
+  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, summary || title);
 
   return NextResponse.json({
-    coverImageUrl: cover,
+    coverImageUrl,
     title: translated?.title ?? null,
     summary: translated?.summary ?? null,
-    body: translated?.body ?? fullArticle ?? null,
     translateDebug,
   });
 }

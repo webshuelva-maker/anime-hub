@@ -12,18 +12,34 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   actions?: AssistantAction[];
+  ts?: number;
 }
 
-const MESSAGES_STORAGE_KEY = "anime-hub:assistant-messages";
+const ARCHIVE_KEY = "anime-hub:assistant-archive";
+// Si ha pasado más de esto desde el último mensaje, se considera que
+// vuelves "otro día": la conversación visible empieza de cero, pero Ren
+// sigue teniendo acceso a los temas de antes si le preguntas por ellos.
+const SESSION_GAP_MS = 60 * 60 * 1000;
 
-function loadStoredMessages(): Message[] {
+function loadArchive(): Message[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(MESSAGES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(ARCHIVE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
+}
+
+function saveArchive(messages: Message[]): void {
+  window.localStorage.setItem(ARCHIVE_KEY, JSON.stringify(messages.slice(-60)));
+}
+
+/** Resumen breve de temas ya hablados, para que Ren pueda recordarlos sin repetir la conversación entera. */
+function buildPriorTopicsSummary(archive: Message[]): string {
+  const userLines = archive.filter((m) => m.role === "user").slice(-10).map((m) => `- ${m.content}`);
+  if (userLines.length === 0) return "";
+  return `Cosas de las que ya ha hablado contigo este usuario en sesiones anteriores (no continúes esa conversación, pero recuérdalas si te pregunta por ellas):\n${userLines.join("\n")}`;
 }
 
 function Orb({ active, size = 24 }: { active: boolean; size?: number }) {
@@ -70,22 +86,38 @@ function TypingDots() {
   );
 }
 
+function initialMessages(): Message[] {
+  const archive = loadArchive();
+  const last = archive[archive.length - 1];
+  const isFreshSession = !last || !last.ts || Date.now() - last.ts > SESSION_GAP_MS;
+  // Si vuelves tras un rato, la vista empieza limpia (pero el archivo sigue
+  // intacto para que Ren pueda recordar temas si se lo preguntas).
+  return isFreshSession ? [] : archive;
+}
+
 export function AssistantOrb() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>(loadStoredMessages);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [archive, setArchive] = useState<Message[]>(loadArchive);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (messages.length === 0) return;
-    window.localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages));
-  }, [messages]);
+  const appendToArchive = (msgs: Message[]) => {
+    setArchive((prev) => {
+      const next = [...prev, ...msgs];
+      saveArchive(next);
+      return next;
+    });
+  };
 
   const handleClearChat = () => {
+    const confirmed = window.confirm("¿Seguro que quieres borrar la conversación con Ren? No se puede deshacer.");
+    if (!confirmed) return;
     setMessages([]);
-    window.localStorage.removeItem(MESSAGES_STORAGE_KEY);
+    setArchive([]);
+    window.localStorage.removeItem(ARCHIVE_KEY);
   };
 
   useEffect(() => {
@@ -95,12 +127,12 @@ export function AssistantOrb() {
       setPrefs(p);
       if (messages.length === 0) {
         const name = p.displayName ? `, ${p.displayName}` : "";
-        setMessages([
-          {
-            role: "assistant",
-            content: `Hola${name}. Soy ${siteConfig.assistantName} — puedo ponerte al día de las noticias, hablarte de lo que sigues, o simplemente charlar de anime. ¿Qué te apetece?`,
-          },
-        ]);
+        const greeting: Message = {
+          role: "assistant",
+          content: `Hola${name}. Soy ${siteConfig.assistantName} — puedo ponerte al día de las noticias, hablarte de lo que sigues, o simplemente charlar de anime. ¿Qué te apetece?`,
+          ts: Date.now(),
+        };
+        setMessages([greeting]);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,28 +146,30 @@ export function AssistantOrb() {
     const text = input.trim();
     if (!text || loading) return;
 
-    const nextMessages: Message[] = [...messages, { role: "user", content: text }];
+    const userMessage: Message = { role: "user", content: text, ts: Date.now() };
+    const nextMessages: Message[] = [...messages, userMessage];
     setMessages(nextMessages);
+    appendToArchive([userMessage]);
     setInput("");
     setLoading(true);
 
     try {
       const currentPrefs = getPreferences();
+      const priorTopics = buildPriorTopicsSummary(archive);
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: nextMessages,
-          context: buildAssistantContext(currentPrefs),
+          context: buildAssistantContext(currentPrefs) + (priorTopics ? `\n\n${priorTopics}` : ""),
         }),
       });
       const data = await res.json();
       const rawReply: string = data.reply || data.error || "No he podido responder.";
       const { cleanText, actions } = parseAndRunActions(rawReply);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: cleanText || rawReply, actions },
-      ]);
+      const assistantMessage: Message = { role: "assistant", content: cleanText || rawReply, actions, ts: Date.now() };
+      setMessages((prev) => [...prev, assistantMessage]);
+      appendToArchive([assistantMessage]);
     } catch {
       setMessages((prev) => [
         ...prev,

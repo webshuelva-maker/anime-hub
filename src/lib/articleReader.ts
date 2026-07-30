@@ -11,36 +11,42 @@ function stripTags(html: string): string {
     .trim();
 }
 
+function extractOgImage(html: string): string | null {
+  const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+  return og?.[1] ?? null;
+}
+
 /**
- * Descarga la página del artículo original y extrae el texto de sus
- * párrafos (<p>), como hacen los lectores tipo "modo lectura". No es
- * perfecto (cada web tiene su propia estructura), pero da mucho más
- * contenido que el resumen corto del RSS. Si algo falla o tarda demasiado,
- * devuelve null y el resumen corto se queda como estaba.
+ * Descarga la página del artículo original y saca dos cosas: el texto de
+ * sus párrafos (<p>), y la imagen "og:image" que casi cualquier web
+ * moderna incluye para cuando se comparte en redes — es la misma imagen
+ * que usa la propia web de origen, sea de un manga, un anime o lo que sea.
+ * Si algo falla o tarda demasiado, ambos valores quedan en null.
  */
-export async function fetchFullArticle(url: string): Promise<string | null> {
-  if (!url) return null;
+export async function fetchArticlePage(url: string): Promise<{ text: string | null; image: string | null }> {
+  if (!url) return { text: null, image: null };
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4000);
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0)" },
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { text: null, image: null };
     const html = await res.text();
 
     const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
       .map((m) => stripTags(m[1]))
-      .filter((text) => text.length > 40); // fuera migas de pan, avisos legales cortos, etc.
+      .filter((text) => text.length > 40);
 
-    if (paragraphs.length === 0) return null;
+    const combined = paragraphs.length > 0 ? paragraphs.join("\n\n") : null;
+    const text = combined && combined.length > 4000 ? `${combined.slice(0, 4000)}…` : combined;
 
-    const combined = paragraphs.join("\n\n");
-    return combined.length > 4000 ? `${combined.slice(0, 4000)}…` : combined;
+    return { text, image: extractOgImage(html) };
   } catch {
-    return null;
+    return { text: null, image: null };
   } finally {
     clearTimeout(timeout);
   }

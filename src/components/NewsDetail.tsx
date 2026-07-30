@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { NewsItem } from "@/types/news";
 import { NewsCover } from "./NewsCover";
@@ -16,9 +16,11 @@ export function NewsDetail({
   item: NewsItem | null;
   onClose: () => void;
 }) {
+  const [fullBody, setFullBody] = useState<string | null>(null);
+  const [loadingArticle, setLoadingArticle] = useState(false);
+  const [detailCover, setDetailCover] = useState<string | null>(null);
+
   // Bloquea el scroll de la página de fondo mientras el modal está abierto
-  // (html + body, y overscroll-behavior para que la rueda del ratón no
-  // "atraviese" el fondo aunque el modal esté encima).
   useEffect(() => {
     if (!item) return;
     const html = document.documentElement;
@@ -34,6 +36,29 @@ export function NewsDetail({
       body.style.overflow = prevBodyOverflow;
       body.style.overscrollBehavior = prevOverscroll;
     };
+  }, [item]);
+
+  // El artículo completo (más lento) solo se pide cuando se abre ESTA
+  // noticia en concreto, no para todas a la vez.
+  useEffect(() => {
+    if (!item) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFullBody(null);
+      setDetailCover(null);
+      return;
+    }
+    setFullBody(null);
+    setDetailCover(null);
+    setLoadingArticle(true);
+    const params = new URLSearchParams({ title: item.title, summary: item.summary, url: item.source.url });
+    fetch(`/api/enrich-detail?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data: { coverImageUrl?: string | null; body?: string | null }) => {
+        if (data.body) setFullBody(data.body);
+        if (data.coverImageUrl) setDetailCover(data.coverImageUrl);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingArticle(false));
   }, [item]);
 
   return (
@@ -67,7 +92,11 @@ export function NewsDetail({
             </button>
 
             <div className="max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain">
-              <NewsCover category={item.category} relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} />
+              <NewsCover
+                category={item.category}
+                relatedTitle={item.relatedTitle}
+                coverImageUrl={detailCover || item.coverImageUrl}
+              />
 
               <div className="p-6 sm:p-8">
                 <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -83,8 +112,11 @@ export function NewsDetail({
                 <p className="font-heading mt-3 text-sm text-muted">{item.relatedTitle}</p>
 
                 <p className="mt-6 whitespace-pre-line text-[15px] leading-relaxed text-foreground/90">
-                  {item.body}
+                  {fullBody || item.body}
                 </p>
+                {loadingArticle && !fullBody && (
+                  <p className="mt-3 text-xs text-muted">Buscando el artículo completo…</p>
+                )}
 
                 <div className="rule-line my-6" />
 

@@ -74,7 +74,7 @@ export function NewsFeed() {
 
       fetch(`/api/enrich?${params.toString()}`)
         .then((res) => res.json())
-        .then((data: { coverImageUrl?: string | null; title?: string | null; summary?: string | null; body?: string | null }) => {
+        .then((data: { coverImageUrl?: string | null; title?: string | null; summary?: string | null }) => {
           setItems((prev) => {
             const next = prev.map((it) =>
               it.id === item.id
@@ -83,7 +83,6 @@ export function NewsFeed() {
                     coverImageUrl: data.coverImageUrl || it.coverImageUrl,
                     title: data.title || it.title,
                     summary: data.summary || it.summary,
-                    body: data.body || it.body,
                   }
                 : it
             );
@@ -213,7 +212,11 @@ export function NewsFeed() {
 
         {status === "loading" && (
           <div className="panel flex flex-col items-center gap-3 rounded-2xl px-6 py-16 text-center">
-            <span className="h-8 w-8 animate-spin rounded-full border-2 border-panel-border border-t-ice" />
+            <motion.span
+              className="h-3 w-3 rounded-full bg-ice"
+              animate={{ scale: [1, 1.6, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            />
             <p className="text-sm text-muted">Cargando noticias en directo…</p>
           </div>
         )}
@@ -270,30 +273,38 @@ export function NewsFeed() {
             )}
 
             {animeResults.length > 0 && (
-              <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {animeResults.map((a) => (
-                  <div key={a.id} className="panel flex gap-4 rounded-xl p-4">
-                    {a.coverImage && (
-                      // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList)
-                      <img src={a.coverImage} alt="" className="h-24 w-16 flex-shrink-0 rounded-lg object-cover" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-heading text-sm font-semibold text-foreground">{a.title}</p>
-                      <p className="mt-0.5 text-[11px] uppercase tracking-wide text-ice">
-                        {[a.format, a.status].filter(Boolean).join(" · ")}
-                      </p>
-                      {a.description && (
-                        <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted">{a.description}</p>
+              <div className="mb-8">
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
+                  Contenido — información general, no son noticias
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {animeResults.map((a) => (
+                    <div key={a.id} className="panel flex cursor-default gap-4 rounded-xl p-4">
+                      {a.coverImage && (
+                        // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList)
+                        <img src={a.coverImage} alt="" className="h-24 w-16 flex-shrink-0 rounded-lg object-cover" />
                       )}
+                      <div className="min-w-0">
+                        <p className="font-heading text-sm font-semibold text-foreground">{a.title}</p>
+                        <p className="mt-0.5 text-[11px] uppercase tracking-wide text-ice">
+                          {[a.format, a.status].filter(Boolean).join(" · ")}
+                        </p>
+                        {a.description && (
+                          <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted">{a.description}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
 
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
+              Noticias recientes
+            </p>
             {searchResults.length === 0 ? (
               <p className="panel rounded-xl p-8 text-center text-sm text-muted">
-                No hay noticias sobre &quot;{searchTerm}&quot; en el feed cargado ahora mismo.
+                No hay noticias recientes disponibles sobre &quot;{searchTerm}&quot; ahora mismo.
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

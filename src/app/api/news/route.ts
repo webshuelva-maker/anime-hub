@@ -3,7 +3,12 @@ import { NewsCategory, NewsItem, Reliability } from "@/types/news";
 
 export const runtime = "nodejs";
 
-const FEED_URL = "https://www.animenewsnetwork.com/all/rss.xml";
+// No dependemos de una sola fuente: si una falla o está caída, la otra
+// puede seguir dando noticias.
+const FEEDS = [
+  { url: "https://www.animenewsnetwork.com/all/rss.xml", platform: "Anime News Network", label: "Ver en Anime News Network" },
+  { url: "https://www.crunchyroll.com/newsrss?lang=en", platform: "Crunchyroll News", label: "Ver en Crunchyroll News" },
+];
 
 function decodeEntities(raw: string): string {
   return raw
@@ -76,57 +81,57 @@ function dedupeAgainstTitle(text: string, title: string): string {
   return text;
 }
 
+async function fetchFeed(feed: { url: string; platform: string; label: string }): Promise<NewsItem[]> {
+  const res = await fetch(feed.url, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0; +https://animehubbs.netlify.app)" },
+    next: { revalidate: 900 },
+  });
+  if (!res.ok) return [];
+
+  const xml = await res.text();
+  const blocks = xml.split("<item>").slice(1).map((b) => b.split("</item>")[0]);
+
+  return blocks.slice(0, 20).map((block) => {
+    const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "Sin título";
+    const title = stripHtml(rawTitle);
+    const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? "").trim();
+    const pubDateRaw = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim();
+    const rawDescription = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? "";
+    const description = dedupeAgainstTitle(stripHtml(rawDescription), title);
+    const embeddedImage = extractEmbeddedImage(block, rawDescription);
+    const publishedAt = pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw))
+      ? new Date(pubDateRaw).toISOString()
+      : new Date().toISOString();
+
+    const item: NewsItem = {
+      id: `${feed.platform.slice(0, 3).toLowerCase()}-${hashId(link || title)}`,
+      title,
+      summary: description ? description.slice(0, 200) : title,
+      body: description || title,
+      imageQuery: title,
+      reliability: guessReliability(title),
+      category: inferCategory(title),
+      genres: [],
+      studios: [],
+      publishedAt,
+      source: { platform: feed.platform, url: link || feed.url, label: feed.label },
+      relatedTitle: shortenTitle(title),
+      prominence: "mainstream",
+    };
+    if (embeddedImage) item.coverImageUrl = embeddedImage;
+    return item;
+  });
+}
+
 export async function GET() {
-  try {
-    const res = await fetch(FEED_URL, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0; +https://animehubbs.netlify.app)" },
-      next: { revalidate: 900 },
-    });
+  const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+  const items = results
+    .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
-    if (!res.ok) {
-      return NextResponse.json({ items: [], error: `El feed respondió ${res.status}` }, { status: 502 });
-    }
-
-    const xml = await res.text();
-    const blocks = xml.split("<item>").slice(1).map((b) => b.split("</item>")[0]);
-
-    const items: NewsItem[] = blocks.slice(0, 30).map((block) => {
-      const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "Sin título";
-      const title = stripHtml(rawTitle);
-      const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? "").trim();
-      const pubDateRaw = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim();
-      const rawDescription = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? "";
-      const description = dedupeAgainstTitle(stripHtml(rawDescription), title);
-      const embeddedImage = extractEmbeddedImage(block, rawDescription);
-      const publishedAt = pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw))
-        ? new Date(pubDateRaw).toISOString()
-        : new Date().toISOString();
-
-      const item: NewsItem = {
-        id: `ann-${hashId(link || title)}`,
-        title,
-        summary: description ? description.slice(0, 200) : title,
-        body: description || title,
-        imageQuery: title,
-        reliability: guessReliability(title),
-        category: inferCategory(title),
-        genres: [],
-        studios: [],
-        publishedAt,
-        source: {
-          platform: "Anime News Network",
-          url: link || "https://www.animenewsnetwork.com/",
-          label: "Ver en Anime News Network",
-        },
-        relatedTitle: shortenTitle(title),
-        prominence: "mainstream",
-      };
-      if (embeddedImage) item.coverImageUrl = embeddedImage;
-      return item;
-    });
-
-    return NextResponse.json({ items });
-  } catch {
-    return NextResponse.json({ items: [], error: "No se pudo contactar con el feed en directo." }, { status: 502 });
+  if (items.length === 0) {
+    return NextResponse.json({ items: [], error: "Ninguna fuente respondió." }, { status: 502 });
   }
+
+  return NextResponse.json({ items });
 }
