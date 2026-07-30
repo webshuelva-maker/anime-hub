@@ -21,12 +21,13 @@ export async function GET(req: NextRequest) {
   ]);
 
   const bodyForTranslation = fullArticle || summary || title;
-  const translated = await translateNewsFields(title, summary, bodyForTranslation);
+  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, bodyForTranslation);
 
   return NextResponse.json({
     coverImageUrl: cover,
     title: translated?.title ?? null,
     summary: translated?.summary ?? null,
     body: translated?.body ?? fullArticle ?? null,
+    translateDebug,
   });
 }

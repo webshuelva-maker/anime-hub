@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NewsItem } from "@/types/news";
 
 export function SearchBar({
@@ -14,8 +14,11 @@ export function SearchBar({
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const [dbSuggestions, setDbSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  const suggestions = useMemo(() => {
+  // Sugerencias de lo que ya está cargado en el feed (aparecen al instante)
+  const localSuggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 1) return [];
     const seen = new Set<string>();
@@ -26,10 +29,44 @@ export function SearchBar({
         seen.add(t.toLowerCase());
         matches.push(t);
       }
-      if (matches.length >= 6) break;
+      if (matches.length >= 4) break;
     }
     return matches;
   }, [query, items]);
+
+  // Sugerencias de la base de datos completa de AniList (con un pequeño
+  // retraso mientras escribes, para no lanzar una petición por cada letra)
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDbSuggestions([]);
+      return;
+    }
+    setLoadingSuggestions(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/anime-search?q=${encodeURIComponent(q)}`)
+        .then((res) => res.json())
+        .then((data: { results?: { title: string }[] }) => {
+          setDbSuggestions((data.results ?? []).map((r) => r.title));
+        })
+        .catch(() => setDbSuggestions([]))
+        .finally(() => setLoadingSuggestions(false));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const suggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const combined: string[] = [];
+    for (const t of [...localSuggestions, ...dbSuggestions]) {
+      if (!seen.has(t.toLowerCase())) {
+        seen.add(t.toLowerCase());
+        combined.push(t);
+      }
+    }
+    return combined.slice(0, 7);
+  }, [localSuggestions, dbSuggestions]);
 
   const runSearch = (term: string) => {
     setQuery(term);
@@ -78,7 +115,7 @@ export function SearchBar({
         )}
       </div>
 
-      {focused && suggestions.length > 0 && (
+      {focused && (suggestions.length > 0 || loadingSuggestions) && (
         <div className="panel absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl shadow-xl shadow-black/40">
           {suggestions.map((s) => (
             <button
@@ -90,6 +127,9 @@ export function SearchBar({
               {s}
             </button>
           ))}
+          {loadingSuggestions && suggestions.length === 0 && (
+            <p className="px-4 py-2.5 text-xs text-muted">Buscando…</p>
+          )}
         </div>
       )}
     </div>

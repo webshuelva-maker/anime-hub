@@ -1,21 +1,27 @@
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
+export interface TranslationOutcome {
+  result: { title: string; summary: string; body: string } | null;
+  debug: string;
+}
+
 /**
  * Traduce título + resumen + cuerpo de una noticia al español en una sola
  * llamada (para gastar solo una petición por noticia). Si no hay clave de
- * NVIDIA configurada, o la traducción falla o tarda demasiado, devuelve
- * null y el texto se queda en su idioma original — nunca rompe el feed.
+ * NVIDIA configurada, o la traducción falla o tarda demasiado, el texto se
+ * queda en su idioma original — nunca rompe el feed. Devuelve también un
+ * "debug" corto para poder diagnosticar sin adivinar.
  */
 export async function translateNewsFields(
   title: string,
   summary: string,
   body: string
-): Promise<{ title: string; summary: string; body: string } | null> {
+): Promise<TranslationOutcome> {
   const apiKey = process.env.NVIDIA_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return { result: null, debug: "sin NVIDIA_API_KEY configurada" };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
     const res = await fetch(NVIDIA_URL, {
@@ -40,25 +46,34 @@ export async function translateNewsFields(
       }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      return { result: null, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+    }
+
     const data = await res.json();
     const rawText: string = data?.choices?.[0]?.message?.content ?? "";
-    // Algunos modelos añaden **negrita** markdown pese a que se les pide que no
     const text = rawText.replace(/\*\*/g, "").replace(/\*/g, "");
 
     const titleMatch = text.match(/T[IÍ]TULO:\s*([\s\S]*?)(?:\n\s*RESUMEN:|$)/i);
     const summaryMatch = text.match(/RESUMEN:\s*([\s\S]*?)(?:\n\s*CUERPO:|$)/i);
     const bodyMatch = text.match(/CUERPO:\s*([\s\S]*)/i);
 
-    if (!titleMatch?.[1]?.trim() || !bodyMatch?.[1]?.trim()) return null;
+    if (!titleMatch?.[1]?.trim() || !bodyMatch?.[1]?.trim()) {
+      return { result: null, debug: `no se pudo interpretar la respuesta: "${rawText.slice(0, 150)}"` };
+    }
 
     return {
-      title: titleMatch[1].trim(),
-      summary: summaryMatch?.[1]?.trim() || titleMatch[1].trim(),
-      body: bodyMatch[1].trim(),
+      result: {
+        title: titleMatch[1].trim(),
+        summary: summaryMatch?.[1]?.trim() || titleMatch[1].trim(),
+        body: bodyMatch[1].trim(),
+      },
+      debug: "ok",
     };
-  } catch {
-    return null;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { result: null, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }

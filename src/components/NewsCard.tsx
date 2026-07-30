@@ -82,9 +82,11 @@ export function NewsCard({
         <NewsCover category={item.category} relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} tall={featured} />
         {pending && (
           <div className="absolute inset-0 overflow-hidden rounded-t-xl sm:rounded-tr-none">
-            <div
-              className="absolute inset-0 -translate-x-full animate-[shimmer_1.6s_infinite]"
-              style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }}
+            <motion.div
+              className="absolute inset-0"
+              style={{ background: "rgba(6,7,10,0.55)" }}
+              animate={{ opacity: [0.3, 0.65, 0.3] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
             />
           </div>
         )}
