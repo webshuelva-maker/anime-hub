@@ -20,10 +20,12 @@ function photoUrl(relatedTitle: string, width: number, height: number) {
 export function NewsCover({
   category,
   relatedTitle,
+  coverImageUrl,
   tall = false,
 }: {
   category: NewsCategory;
   relatedTitle: string;
+  coverImageUrl?: string;
   tall?: boolean;
 }) {
   return (
@@ -35,12 +37,12 @@ export function NewsCover({
       }`}
       style={{ background: "var(--panel)" }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum/Unsplash), no cabe en next/image sin configurar dominios remotos */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/Picsum), no cabe en next/image sin configurar dominios remotos */}
       <img
-        src={photoUrl(relatedTitle, 640, 420)}
+        src={coverImageUrl || photoUrl(relatedTitle, 640, 420)}
         alt=""
         loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover"
+        className={`absolute inset-0 h-full w-full ${coverImageUrl ? "object-cover object-top" : "object-cover"}`}
       />
       <div
         className="absolute inset-0"
@@ -49,8 +51,8 @@ export function NewsCover({
 
       <div className="absolute inset-0 flex flex-col justify-between p-4">
         <span
-          className="w-fit border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.15em] text-white/85"
-          style={{ borderColor: "rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.35)" }}
+          className="w-fit text-[11px] font-semibold uppercase tracking-[0.15em] text-white"
+          style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}
         >
           {CATEGORY_LABELS[category]}
         </span>

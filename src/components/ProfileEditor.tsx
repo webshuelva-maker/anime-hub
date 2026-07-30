@@ -10,16 +10,23 @@ import { Toast } from "./Toast";
 
 export function ProfileEditor() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(JSON.stringify(DEFAULT_PREFERENCES));
   const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    const loaded = getPreferences();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPrefs(getPreferences());
+    setPrefs(loaded);
+    setSavedSnapshot(JSON.stringify(loaded));
   }, []);
 
+  const isDirty = JSON.stringify(prefs) !== savedSnapshot;
+
   const handleSave = () => {
+    if (!isDirty) return;
     savePreferences(prefs);
+    setSavedSnapshot(JSON.stringify(prefs));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -134,9 +141,21 @@ export function ProfileEditor() {
         <button
           type="button"
           onClick={handleSave}
-          className="accent-gradient rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-[1.03] active:scale-95"
+          disabled={!isDirty && !saved}
+          className={`flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-all ${
+            saved
+              ? "border border-ice/40 text-ice"
+              : isDirty
+              ? "accent-gradient text-white hover:scale-[1.03] active:scale-95"
+              : "cursor-default border border-panel-border text-muted"
+          }`}
         >
-          {saved ? "Guardado ✓" : "Guardar cambios"}
+          {saved && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
+          {saved ? "Guardado" : isDirty ? "Guardar cambios" : "Sin cambios"}
         </button>
       </div>
 

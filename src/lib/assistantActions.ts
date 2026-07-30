@@ -1,4 +1,4 @@
-import { NEWS_ITEMS } from "@/data/news";
+import { getNewsItems } from "./newsStore";
 import { getPreferences, savePreferences } from "./storage";
 import { toggleLike } from "./learning";
 
@@ -46,7 +46,7 @@ function runAction(type: AssistantAction["type"], value: string): string | null 
   }
 
   if (type === "like_news") {
-    const item = NEWS_ITEMS.find((n) => n.relatedTitle.toLowerCase().includes(value.toLowerCase()));
+    const item = getNewsItems().find((n) => n.relatedTitle.toLowerCase().includes(value.toLowerCase()));
     if (!item) return `No encontré ninguna noticia sobre "${value}" en el feed actual.`;
     const nowLiked = toggleLike(item);
     return nowLiked

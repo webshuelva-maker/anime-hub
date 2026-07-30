@@ -9,6 +9,7 @@ import { DEFAULT_PREFERENCES, clearPreferences, getPreferences, savePreferences 
 import { getTopAffinities } from "@/lib/learning";
 import { SelectableChip } from "./SelectableChip";
 import { TagInput } from "./TagInput";
+import { TimePicker } from "./TimePicker";
 
 function AffinityBar({ name, count, max }: { name: string; count: number; max: number }) {
   const pct = Math.max(8, Math.round((count / max) * 100));
@@ -28,18 +29,25 @@ function AffinityBar({ name, count, max }: { name: string; count: number; max: n
 export function PreferencesEditor() {
   const router = useRouter();
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(JSON.stringify(DEFAULT_PREFERENCES));
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    const loaded = getPreferences();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPrefs(getPreferences());
+    setPrefs(loaded);
+    setSavedSnapshot(JSON.stringify(loaded));
   }, []);
+
+  const isDirty = JSON.stringify(prefs) !== savedSnapshot;
 
   const toggle = <T,>(list: T[], value: T): T[] =>
     list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
   const handleSave = () => {
+    if (!isDirty) return;
     savePreferences(prefs);
+    setSavedSnapshot(JSON.stringify(prefs));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -160,12 +168,12 @@ export function PreferencesEditor() {
         <p className="mt-1 text-sm text-muted">
           Hora aproximada a la que te gustaría recibir el resumen del día (demo visual, aún sin notificaciones reales).
         </p>
-        <input
-          type="time"
-          value={prefs.digestTime}
-          onChange={(e) => setPrefs((p) => ({ ...p, digestTime: e.target.value }))}
-          className="panel-elevated mt-3 rounded-lg px-3 py-2 text-sm text-foreground outline-none"
-        />
+        <div className="mt-3">
+          <TimePicker
+            value={prefs.digestTime}
+            onChange={(digestTime) => setPrefs((p) => ({ ...p, digestTime }))}
+          />
+        </div>
 
         <div className="mt-5 flex items-center justify-between">
           <div>
@@ -200,11 +208,23 @@ export function PreferencesEditor() {
         <motion.button
           type="button"
           onClick={handleSave}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.95 }}
-          className="accent-gradient rounded-full px-6 py-2.5 text-sm font-semibold text-white"
+          disabled={!isDirty && !saved}
+          whileHover={isDirty ? { scale: 1.03 } : {}}
+          whileTap={isDirty ? { scale: 0.95 } : {}}
+          className={`flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-colors ${
+            saved
+              ? "border border-ice/40 text-ice"
+              : isDirty
+              ? "accent-gradient text-white"
+              : "cursor-default border border-panel-border text-muted"
+          }`}
         >
-          {saved ? "Guardado ✓" : "Guardar cambios"}
+          {saved && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
+          {saved ? "Guardado" : isDirty ? "Guardar cambios" : "Sin cambios"}
         </motion.button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { Platform } from "@/types/news";
 
-const PLATFORM_COLORS: Record<Platform, string> = {
+const PLATFORM_COLORS: Partial<Record<Platform, string>> = {
   Crunchyroll: "text-orange-300 bg-orange-500/10 border-orange-500/25",
   Netflix: "text-red-300 bg-red-500/10 border-red-500/25",
   "Prime Video": "text-cyan-300 bg-cyan-500/10 border-cyan-500/25",
@@ -14,11 +14,12 @@ const PLATFORM_COLORS: Record<Platform, string> = {
   Laftel: "text-fuchsia-300 bg-fuchsia-500/10 border-fuchsia-500/25",
 };
 
-export function PlatformBadge({ platform }: { platform: Platform }) {
+const DEFAULT_COLOR = "text-slate-300 bg-slate-500/10 border-slate-500/25";
+
+export function PlatformBadge({ platform }: { platform: string }) {
+  const colorClass = PLATFORM_COLORS[platform as Platform] ?? DEFAULT_COLOR;
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${PLATFORM_COLORS[platform]}`}
-    >
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${colorClass}`}>
       {platform}
     </span>
   );

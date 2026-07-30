@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { NEWS_ITEMS } from "@/data/news";
 import { NewsCard } from "./NewsCard";
 import { NewsThumb } from "./NewsThumb";
 import { NewsDetail } from "./NewsDetail";
@@ -12,15 +11,50 @@ import { NewsItem, UserPreferences } from "@/types/news";
 import { scoreNewsItem, toggleLike, recordNewsInteraction } from "@/lib/learning";
 import { formatRelativeDate } from "@/lib/date";
 import { Avatar } from "./AvatarPicker";
+import { getNewsItems, setNewsItems } from "@/lib/newsStore";
+
+type FeedStatus = "loading" | "live" | "offline" | "down";
 
 export function NewsFeed() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [visibleTail, setVisibleTail] = useState(6);
+  const [items, setItems] = useState<NewsItem[]>(getNewsItems());
+  const [status, setStatus] = useState<FeedStatus>("loading");
+
+  const loadNews = (silent = false) => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setStatus("offline");
+      return;
+    }
+    if (!silent) setStatus("loading");
+    fetch("/api/news")
+      .then(async (res) => {
+        const data: { items?: NewsItem[] } = await res.json();
+        if (res.ok && data.items && data.items.length > 0) {
+          setNewsItems(data.items);
+          setItems(data.items);
+          setStatus("live");
+        } else if (!silent) {
+          setStatus("down");
+        }
+      })
+      .catch(() => {
+        if (!silent) {
+          setStatus(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "down");
+        }
+      });
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(getPreferences());
+    loadNews();
+
+    // Refresco silencioso cada 15 minutos: si ya estás viendo noticias, no se
+    // interrumpe la vista ni aunque este refresco puntual falle.
+    const interval = setInterval(() => loadNews(true), 15 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const hasLearned =
@@ -28,21 +62,21 @@ export function NewsFeed() {
     Object.keys(prefs.studioInteractionCounts).length > 0;
 
   const ranked = useMemo(() => {
-    return NEWS_ITEMS.map((item) => ({
+    return items.map((item) => ({
       item,
       score: scoreNewsItem(item, prefs),
     })).sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return new Date(b.item.publishedAt).getTime() - new Date(a.item.publishedAt).getTime();
     });
-  }, [prefs]);
+  }, [items, prefs]);
 
   const [featured, second, third, ...tail] = ranked;
   const mainStories = [second, third].filter(Boolean) as typeof ranked;
-  const openItem: NewsItem | null = NEWS_ITEMS.find((n) => n.id === openItemId) ?? null;
+  const openItem: NewsItem | null = items.find((n) => n.id === openItemId) ?? null;
 
   const handleToggleLike = (itemId: string) => {
-    const item = NEWS_ITEMS.find((n) => n.id === itemId);
+    const item = items.find((n) => n.id === itemId);
     if (!item) return;
     toggleLike(item);
     setPrefs(getPreferences());
@@ -69,6 +103,17 @@ export function NewsFeed() {
                   : "Marca ♡ en lo que te interese y el orden se ajustará solo"}
               </p>
             </div>
+            <span
+              className={`ml-auto flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                status === "live" ? "border-ice/30 text-ice" : "border-panel-border text-muted"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${status === "live" ? "bg-ice" : "bg-muted"}`} />
+              {status === "loading" && "Conectando…"}
+              {status === "live" && "En directo · ANN"}
+              {status === "offline" && "Sin conexión"}
+              {status === "down" && "Feed caído"}
+            </span>
           </div>
         </div>
       </div>
@@ -80,6 +125,47 @@ export function NewsFeed() {
           </p>
         )}
 
+        {status === "loading" && (
+          <div className="panel flex flex-col items-center gap-3 rounded-2xl px-6 py-16 text-center">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-panel-border border-t-ice" />
+            <p className="text-sm text-muted">Cargando noticias en directo…</p>
+          </div>
+        )}
+
+        {status === "offline" && (
+          <div className="panel flex flex-col items-center gap-3 rounded-2xl px-6 py-16 text-center">
+            <p className="font-heading text-lg font-semibold">No hay conexión a internet</p>
+            <p className="max-w-sm text-sm text-muted">
+              Conéctate a internet para cargar las noticias. En cuanto vuelvas a tener señal, pulsa reintentar.
+            </p>
+            <button
+              type="button"
+              onClick={() => loadNews()}
+              className="mt-2 rounded-full border border-panel-border px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-ice/40"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {status === "down" && (
+          <div className="panel flex flex-col items-center gap-3 rounded-2xl px-6 py-16 text-center">
+            <p className="font-heading text-lg font-semibold">El feed está caído temporalmente</p>
+            <p className="max-w-sm text-sm text-muted">
+              No hemos podido traer las noticias de Anime News Network ahora mismo. Puede ser cosa de un momento — inténtalo de nuevo en un rato.
+            </p>
+            <button
+              type="button"
+              onClick={() => loadNews()}
+              className="mt-2 rounded-full border border-panel-border px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-ice/40"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {status === "live" && (
+          <>
         {featured && (
           <div className="mb-10">
             <p className="font-heading mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
@@ -132,7 +218,7 @@ export function NewsFeed() {
                   transition={{ duration: 0.18, ease: "easeOut" }}
                   className="card-hover panel flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left hover:border-ice/30"
                 >
-                  <NewsThumb relatedTitle={item.relatedTitle} />
+                  <NewsThumb relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} />
                   <div className="min-w-0 flex-1">
                     <div className="mb-1.5 flex items-center gap-2">
                       <ReliabilityBadge reliability={item.reliability} />
@@ -163,6 +249,8 @@ export function NewsFeed() {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
       </div>
 

@@ -1,8 +1,9 @@
 import { UserPreferences } from "@/types/news";
-import { NEWS_ITEMS } from "@/data/news";
+import { getNewsItems } from "./newsStore";
 import { getTopAffinities } from "./learning";
 
 export function buildAssistantContext(prefs: UserPreferences): string {
+  const newsItems = getNewsItems();
   const lines: string[] = [];
 
   lines.push(`Nombre del usuario: ${prefs.displayName || "no lo ha dicho todavía"}`);
@@ -20,14 +21,14 @@ export function buildAssistantContext(prefs: UserPreferences): string {
     );
   }
 
-  const likedTitles = NEWS_ITEMS.filter((n) => prefs.likedNewsIds.includes(n.id)).map(
+  const likedTitles = newsItems.filter((n) => prefs.likedNewsIds.includes(n.id)).map(
     (n) => n.relatedTitle
   );
   if (likedTitles.length > 0) {
     lines.push(`Noticias a las que ha dado me gusta: ${likedTitles.join(", ")}`);
   }
 
-  const recentHeadlines = NEWS_ITEMS.slice(0, 8).map(
+  const recentHeadlines = newsItems.slice(0, 8).map(
     (n) => `- "${n.title}" (${n.relatedTitle}, fuente: ${n.source.platform}, fiabilidad: ${n.reliability})`
   );
   lines.push(`Titulares disponibles ahora mismo en el feed:\n${recentHeadlines.join("\n")}`);

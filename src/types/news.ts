@@ -24,7 +24,7 @@ export type NewsCategory =
 export type Prominence = "mainstream" | "indie"; // gran franquicia vs. producción pequeña/independiente
 
 export interface NewsSource {
-  platform: Platform;
+  platform: string;
   url: string;
   label: string; // ej: "Ver en Crunchyroll Newsroom"
 }
@@ -35,6 +35,7 @@ export interface NewsItem {
   summary: string;
   body: string; // texto completo para leer la noticia en detalle dentro de la app
   imageQuery: string; // usado para generar/seleccionar imagen de portada
+  coverImageUrl?: string; // carátula oficial real (vía API de AniList), si se encontró
   reliability: Reliability;
   category: NewsCategory;
   genres: string[];

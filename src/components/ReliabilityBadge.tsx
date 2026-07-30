@@ -1,33 +1,16 @@
 import { Reliability } from "@/types/news";
 
-const CONFIG: Record<
-  Reliability,
-  { label: string; className: string; dot: string }
-> = {
-  official: {
-    label: "Oficial",
-    className: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
-    dot: "bg-emerald-400",
-  },
-  confirmed: {
-    label: "Confirmado",
-    className: "text-blue-300 bg-blue-500/10 border-blue-500/30",
-    dot: "bg-blue-400",
-  },
-  rumor: {
-    label: "Rumor",
-    className: "text-amber-300 bg-amber-500/10 border-amber-500/30",
-    dot: "bg-amber-400",
-  },
+const CONFIG: Record<Reliability, { label: string; color: string }> = {
+  official: { label: "Oficial", color: "#4d9b7a" },
+  confirmed: { label: "Confirmado", color: "#6d93c4" },
+  rumor: { label: "Rumor", color: "#b7965f" },
 };
 
 export function ReliabilityBadge({ reliability }: { reliability: Reliability }) {
   const cfg = CONFIG[reliability];
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${cfg.className}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide" style={{ color: cfg.color }}>
+      <span className="h-[5px] w-[5px] rounded-full" style={{ background: cfg.color }} />
       {cfg.label}
     </span>
   );

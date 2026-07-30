@@ -16,6 +16,9 @@ export function NewsDetail({
   item: NewsItem | null;
   onClose: () => void;
 }) {
+  // Bloquea el scroll de la página de fondo mientras el modal está abierto
+  // (html + body, y overscroll-behavior para que la rueda del ratón no
+  // "atraviese" el fondo aunque el modal esté encima).
   useEffect(() => {
     if (!item) return;
     const html = document.documentElement;
@@ -87,7 +90,7 @@ export function NewsDetail({
                 <span className="text-xs text-muted">
                   Fuente original: {item.source.platform}
                 </span>
-                
+                <a
                   href={item.source.url}
                   target="_blank"
                   rel="noopener noreferrer"

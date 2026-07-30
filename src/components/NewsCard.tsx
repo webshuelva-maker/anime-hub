@@ -20,7 +20,7 @@ function HeartButton({ liked, onToggle }: { liked: boolean; onToggle: () => void
       className={`flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-150 active:scale-90 ${
         liked
           ? "border-ice bg-ice/15 text-ice"
-          : "border-white/25 bg-black/25 text-white/80 backdrop-blur-sm"
+          : "border-white/25 bg-black/40 text-white/80"
       }`}
     >
       <span className="relative block h-[15px] w-[15px]">
@@ -77,17 +77,25 @@ export function NewsCard({
       onClick={onOpenDetail}
     >
       <div className={`relative ${featured ? "sm:w-2/5" : ""}`}>
-        <NewsCover category={item.category} relatedTitle={item.relatedTitle} tall={featured} />
+        <NewsCover category={item.category} relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} tall={featured} />
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
           {onToggleLike && <HeartButton liked={liked} onToggle={onToggleLike} />}
           {highlight && (
-            <span className="border border-ice/50 bg-black/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-ice backdrop-blur-sm">
+            <span
+              className="flex items-center gap-1.5 pr-0.5 text-[11px] font-semibold uppercase tracking-wide text-white"
+              style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}
+            >
               Para ti
+              <span className="h-[5px] w-[5px] rounded-full bg-ice" />
             </span>
           )}
         </div>
         {item.prominence === "indie" && (
-          <span className="absolute left-3 top-3 border border-white/25 bg-black/35 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-white/90 backdrop-blur-sm">
+          <span
+            className="absolute left-3 top-3 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/90"
+            style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}
+          >
+            <span className="h-[5px] w-[5px] rounded-full bg-white/70" />
             Independiente
           </span>
         )}
