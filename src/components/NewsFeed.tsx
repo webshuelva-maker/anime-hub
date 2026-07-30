@@ -278,7 +278,7 @@ export function NewsFeed() {
                   Contenido — información general, no son noticias
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {animeResults.map((a) => (
+                  {animeResults.slice(0, 4).map((a) => (
                     <div key={a.id} className="panel flex cursor-default gap-4 rounded-xl p-4">
                       {a.coverImage && (
                         // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList)
@@ -309,10 +309,10 @@ export function NewsFeed() {
                 {(() => {
                   const known = animeResults[0];
                   if (known?.status === "FINISHED" && known.endYear) {
-                    return `No hay noticias recientes sobre "${searchTerm}" — "${known.title}" terminó en ${known.endYear}, así que ya no suele salir en la actualidad. Puedes buscarla directamente en el feed de noticias si sale algo nuevo (spin-offs, reediciones...).`;
+                    return `No hay noticias recientes sobre "${searchTerm}": esta serie terminó en ${known.endYear}, por lo que no suele generar cobertura activa. No hace falta que la revises tú — en cuanto salga algo nuevo sobre ella, aparecerá aquí automáticamente.`;
                   }
                   if (known?.status === "NOT_YET_RELEASED") {
-                    return `"${known.title}" todavía no se ha estrenado, así que de momento no hay noticias recientes sobre ella — en cuanto se acerque la fecha, debería empezar a aparecer cobertura.`;
+                    return `"${searchTerm}" todavía no se ha estrenado, así que de momento no hay noticias recientes sobre ella. En cuanto se acerque la fecha, deberían empezar a aparecer aquí solas.`;
                   }
                   return `No hay noticias recientes disponibles sobre "${searchTerm}" ahora mismo.`;
                 })()}

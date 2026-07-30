@@ -65,7 +65,7 @@ export interface AnimeSearchResult {
 
 const SEARCH_QUERY = `
 query ($search: String) {
-  anime: Page(page: 1, perPage: 3) {
+  anime: Page(page: 1, perPage: 8) {
     media(search: $search, type: ANIME) {
       id
       title { romaji english }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { getPreferences, savePreferences } from "@/lib/storage";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
 import { BrandMark } from "./BrandMark";
@@ -59,7 +60,7 @@ export function OnboardingWizard() {
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Tu nombre o apodo"
           maxLength={24}
-          className="font-heading panel-elevated mt-6 w-full rounded-lg px-3.5 py-2.5 text-center text-base text-foreground outline-none placeholder:text-muted placeholder:font-sans"
+          className="font-heading panel-elevated mt-6 w-full rounded-lg px-4 py-2.5 text-base text-foreground outline-none transition-shadow placeholder:text-muted placeholder:font-sans focus:shadow-[0_0_0_2px_var(--accent-solid)]"
         />
 
         {!photoDataUrl && (
@@ -69,14 +70,16 @@ export function OnboardingWizard() {
           </div>
         )}
 
-        <button
+        <motion.button
           type="button"
           onClick={handleStart}
           disabled={displayName.trim().length === 0}
-          className="accent-gradient mt-7 w-full rounded-full px-6 py-3 text-sm font-semibold text-white transition-transform hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          whileHover={displayName.trim() ? { scale: 1.03 } : {}}
+          whileTap={displayName.trim() ? { scale: 0.96 } : {}}
+          className="accent-gradient mt-7 w-full rounded-full px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/30 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Entrar
-        </button>
+        </motion.button>
       </div>
     </div>
   );
