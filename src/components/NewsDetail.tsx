@@ -37,22 +37,24 @@ export function NewsDetail({
   }, [item]);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {item && (
         <motion.div
+          key="overlay"
           className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/85 p-4 py-10 sm:items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.12 }}
+          transition={{ duration: 0.18 }}
           onClick={onClose}
         >
           <motion.div
+            key="panel"
             className="panel w-full max-w-2xl overflow-hidden rounded-2xl"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
+            transition={{ duration: 0.18 }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative">

@@ -32,9 +32,12 @@ export function getPreferences(): UserPreferences {
   }
 }
 
+export const PREFERENCES_CHANGED_EVENT = "anime-hub:preferences-changed";
+
 export function savePreferences(prefs: UserPreferences): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  window.dispatchEvent(new Event(PREFERENCES_CHANGED_EVENT));
 }
 
 export function clearPreferences(): void {

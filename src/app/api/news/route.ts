@@ -6,17 +6,30 @@ export const runtime = "nodejs";
 
 const FEED_URL = "https://www.animenewsnetwork.com/all/rss.xml";
 
-function stripHtml(raw: string): string {
+function decodeEntities(raw: string): string {
   return raw
-    .replace("<![CDATA[", "")
-    .replace("]]>", "")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&"); // siempre el último, para no volver a decodificar entidades ya resueltas
+}
+
+function stripHtml(raw: string): string {
+  const withoutCdata = raw.replace("<![CDATA[", "").replace("]]>", "");
+  // Primero se "traducen" los símbolos (&lt;cite&gt; -> <cite>) y solo
+  // DESPUÉS se quitan las etiquetas reales — al revés se quedan a medias.
+  const decoded = decodeEntities(withoutCdata);
+  return decoded
+    .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractEmbeddedImage(rawDescription: string): string | null {
+  const match = rawDescription.match(/<img[^>]+src="([^"]+)"/i);
+  return match?.[1] ?? null;
 }
 
 function inferCategory(title: string): NewsCategory {
@@ -48,11 +61,18 @@ function shortenTitle(title: string): string {
   return title.length > 64 ? `${title.slice(0, 61)}…` : title;
 }
 
+/** Si el resumen empieza repitiendo el titular tal cual, quita esa repetición. */
+function dedupeAgainstTitle(text: string, title: string): string {
+  if (text.toLowerCase().startsWith(title.toLowerCase())) {
+    return text.slice(title.length).replace(/^[\s.:—-]+/, "").trim();
+  }
+  return text;
+}
+
 export async function GET() {
   try {
     const res = await fetch(FEED_URL, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0; +https://animehubbs.netlify.app)" },
-      // Vuelve a pedir el feed como mucho cada 15 minutos, no en cada visita
       next: { revalidate: 900 },
     });
 
@@ -69,12 +89,13 @@ export async function GET() {
       const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? "").trim();
       const pubDateRaw = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim();
       const rawDescription = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? "";
-      const description = stripHtml(rawDescription);
+      const description = dedupeAgainstTitle(stripHtml(rawDescription), title);
+      const embeddedImage = extractEmbeddedImage(rawDescription);
       const publishedAt = pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw))
         ? new Date(pubDateRaw).toISOString()
         : new Date().toISOString();
 
-      return {
+      const item: NewsItem = {
         id: `ann-${hashId(link || title)}`,
         title,
         summary: description ? description.slice(0, 200) : title,
@@ -93,14 +114,16 @@ export async function GET() {
         relatedTitle: shortenTitle(title),
         prominence: "mainstream",
       };
+      if (embeddedImage) item.coverImageUrl = embeddedImage;
+      return item;
     });
 
-    // Carátulas oficiales reales vía AniList, en paralelo, limitadas a los
-    // primeros elementos (para no disparar demasiadas peticiones); si no hay
-    // coincidencia o AniList no responde, el frontend usa su propio respaldo
-    // fotográfico — nunca se bloquea el feed por esto.
+    // Carátulas oficiales reales vía AniList: solo se busca para las que
+    // todavía no tienen ya la propia imagen del artículo (arriba). Se hace
+    // en paralelo y con límite, y nunca bloquea el feed si falla.
     await Promise.allSettled(
       items.slice(0, 16).map(async (item) => {
+        if (item.coverImageUrl) return;
         const cover = await findCoverImage(guessSeriesName(item.relatedTitle));
         if (cover) item.coverImageUrl = cover;
       })

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { siteConfig } from "@/config/site";
-import { getPreferences } from "@/lib/storage";
+import { getPreferences, PREFERENCES_CHANGED_EVENT } from "@/lib/storage";
 import { Avatar } from "./AvatarPicker";
 import { FullscreenButton } from "./FullscreenButton";
+import { BrandMark } from "./BrandMark";
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
@@ -19,18 +20,22 @@ export function Navbar() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const prefs = getPreferences();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAvatarId(prefs.avatarId);
-    setPhotoDataUrl(prefs.avatarPhotoDataUrl);
+    const refresh = () => {
+      const prefs = getPreferences();
+      setAvatarId(prefs.avatarId);
+      setPhotoDataUrl(prefs.avatarPhotoDataUrl);
+    };
+    refresh();
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, refresh);
   }, [pathname]);
 
   return (
     <header className="sticky top-0 z-20 border-b border-panel-border/70 bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <Link href="/noticias" className="flex items-center gap-2.5">
-          <span className="font-heading flex h-8 w-8 items-center justify-center rounded-full border border-ice/30 text-sm font-bold ice-text">
-            愛
+          <span className="font-heading flex h-8 w-8 items-center justify-center rounded-full border border-ice/30 ice-text">
+            <BrandMark size={14} />
           </span>
           <span className="font-heading text-lg font-semibold tracking-wide">
             {siteConfig.name}
