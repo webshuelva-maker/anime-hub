@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
 import { NewsCategory, NewsItem, Reliability } from "@/types/news";
-import { findCoverImage, guessSeriesName } from "@/lib/anilist";
-import { fetchFullArticle } from "@/lib/articleReader";
-import { translateNewsFields } from "@/lib/translate";
 
 export const runtime = "nodejs";
 
@@ -127,41 +124,6 @@ export async function GET() {
       if (embeddedImage) item.coverImageUrl = embeddedImage;
       return item;
     });
-
-    // Carátulas oficiales reales vía AniList: solo se busca para las que
-    // todavía no tienen ya la propia imagen del artículo (arriba). Se hace
-    // en paralelo y con límite, y nunca bloquea el feed si falla.
-    await Promise.allSettled(
-      items.map(async (item) => {
-        if (item.coverImageUrl) return;
-        const cover = await findCoverImage(guessSeriesName(item.relatedTitle));
-        if (cover) item.coverImageUrl = cover;
-      })
-    );
-
-    // Artículo completo (no solo el resumen corto del RSS) para las
-    // primeras noticias, sacado de la propia página original. Si falla o
-    // tarda demasiado para alguna, se queda con el resumen del RSS.
-    await Promise.allSettled(
-      items.slice(0, 14).map(async (item) => {
-        const full = await fetchFullArticle(item.source.url);
-        if (full && full.length > item.body.length) item.body = full;
-      })
-    );
-
-    // Traducción al español (reutiliza la clave de NVIDIA ya configurada
-    // para Ren). Si no hay clave o falla, el texto se queda en inglés —
-    // nunca bloquea el feed.
-    await Promise.allSettled(
-      items.slice(0, 14).map(async (item) => {
-        const translated = await translateNewsFields(item.title, item.summary, item.body);
-        if (translated) {
-          item.title = translated.title;
-          item.summary = translated.summary;
-          item.body = translated.body;
-        }
-      })
-    );
 
     return NextResponse.json({ items });
   } catch {

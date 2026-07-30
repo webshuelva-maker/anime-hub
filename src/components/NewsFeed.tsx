@@ -40,6 +40,7 @@ export function NewsFeed() {
           setNewsItems(data.items);
           setItems(data.items);
           setStatus("live");
+          enrichItems(data.items);
         } else if (!silent) {
           setStatus("down");
         }
@@ -49,6 +50,47 @@ export function NewsFeed() {
           setStatus(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "down");
         }
       });
+  };
+
+  /**
+   * Pide, noticia a noticia y por separado (no todas de golpe), la
+   * carátula real, el artículo completo y la traducción. El navegador ya
+   * limita solo cuántas peticiones van a la vez, así que no hace falta
+   * ningún límite manual — y si una falla, las demás siguen sin problema.
+   */
+  const enrichItems = (loadedItems: NewsItem[]) => {
+    loadedItems.slice(0, 16).forEach((item) => {
+      const params = new URLSearchParams({
+        relatedTitle: item.relatedTitle,
+        title: item.title,
+        summary: item.summary,
+        url: item.source.url,
+        hasImage: item.coverImageUrl ? "1" : "0",
+      });
+
+      fetch(`/api/enrich?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data: { coverImageUrl?: string | null; title?: string | null; summary?: string | null; body?: string | null }) => {
+          setItems((prev) => {
+            const next = prev.map((it) =>
+              it.id === item.id
+                ? {
+                    ...it,
+                    coverImageUrl: data.coverImageUrl || it.coverImageUrl,
+                    title: data.title || it.title,
+                    summary: data.summary || it.summary,
+                    body: data.body || it.body,
+                  }
+                : it
+            );
+            setNewsItems(next);
+            return next;
+          });
+        })
+        .catch(() => {
+          // Esta noticia en concreto se queda con lo básico; el resto sigue.
+        });
+    });
   };
 
   useEffect(() => {
