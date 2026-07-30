@@ -9,11 +9,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Si el modelo configurado está saturado incluso tras reintentar, se
+// prueba con este como plan B — no siempre coinciden los picos de tráfico
+// entre modelos distintos.
+const FALLBACK_MODEL = "meta/llama-3.1-70b-instruct";
+
 async function callOnce(
   title: string,
   summary: string,
   body: string,
-  apiKey: string
+  apiKey: string,
+  model: string
 ): Promise<{ ok: true; text: string } | { ok: false; retryable: boolean; debug: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -24,7 +30,7 @@ async function callOnce(
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
       body: JSON.stringify({
-        model: process.env.NVIDIA_MODEL || "meta/llama-3.1-70b-instruct",
+        model,
         temperature: 0.2,
         max_tokens: 700,
         messages: [
@@ -40,9 +46,6 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      // 429 (límite de peticiones) y 5xx (servidor saturado/caído) merecen
-      // un segundo intento; el resto (clave mala, etc.) no tiene sentido
-      // reintentarlo.
       const retryable = res.status === 429 || res.status >= 500;
       return { ok: false, retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
     }
@@ -59,10 +62,10 @@ async function callOnce(
 }
 
 /**
- * Traduce título + resumen + cuerpo de una noticia al español en una sola
- * llamada. Si NVIDIA responde que está saturado (o hay un fallo de red),
- * reintenta una vez tras una breve espera antes de rendirse — esos fallos
- * suelen ser puntuales, no un problema real de configuración.
+ * Traduce título + resumen + cuerpo de una noticia al español. Si el
+ * modelo configurado está saturado (o hay un fallo de red), reintenta una
+ * vez, y si sigue sin ir, prueba con un modelo de respaldo distinto antes
+ * de rendirse — casi nunca están los dos saturados a la vez.
  */
 export async function translateNewsFields(
   title: string,
@@ -72,10 +75,16 @@ export async function translateNewsFields(
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) return { result: null, debug: "sin NVIDIA_API_KEY configurada" };
 
-  let attempt = await callOnce(title, summary, body, apiKey);
+  const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
+
+  let attempt = await callOnce(title, summary, body, apiKey, primaryModel);
   if (!attempt.ok && attempt.retryable) {
     await sleep(1200);
-    attempt = await callOnce(title, summary, body, apiKey);
+    attempt = await callOnce(title, summary, body, apiKey, primaryModel);
+  }
+
+  if (!attempt.ok && attempt.retryable && primaryModel !== FALLBACK_MODEL) {
+    attempt = await callOnce(title, summary, body, apiKey, FALLBACK_MODEL);
   }
 
   if (!attempt.ok) {
