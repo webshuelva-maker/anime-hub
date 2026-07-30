@@ -309,10 +309,10 @@ export function NewsFeed() {
                 {(() => {
                   const known = animeResults[0];
                   if (known?.status === "FINISHED" && known.endYear) {
-                    return `No hay noticias recientes sobre "${searchTerm}": esta serie terminó en ${known.endYear}, por lo que no suele generar cobertura activa. No hace falta que la revises tú — en cuanto salga algo nuevo sobre ella, aparecerá aquí automáticamente.`;
+                    return `No hay noticias recientes sobre "${searchTerm}". La serie terminó en ${known.endYear}, así que ya no suelen salir noticias nuevas sobre ella. No tienes que estar pendiente. Si sale algo, lo verás solo en la sección de Noticias.`;
                   }
                   if (known?.status === "NOT_YET_RELEASED") {
-                    return `"${searchTerm}" todavía no se ha estrenado, así que de momento no hay noticias recientes sobre ella. En cuanto se acerque la fecha, deberían empezar a aparecer aquí solas.`;
+                    return `"${searchTerm}" todavía no se ha estrenado, así que de momento no hay noticias recientes sobre ella. Cuando se acerque la fecha, deberían empezar a salir en la sección de Noticias.`;
                   }
                   return `No hay noticias recientes disponibles sobre "${searchTerm}" ahora mismo.`;
                 })()}

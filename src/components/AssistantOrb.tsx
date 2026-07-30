@@ -7,6 +7,7 @@ import { getPreferences } from "@/lib/storage";
 import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface Message {
   role: "user" | "assistant";
@@ -102,6 +103,7 @@ export function AssistantOrb() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const appendToArchive = (msgs: Message[]) => {
@@ -113,11 +115,10 @@ export function AssistantOrb() {
   };
 
   const handleClearChat = () => {
-    const confirmed = window.confirm("¿Seguro que quieres borrar la conversación con Ren? No se puede deshacer.");
-    if (!confirmed) return;
     setMessages([]);
     setArchive([]);
     window.localStorage.removeItem(ARCHIVE_KEY);
+    setConfirmingClear(false);
   };
 
   useEffect(() => {
@@ -212,7 +213,7 @@ export function AssistantOrb() {
                 </div>
                 <button
                   type="button"
-                  onClick={handleClearChat}
+                  onClick={() => setConfirmingClear(true)}
                   aria-label="Borrar conversación"
                   title="Borrar conversación"
                   className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
@@ -319,6 +320,14 @@ export function AssistantOrb() {
           <Orb active={false} size={34} />
         </motion.button>
       </div>
+
+      <ConfirmDialog
+        open={confirmingClear}
+        title="Borrar conversación"
+        message={`¿Seguro que quieres borrar la conversación con ${siteConfig.assistantName}? No se puede deshacer.`}
+        onConfirm={handleClearChat}
+        onCancel={() => setConfirmingClear(false)}
+      />
     </>
   );
 }
