@@ -58,12 +58,13 @@ export function NewsFeed() {
    * carátula real, el artículo completo y la traducción. El navegador ya
    * limita solo cuántas peticiones van a la vez, así que no hace falta
    * ningún límite manual — y si una falla, las demás siguen sin problema.
+   * Si la primera respuesta no trae traducción, se reintenta una vez.
    */
   const enrichItems = (loadedItems: NewsItem[]) => {
     const targets = loadedItems.slice(0, 16);
     setEnrichingIds(new Set(targets.map((i) => i.id)));
 
-    targets.forEach((item) => {
+    targets.forEach(async (item) => {
       const params = new URLSearchParams({
         relatedTitle: item.relatedTitle,
         title: item.title,
@@ -71,35 +72,40 @@ export function NewsFeed() {
         url: item.source.url,
         hasImage: item.coverImageUrl ? "1" : "0",
       });
+      const url = `/api/enrich?${params.toString()}`;
 
-      fetch(`/api/enrich?${params.toString()}`)
-        .then((res) => res.json())
-        .then((data: { coverImageUrl?: string | null; title?: string | null; summary?: string | null }) => {
-          setItems((prev) => {
-            const next = prev.map((it) =>
-              it.id === item.id
-                ? {
-                    ...it,
-                    coverImageUrl: data.coverImageUrl || it.coverImageUrl,
-                    title: data.title || it.title,
-                    summary: data.summary || it.summary,
-                  }
-                : it
-            );
-            setNewsItems(next);
-            return next;
-          });
-        })
-        .catch(() => {
-          // Esta noticia en concreto se queda con lo básico; el resto sigue.
-        })
-        .finally(() => {
-          setEnrichingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(item.id);
-            return next;
-          });
-        });
+      type EnrichResponse = { coverImageUrl?: string | null; title?: string | null; summary?: string | null };
+      let data: EnrichResponse = {};
+      try {
+        data = await (await fetch(url)).json();
+        if (!data.title) {
+          await new Promise((r) => setTimeout(r, 1200));
+          data = await (await fetch(url)).json();
+        }
+      } catch {
+        // se queda con lo que ya había, el resto de noticias sigue igual
+      }
+
+      setItems((prev) => {
+        const next = prev.map((it) =>
+          it.id === item.id
+            ? {
+                ...it,
+                coverImageUrl: data.coverImageUrl || it.coverImageUrl,
+                title: data.title || it.title,
+                summary: data.summary || it.summary,
+              }
+            : it
+        );
+        setNewsItems(next);
+        return next;
+      });
+
+      setEnrichingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
     });
   };
 

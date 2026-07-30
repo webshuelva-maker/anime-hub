@@ -51,14 +51,23 @@ export function NewsDetail({
     setDetailCover(null);
     setLoadingArticle(true);
     const params = new URLSearchParams({ title: item.title, summary: item.summary, url: item.source.url });
-    fetch(`/api/enrich-detail?${params.toString()}`)
-      .then((res) => res.json())
-      .then((data: { coverImageUrl?: string | null; body?: string | null }) => {
+    const url = `/api/enrich-detail?${params.toString()}`;
+
+    (async () => {
+      try {
+        let data: { coverImageUrl?: string | null; body?: string | null } = await (await fetch(url)).json();
+        if (!data.body) {
+          await new Promise((r) => setTimeout(r, 1200));
+          data = await (await fetch(url)).json();
+        }
         if (data.body) setFullBody(data.body);
         if (data.coverImageUrl) setDetailCover(data.coverImageUrl);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingArticle(false));
+      } catch {
+        // se queda con el resumen corto que ya tenía
+      } finally {
+        setLoadingArticle(false);
+      }
+    })();
   }, [item]);
 
   return (
