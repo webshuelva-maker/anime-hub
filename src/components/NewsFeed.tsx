@@ -26,6 +26,7 @@ export function NewsFeed() {
   const [searchTerm, setSearchTerm] = useState("");
   const [animeResults, setAnimeResults] = useState<AnimeSearchResult[]>([]);
   const [searchingAnime, setSearchingAnime] = useState(false);
+  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
 
   const loadNews = (silent = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -59,7 +60,10 @@ export function NewsFeed() {
    * ningún límite manual — y si una falla, las demás siguen sin problema.
    */
   const enrichItems = (loadedItems: NewsItem[]) => {
-    loadedItems.slice(0, 16).forEach((item) => {
+    const targets = loadedItems.slice(0, 16);
+    setEnrichingIds(new Set(targets.map((i) => i.id)));
+
+    targets.forEach((item) => {
       const params = new URLSearchParams({
         relatedTitle: item.relatedTitle,
         title: item.title,
@@ -89,6 +93,13 @@ export function NewsFeed() {
         })
         .catch(() => {
           // Esta noticia en concreto se queda con lo básico; el resto sigue.
+        })
+        .finally(() => {
+          setEnrichingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
         });
     });
   };
@@ -290,6 +301,7 @@ export function NewsFeed() {
                   <NewsCard
                     key={item.id}
                     item={item}
+                    pending={enrichingIds.has(item.id)}
                     highlight={hasLearned && score > 0}
                     liked={prefs.likedNewsIds.includes(item.id)}
                     onToggleLike={() => handleToggleLike(item.id)}
@@ -311,6 +323,7 @@ export function NewsFeed() {
             <NewsCard
               item={featured.item}
               featured
+              pending={enrichingIds.has(featured.item.id)}
               highlight={hasLearned && featured.score > 0}
               liked={prefs.likedNewsIds.includes(featured.item.id)}
               onToggleLike={() => handleToggleLike(featured.item.id)}
@@ -329,6 +342,7 @@ export function NewsFeed() {
                 <NewsCard
                   key={item.id}
                   item={item}
+                  pending={enrichingIds.has(item.id)}
                   highlight={hasLearned && score > 0}
                   liked={prefs.likedNewsIds.includes(item.id)}
                   onToggleLike={() => handleToggleLike(item.id)}

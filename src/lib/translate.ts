@@ -42,17 +42,19 @@ export async function translateNewsFields(
 
     if (!res.ok) return null;
     const data = await res.json();
-    const text: string = data?.choices?.[0]?.message?.content ?? "";
+    const rawText: string = data?.choices?.[0]?.message?.content ?? "";
+    // Algunos modelos añaden **negrita** markdown pese a que se les pide que no
+    const text = rawText.replace(/\*\*/g, "").replace(/\*/g, "");
 
-    const titleMatch = text.match(/TITULO:\s*([\s\S]*?)\nRESUMEN:/i);
-    const summaryMatch = text.match(/RESUMEN:\s*([\s\S]*?)\nCUERPO:/i);
+    const titleMatch = text.match(/T[IÍ]TULO:\s*([\s\S]*?)(?:\n\s*RESUMEN:|$)/i);
+    const summaryMatch = text.match(/RESUMEN:\s*([\s\S]*?)(?:\n\s*CUERPO:|$)/i);
     const bodyMatch = text.match(/CUERPO:\s*([\s\S]*)/i);
 
-    if (!titleMatch || !summaryMatch || !bodyMatch) return null;
+    if (!titleMatch?.[1]?.trim() || !bodyMatch?.[1]?.trim()) return null;
 
     return {
       title: titleMatch[1].trim(),
-      summary: summaryMatch[1].trim(),
+      summary: summaryMatch?.[1]?.trim() || titleMatch[1].trim(),
       body: bodyMatch[1].trim(),
     };
   } catch {

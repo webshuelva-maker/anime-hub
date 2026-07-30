@@ -17,7 +17,11 @@ async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promi
   try {
     const res = await fetch(ANILIST_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0)",
+      },
       body: JSON.stringify({ query: QUERY, variables: { search: searchText, type } }),
       signal: controller.signal,
     });
@@ -72,31 +76,49 @@ query ($search: String) {
   }
 }`;
 
+export interface AnimeSearchOutcome {
+  results: AnimeSearchResult[];
+  debug: string;
+}
+
 /**
  * Búsqueda real contra toda la base de datos de AniList (no solo lo que
  * tengamos cargado en el feed). Se usa desde el buscador de la app y desde
  * Ren, para poder hablar de cualquier anime exista o no una noticia sobre
- * él ahora mismo.
+ * él ahora mismo. Devuelve también un "debug" corto explicando qué pasó,
+ * para poder diagnosticar sin adivinar si algo falla.
  */
-export async function searchAnimeDatabase(term: string): Promise<AnimeSearchResult[]> {
+export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutcome> {
   const clean = term.trim();
-  if (clean.length < 2) return [];
+  if (clean.length < 2) return { results: [], debug: "término demasiado corto" };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4000);
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
     const res = await fetch(ANILIST_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0)",
+      },
       body: JSON.stringify({ query: SEARCH_QUERY, variables: { search: clean } }),
       signal: controller.signal,
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const media = data?.data?.anime?.media ?? [];
 
-    return media.map((m: {
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      return { results: [], debug: `AniList respondió ${res.status}: ${errBody.slice(0, 200)}` };
+    }
+
+    const data = await res.json();
+    if (data.errors) {
+      return { results: [], debug: `AniList devolvió error: ${JSON.stringify(data.errors).slice(0, 200)}` };
+    }
+
+    const media = data?.data?.anime?.media ?? [];
+    const results = media.map((m: {
       id: number;
       title: { romaji?: string; english?: string };
       coverImage?: { large?: string };
@@ -114,8 +136,11 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchResu
       genres: m.genres ?? [],
       type: "ANIME" as const,
     }));
-  } catch {
-    return [];
+
+    return { results, debug: `ok, ${results.length} resultado(s)` };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { results: [], debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }

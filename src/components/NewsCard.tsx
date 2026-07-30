@@ -58,6 +58,7 @@ export function NewsCard({
   onToggleLike,
   onOpenDetail,
   featured = false,
+  pending = false,
 }: {
   item: NewsItem;
   highlight?: boolean;
@@ -65,6 +66,7 @@ export function NewsCard({
   onToggleLike?: () => void;
   onOpenDetail?: () => void;
   featured?: boolean;
+  pending?: boolean;
 }) {
   return (
     <motion.article
@@ -78,6 +80,14 @@ export function NewsCard({
     >
       <div className={`relative ${featured ? "sm:w-2/5" : ""}`}>
         <NewsCover category={item.category} relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} tall={featured} />
+        {pending && (
+          <div className="absolute inset-0 overflow-hidden rounded-t-xl sm:rounded-tr-none">
+            <div
+              className="absolute inset-0 -translate-x-full animate-[shimmer_1.6s_infinite]"
+              style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }}
+            />
+          </div>
+        )}
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
           {onToggleLike && <HeartButton liked={liked} onToggle={onToggleLike} />}
           {highlight && (
