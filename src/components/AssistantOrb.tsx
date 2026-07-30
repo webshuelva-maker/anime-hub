@@ -97,6 +97,7 @@ export function AssistantOrb() {
   const [archive, setArchive] = useState<Message[]>(loadArchive);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slowResponse, setSlowResponse] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -148,6 +149,7 @@ export function AssistantOrb() {
     appendToArchive([userMessage]);
     setInput("");
     setLoading(true);
+    const slowTimer = setTimeout(() => setSlowResponse(true), 4000);
 
     try {
       const currentPrefs = getPreferences();
@@ -172,6 +174,8 @@ export function AssistantOrb() {
         { role: "assistant", content: "Se ha cortado la conexión. Inténtalo otra vez." },
       ]);
     } finally {
+      clearTimeout(slowTimer);
+      setSlowResponse(false);
       setLoading(false);
     }
   };
@@ -260,11 +264,18 @@ export function AssistantOrb() {
                     </motion.div>
                   ))}
                   {loading && (
-                    <div className="flex items-end gap-2">
-                      <Orb active={false} size={16} />
-                      <div className="panel-elevated flex items-center rounded-2xl border border-panel-border/70 px-2 py-1">
-                        <TypingDots />
+                    <div className="flex flex-col items-start gap-1">
+                      <div className="flex items-end gap-2">
+                        <Orb active={false} size={16} />
+                        <div className="panel-elevated flex items-center rounded-2xl border border-panel-border/70 px-2 py-1">
+                          <TypingDots />
+                        </div>
                       </div>
+                      {slowResponse && (
+                        <p className="ml-8 text-[11px] text-muted">
+                          Los servidores están más llenos de lo normal, tardando un poco más…
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

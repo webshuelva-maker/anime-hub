@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { NewsCard } from "./NewsCard";
 import { NewsThumb } from "./NewsThumb";
@@ -22,11 +22,12 @@ export function NewsFeed() {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [visibleTail, setVisibleTail] = useState(6);
   const [items, setItems] = useState<NewsItem[]>(getNewsItems());
-  const [status, setStatus] = useState<FeedStatus>("loading");
+  const [status, setStatus] = useState<FeedStatus>(() => (getNewsItems().length > 0 ? "live" : "loading"));
   const [searchTerm, setSearchTerm] = useState("");
   const [animeResults, setAnimeResults] = useState<AnimeSearchResult[]>([]);
   const [searchingAnime, setSearchingAnime] = useState(false);
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
+  const pendingItemsRef = useRef<NewsItem[]>([]);
 
   const loadNews = (silent = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -62,6 +63,7 @@ export function NewsFeed() {
    */
   const enrichItems = (loadedItems: NewsItem[]) => {
     const targets = loadedItems.slice(0, 16);
+    pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
 
     targets.forEach(async (item) => {
@@ -101,6 +103,14 @@ export function NewsFeed() {
         return next;
       });
 
+      // Solo se considera "resuelto" si de verdad llegó algo nuevo — si se
+      // quedó sin nada (p. ej. la pestaña estaba en segundo plano y el
+      // navegador frenó la petición), sigue en la lista de pendientes para
+      // reintentarlo cuando vuelvas a mirar la pestaña.
+      if (data.title || data.coverImageUrl) {
+        pendingItemsRef.current = pendingItemsRef.current.filter((p) => p.id !== item.id);
+      }
+
       setEnrichingIds((prev) => {
         const next = new Set(prev);
         next.delete(item.id);
@@ -109,10 +119,30 @@ export function NewsFeed() {
     });
   };
 
+  // Los navegadores frenan las pestañas en segundo plano, así que si vuelves
+  // a mirarla y todavía quedan noticias sin carátula/traducción real, se
+  // reintentan solas.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && pendingItemsRef.current.length > 0) {
+        enrichItems(pendingItemsRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(getPreferences());
-    loadNews();
+
+    // Si ya teníamos una copia guardada (p. ej. el navegador recargó la
+    // pestaña en segundo plano), se usa tal cual, sin volver a pedir ni
+    // traducir nada — el refresco cada 15 minutos ya se encarga de
+    // mantenerlo al día más adelante.
+    if (!getNewsItems().length) {
+      loadNews();
+    }
 
     // Refresco silencioso cada 15 minutos: si ya estás viendo noticias, no se
     // interrumpe la vista ni aunque este refresco puntual falle.

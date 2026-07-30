@@ -122,6 +122,16 @@ export function NewsCard({
               + confirmado por {item.crossConfirmedBy.join(", ")}
             </span>
           )}
+          {pending && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+              <motion.span
+                className="h-1.5 w-1.5 rounded-full bg-ice"
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+              />
+              Traduciendo…
+            </span>
+          )}
         </div>
 
         <h3 className={`font-heading font-semibold leading-snug text-foreground ${featured ? "text-xl" : "text-base"}`}>

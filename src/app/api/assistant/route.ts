@@ -9,6 +9,41 @@ interface ChatMessage {
 }
 
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const FALLBACK_MODEL = "meta/llama-3.1-70b-instruct";
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callModel(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: ChatMessage[]
+): Promise<{ ok: true; reply: string } | { ok: false; retryable: boolean }> {
+  try {
+    const response = await fetch(NVIDIA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
+        temperature: 0.7,
+        max_tokens: 420,
+      }),
+    });
+
+    if (!response.ok) {
+      return { ok: false, retryable: response.status === 429 || response.status >= 500 };
+    }
+
+    const data = await response.json();
+    const reply: string = data?.choices?.[0]?.message?.content ?? "";
+    return { ok: true, reply };
+  } catch {
+    return { ok: false, retryable: true };
+  }
+}
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.NVIDIA_API_KEY;
@@ -52,37 +87,24 @@ No puedes hacer nada más que estas dos acciones (no puedes cambiar el nombre de
 Contexto del usuario y de la app en este momento:
 ${context}`;
 
-  try {
-    const response = await fetch(NVIDIA_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: process.env.NVIDIA_MODEL || "meta/llama-3.1-70b-instruct",
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
-        temperature: 0.7,
-        max_tokens: 420,
-      }),
-    });
+  const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return NextResponse.json(
-        { error: `NVIDIA respondió con un error (${response.status}). ${errText.slice(0, 200)}` },
-        { status: 502 }
-      );
-    }
-
-    const data = await response.json();
-    const reply: string = data?.choices?.[0]?.message?.content ?? "";
-
-    return NextResponse.json({ reply });
-  } catch {
-    return NextResponse.json(
-      { error: "No se pudo contactar con la API de NVIDIA. Comprueba tu conexión y la clave." },
-      { status: 502 }
-    );
+  let attempt = await callModel(apiKey, primaryModel, systemPrompt, messages);
+  if (!attempt.ok && attempt.retryable) {
+    await sleep(1200);
+    attempt = await callModel(apiKey, primaryModel, systemPrompt, messages);
   }
+  if (!attempt.ok && attempt.retryable && primaryModel !== FALLBACK_MODEL) {
+    attempt = await callModel(apiKey, FALLBACK_MODEL, systemPrompt, messages);
+  }
+
+  if (!attempt.ok) {
+    // Nunca se enseña el error en crudo al usuario — solo un mensaje
+    // natural, como si el propio Ren estuviera avisando de la tardanza.
+    return NextResponse.json({
+      reply: "Los servidores están más llenos de lo normal ahora mismo y no consigo responder. Prueba otra vez en un momento.",
+    });
+  }
+
+  return NextResponse.json({ reply: attempt.reply });
 }
