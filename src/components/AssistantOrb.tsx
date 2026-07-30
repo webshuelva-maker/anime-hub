@@ -17,10 +17,6 @@ interface Message {
 }
 
 const ARCHIVE_KEY = "anime-hub:assistant-archive";
-// Si ha pasado más de esto desde el último mensaje, se considera que
-// vuelves "otro día": la conversación visible empieza de cero, pero Ren
-// sigue teniendo acceso a los temas de antes si le preguntas por ellos.
-const SESSION_GAP_MS = 60 * 60 * 1000;
 
 function loadArchive(): Message[] {
   if (typeof window === "undefined") return [];
@@ -88,12 +84,11 @@ function TypingDots() {
 }
 
 function initialMessages(): Message[] {
-  const archive = loadArchive();
-  const last = archive[archive.length - 1];
-  const isFreshSession = !last || !last.ts || Date.now() - last.ts > SESSION_GAP_MS;
-  // Si vuelves tras un rato, la vista empieza limpia (pero el archivo sigue
-  // intacto para que Ren pueda recordar temas si se lo preguntas).
-  return isFreshSession ? [] : archive;
+  // Cada vez que entras en la página, la conversación visible empieza
+  // limpia — Ren no continúa el hilo de antes. El archivo de memoria (con
+  // los temas ya hablados) sigue intacto por debajo para que pueda
+  // recordarlos si se lo preguntas, solo no se muestra de golpe.
+  return [];
 }
 
 export function AssistantOrb() {
@@ -214,8 +209,8 @@ export function AssistantOrb() {
                 <button
                   type="button"
                   onClick={() => setConfirmingClear(true)}
-                  aria-label="Borrar conversación"
-                  title="Borrar conversación"
+                  aria-label="Borrar memoria de Ren"
+                  title="Borrar memoria de Ren"
                   className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -323,8 +318,8 @@ export function AssistantOrb() {
 
       <ConfirmDialog
         open={confirmingClear}
-        title="Borrar conversación"
-        message={`¿Seguro que quieres borrar la conversación con ${siteConfig.assistantName}? No se puede deshacer.`}
+        title="Borrar memoria de Ren"
+        message={`Cada vez que entras, ${siteConfig.assistantName} ya empieza una conversación nueva por su cuenta — esto borra además todo lo que recuerda de temas anteriores. No se puede deshacer.`}
         onConfirm={handleClearChat}
         onCancel={() => setConfirmingClear(false)}
       />

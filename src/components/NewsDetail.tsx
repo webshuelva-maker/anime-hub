@@ -95,7 +95,7 @@ export function NewsDetail({
               <NewsCover
                 category={item.category}
                 relatedTitle={item.relatedTitle}
-                coverImageUrl={detailCover || item.coverImageUrl}
+                coverImageUrl={item.coverImageUrl || detailCover || undefined}
               />
 
               <div className="p-6 sm:p-8">
