@@ -41,10 +41,21 @@ export async function findCoverImage(searchText: string): Promise<string | null>
 
 /**
  * Extrae del título de una noticia el nombre de serie más probable, para
- * usarlo como término de búsqueda (los titulares suelen llevar contexto
- * extra alrededor del nombre real del anime).
+ * usarlo como término de búsqueda. Los titulares de ANN suelen tener el
+ * nombre de la serie al principio, seguido de una palabra tipo "Manga",
+ * "Anime", "Film"... o separado por dos puntos/guion.
  */
 export function guessSeriesName(title: string): string {
-  const cut = title.split(/[:\u2014-]| Season | Part | Episode /i)[0];
-  return cut.trim().length > 3 ? cut.trim() : title.trim();
+  const colonSplit = title.split(/[:\u2014]/)[0].trim();
+  if (colonSplit.length > 3 && colonSplit.length < title.length) return colonSplit;
+
+  const keywordSplit = title.split(
+    /\s+(?:Manga|Anime|Novel|Light Novel|Film|Movie|Live-Action|TV Anime|Video Game|Game|OVA|Series)\b/i
+  )[0].trim();
+  if (keywordSplit.length > 3 && keywordSplit.length < title.length) return keywordSplit;
+
+  const dashSplit = title.split(/ - /)[0].trim();
+  if (dashSplit.length > 3 && dashSplit.length < title.length) return dashSplit;
+
+  return title.trim();
 }

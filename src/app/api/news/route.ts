@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { NewsCategory, NewsItem, Reliability } from "@/types/news";
 import { findCoverImage, guessSeriesName } from "@/lib/anilist";
+import { fetchFullArticle } from "@/lib/articleReader";
 
 export const runtime = "nodejs";
 
@@ -27,9 +28,17 @@ function stripHtml(raw: string): string {
     .trim();
 }
 
-function extractEmbeddedImage(rawDescription: string): string | null {
-  const match = rawDescription.match(/<img[^>]+src="([^"]+)"/i);
-  return match?.[1] ?? null;
+function extractEmbeddedImage(block: string, rawDescription: string): string | null {
+  const enclosure = block.match(/<enclosure[^>]+url="([^"]+)"[^>]*type="image[^"]*"/i)
+    ?? block.match(/<enclosure[^>]+url="([^"]+)"/i);
+  if (enclosure?.[1]) return enclosure[1];
+
+  const mediaThumbnail = block.match(/<media:thumbnail[^>]+url="([^"]+)"/i)
+    ?? block.match(/<media:content[^>]+url="([^"]+)"[^>]*medium="image"/i);
+  if (mediaThumbnail?.[1]) return mediaThumbnail[1];
+
+  const inlineImg = rawDescription.match(/<img[^>]+src="([^"]+)"/i);
+  return inlineImg?.[1] ?? null;
 }
 
 function inferCategory(title: string): NewsCategory {
@@ -90,7 +99,7 @@ export async function GET() {
       const pubDateRaw = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim();
       const rawDescription = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? "";
       const description = dedupeAgainstTitle(stripHtml(rawDescription), title);
-      const embeddedImage = extractEmbeddedImage(rawDescription);
+      const embeddedImage = extractEmbeddedImage(block, rawDescription);
       const publishedAt = pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw))
         ? new Date(pubDateRaw).toISOString()
         : new Date().toISOString();
@@ -126,6 +135,16 @@ export async function GET() {
         if (item.coverImageUrl) return;
         const cover = await findCoverImage(guessSeriesName(item.relatedTitle));
         if (cover) item.coverImageUrl = cover;
+      })
+    );
+
+    // Artículo completo (no solo el resumen corto del RSS) para las
+    // primeras noticias, sacado de la propia página original. Si falla o
+    // tarda demasiado para alguna, se queda con el resumen del RSS.
+    await Promise.allSettled(
+      items.slice(0, 10).map(async (item) => {
+        const full = await fetchFullArticle(item.source.url);
+        if (full && full.length > item.body.length) item.body = full;
       })
     );
 
