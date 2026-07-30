@@ -131,7 +131,7 @@ export async function GET() {
     // todavía no tienen ya la propia imagen del artículo (arriba). Se hace
     // en paralelo y con límite, y nunca bloquea el feed si falla.
     await Promise.allSettled(
-      items.slice(0, 16).map(async (item) => {
+      items.map(async (item) => {
         if (item.coverImageUrl) return;
         const cover = await findCoverImage(guessSeriesName(item.relatedTitle));
         if (cover) item.coverImageUrl = cover;
@@ -142,7 +142,7 @@ export async function GET() {
     // primeras noticias, sacado de la propia página original. Si falla o
     // tarda demasiado para alguna, se queda con el resumen del RSS.
     await Promise.allSettled(
-      items.slice(0, 10).map(async (item) => {
+      items.slice(0, 14).map(async (item) => {
         const full = await fetchFullArticle(item.source.url);
         if (full && full.length > item.body.length) item.body = full;
       })

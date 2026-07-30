@@ -63,4 +63,5 @@ export interface UserPreferences {
   genreInteractionCounts: Record<string, number>; // aprendizaje implícito: clics por género
   studioInteractionCounts: Record<string, number>; // aprendizaje implícito: clics por estudio
   likedNewsIds: string[]; // noticias marcadas con "me gusta": la señal más fuerte de aprendizaje
+  searchHistory: string[]; // términos buscados, para reforzar el feed sin que el usuario tenga que marcar nada
 }

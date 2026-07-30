@@ -8,10 +8,11 @@ import { NewsDetail } from "./NewsDetail";
 import { ReliabilityBadge } from "./ReliabilityBadge";
 import { getPreferences, DEFAULT_PREFERENCES } from "@/lib/storage";
 import { NewsItem, UserPreferences } from "@/types/news";
-import { scoreNewsItem, toggleLike, recordNewsInteraction } from "@/lib/learning";
+import { scoreNewsItem, toggleLike, recordNewsInteraction, recordSearch } from "@/lib/learning";
 import { formatRelativeDate } from "@/lib/date";
 import { Avatar } from "./AvatarPicker";
 import { getNewsItems, setNewsItems } from "@/lib/newsStore";
+import { SearchBar } from "./SearchBar";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -21,6 +22,7 @@ export function NewsFeed() {
   const [visibleTail, setVisibleTail] = useState(6);
   const [items, setItems] = useState<NewsItem[]>(getNewsItems());
   const [status, setStatus] = useState<FeedStatus>("loading");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const loadNews = (silent = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -75,6 +77,14 @@ export function NewsFeed() {
   const mainStories = [second, third].filter(Boolean) as typeof ranked;
   const openItem: NewsItem | null = items.find((n) => n.id === openItemId) ?? null;
 
+  const searchResults = useMemo(() => {
+    if (!searchTerm) return null;
+    const q = searchTerm.toLowerCase();
+    return ranked.filter(
+      ({ item }) => item.title.toLowerCase().includes(q) || item.relatedTitle.toLowerCase().includes(q)
+    );
+  }, [ranked, searchTerm]);
+
   const handleToggleLike = (itemId: string) => {
     const item = items.find((n) => n.id === itemId);
     if (!item) return;
@@ -114,6 +124,17 @@ export function NewsFeed() {
               {status === "offline" && "Sin conexión"}
               {status === "down" && "Feed caído"}
             </span>
+          </div>
+
+          <div className="mt-4">
+            <SearchBar
+              items={items}
+              onSearch={(term) => {
+                setSearchTerm(term);
+                recordSearch(term);
+              }}
+              onClear={() => setSearchTerm("")}
+            />
           </div>
         </div>
       </div>
@@ -164,7 +185,43 @@ export function NewsFeed() {
           </div>
         )}
 
-        {status === "live" && (
+        {status === "live" && searchResults && (
+          <div>
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-heading text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                Resultados para &quot;{searchTerm}&quot;
+              </p>
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="text-xs font-medium text-muted transition-colors hover:text-foreground"
+              >
+                Volver al feed
+              </button>
+            </div>
+
+            {searchResults.length === 0 ? (
+              <p className="panel rounded-xl p-8 text-center text-sm text-muted">
+                No hay noticias sobre &quot;{searchTerm}&quot; en el feed cargado ahora mismo.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {searchResults.map(({ item, score }) => (
+                  <NewsCard
+                    key={item.id}
+                    item={item}
+                    highlight={hasLearned && score > 0}
+                    liked={prefs.likedNewsIds.includes(item.id)}
+                    onToggleLike={() => handleToggleLike(item.id)}
+                    onOpenDetail={() => handleOpenDetail(item.id, item)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {status === "live" && !searchResults && (
           <>
         {featured && (
           <div className="mb-10">

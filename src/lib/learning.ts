@@ -52,6 +52,20 @@ function applyBoost(prefs: UserPreferences, item: NewsItem, weight: number): voi
 }
 
 /**
+ * Registra un término que el usuario ha buscado (con autocompletado o
+ * pulsando Enter). No hace falta que dé "me gusta" a nada: buscar un anime
+ * ya es una señal de que le interesa, así que refuerza el feed solo.
+ */
+export function recordSearch(term: string): void {
+  const clean = term.trim();
+  if (clean.length < 2) return;
+  const prefs = getPreferences();
+  const withoutDupe = prefs.searchHistory.filter((t) => t.toLowerCase() !== clean.toLowerCase());
+  const searchHistory = [clean, ...withoutDupe].slice(0, 20);
+  savePreferences({ ...prefs, searchHistory });
+}
+
+/**
  * Puntuación de afinidad de una noticia para el usuario. Ya no depende de
  * un cuestionario: se basa por completo en lo que ha dado "me gusta" o
  * clicado antes. Los animes favoritos escritos a mano (opcional, en el
@@ -68,6 +82,14 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
     )
   ) {
     score += 6;
+  }
+
+  if (
+    prefs.searchHistory.some((term) =>
+      item.relatedTitle.toLowerCase().includes(term.toLowerCase())
+    )
+  ) {
+    score += 3;
   }
 
   item.genres.forEach((g) => {
