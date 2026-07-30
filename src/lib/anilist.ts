@@ -1,8 +1,8 @@
 const ANILIST_URL = "https://graphql.anilist.co";
 
 const QUERY = `
-query ($search: String) {
-  Media(search: $search, type: ANIME) {
+query ($search: String, $type: MediaType) {
+  Media(search: $search, type: $type) {
     coverImage {
       extraLarge
       large
@@ -10,14 +10,7 @@ query ($search: String) {
   }
 }`;
 
-/**
- * Busca en AniList (API pública y gratuita, pensada precisamente para que
- * apps de terceros muestren carátulas oficiales) la portada real de un
- * anime a partir de un texto de búsqueda. Devuelve null si no hay
- * coincidencia o si la API no responde a tiempo — nunca bloquea el resto
- * del feed por esto.
- */
-export async function findCoverImage(searchText: string): Promise<string | null> {
+async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
 
@@ -25,7 +18,7 @@ export async function findCoverImage(searchText: string): Promise<string | null>
     const res = await fetch(ANILIST_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ query: QUERY, variables: { search: searchText } }),
+      body: JSON.stringify({ query: QUERY, variables: { search: searchText, type } }),
       signal: controller.signal,
     });
     if (!res.ok) return null;
@@ -34,6 +27,95 @@ export async function findCoverImage(searchText: string): Promise<string | null>
     return cover ?? null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Busca en AniList (API pública y gratuita, pensada precisamente para que
+ * apps de terceros muestren carátulas oficiales) la portada real de un
+ * anime o manga a partir de un texto de búsqueda. Prueba primero como
+ * anime y, si no hay coincidencia (muchas noticias son de manga puro, sin
+ * adaptación todavía), prueba como manga. Devuelve null si no hay
+ * coincidencia en ninguno o si la API no responde a tiempo.
+ */
+export async function findCoverImage(searchText: string): Promise<string | null> {
+  const anime = await searchAniList(searchText, "ANIME");
+  if (anime) return anime;
+  return searchAniList(searchText, "MANGA");
+}
+
+export interface AnimeSearchResult {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  description: string | null;
+  format: string | null;
+  status: string | null;
+  genres: string[];
+  type: "ANIME" | "MANGA";
+}
+
+const SEARCH_QUERY = `
+query ($search: String) {
+  anime: Page(page: 1, perPage: 3) {
+    media(search: $search, type: ANIME) {
+      id
+      title { romaji english }
+      coverImage { large }
+      description(asHtml: false)
+      format
+      status
+      genres
+    }
+  }
+}`;
+
+/**
+ * Búsqueda real contra toda la base de datos de AniList (no solo lo que
+ * tengamos cargado en el feed). Se usa desde el buscador de la app y desde
+ * Ren, para poder hablar de cualquier anime exista o no una noticia sobre
+ * él ahora mismo.
+ */
+export async function searchAnimeDatabase(term: string): Promise<AnimeSearchResult[]> {
+  const clean = term.trim();
+  if (clean.length < 2) return [];
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    const res = await fetch(ANILIST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query: SEARCH_QUERY, variables: { search: clean } }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const media = data?.data?.anime?.media ?? [];
+
+    return media.map((m: {
+      id: number;
+      title: { romaji?: string; english?: string };
+      coverImage?: { large?: string };
+      description?: string;
+      format?: string;
+      status?: string;
+      genres?: string[];
+    }) => ({
+      id: m.id,
+      title: m.title.english || m.title.romaji || "Sin título",
+      coverImage: m.coverImage?.large ?? null,
+      description: m.description ? m.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : null,
+      format: m.format ?? null,
+      status: m.status ?? null,
+      genres: m.genres ?? [],
+      type: "ANIME" as const,
+    }));
+  } catch {
+    return [];
   } finally {
     clearTimeout(timeout);
   }

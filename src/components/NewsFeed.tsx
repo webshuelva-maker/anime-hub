@@ -13,6 +13,7 @@ import { formatRelativeDate } from "@/lib/date";
 import { Avatar } from "./AvatarPicker";
 import { getNewsItems, setNewsItems } from "@/lib/newsStore";
 import { SearchBar } from "./SearchBar";
+import { AnimeSearchResult } from "@/lib/anilist";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -23,6 +24,8 @@ export function NewsFeed() {
   const [items, setItems] = useState<NewsItem[]>(getNewsItems());
   const [status, setStatus] = useState<FeedStatus>("loading");
   const [searchTerm, setSearchTerm] = useState("");
+  const [animeResults, setAnimeResults] = useState<AnimeSearchResult[]>([]);
+  const [searchingAnime, setSearchingAnime] = useState(false);
 
   const loadNews = (silent = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -132,8 +135,17 @@ export function NewsFeed() {
               onSearch={(term) => {
                 setSearchTerm(term);
                 recordSearch(term);
+                setSearchingAnime(true);
+                fetch(`/api/anime-search?q=${encodeURIComponent(term)}`)
+                  .then((res) => res.json())
+                  .then((data: { results?: AnimeSearchResult[] }) => setAnimeResults(data.results ?? []))
+                  .catch(() => setAnimeResults([]))
+                  .finally(() => setSearchingAnime(false));
               }}
-              onClear={() => setSearchTerm("")}
+              onClear={() => {
+                setSearchTerm("");
+                setAnimeResults([]);
+              }}
             />
           </div>
         </div>
@@ -199,6 +211,32 @@ export function NewsFeed() {
                 Volver al feed
               </button>
             </div>
+
+            {searchingAnime && (
+              <p className="mb-4 text-xs text-muted">Buscando en la base de datos de anime…</p>
+            )}
+
+            {animeResults.length > 0 && (
+              <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {animeResults.map((a) => (
+                  <div key={a.id} className="panel flex gap-4 rounded-xl p-4">
+                    {a.coverImage && (
+                      // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList)
+                      <img src={a.coverImage} alt="" className="h-24 w-16 flex-shrink-0 rounded-lg object-cover" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-heading text-sm font-semibold text-foreground">{a.title}</p>
+                      <p className="mt-0.5 text-[11px] uppercase tracking-wide text-ice">
+                        {[a.format, a.status].filter(Boolean).join(" · ")}
+                      </p>
+                      {a.description && (
+                        <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted">{a.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {searchResults.length === 0 ? (
               <p className="panel rounded-xl p-8 text-center text-sm text-muted">

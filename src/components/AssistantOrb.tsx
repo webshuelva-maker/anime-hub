@@ -14,6 +14,18 @@ interface Message {
   actions?: AssistantAction[];
 }
 
+const MESSAGES_STORAGE_KEY = "anime-hub:assistant-messages";
+
+function loadStoredMessages(): Message[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MESSAGES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 function Orb({ active, size = 24 }: { active: boolean; size?: number }) {
   return (
     <div className="relative flex flex-shrink-0 items-center justify-center" style={{ height: size, width: size }}>
@@ -60,11 +72,21 @@ function TypingDots() {
 
 export function AssistantOrb() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(loadStoredMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    window.localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+  }, [messages]);
+
+  const handleClearChat = () => {
+    setMessages([]);
+    window.localStorage.removeItem(MESSAGES_STORAGE_KEY);
+  };
 
   useEffect(() => {
     if (open && !prefs) {
@@ -156,9 +178,20 @@ export function AssistantOrb() {
                 </div>
                 <button
                   type="button"
+                  onClick={handleClearChat}
+                  aria-label="Borrar conversación"
+                  title="Borrar conversación"
+                  className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Cerrar"
-                  className="relative ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
                 >
                   ✕
                 </button>
