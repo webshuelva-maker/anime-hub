@@ -17,17 +17,18 @@ async function callOnce(
   apiKey: string,
   model: string,
   maxTokens: number
-): Promise<{ ok: true; text: string } | { ok: false; tryFallback: boolean; debug: string }> {
+): Promise<{ ok: true; text: string } | { ok: false; debug: string }> {
   const controller = new AbortController();
-  // Netlify mata las funciones serverless estándar a los 10s (26s como
-  // máximo en plan Pro). Con 18s por intento, dos intentos ya sumaban
-  // hasta 54s — la función moría a medias sin que este código llegara a
-  // enterarse ni a devolver nada útil. Con 9s, dos intentos (principal +
-  // respaldo) caben en 18s, dentro del límite de 26s de Pro. En el plan
-  // gratuito (10s) sigue pudiendo no dar tiempo con un solo intento lento;
-  // si eso pasa a menudo conviene subir el timeout de la función en
-  // Netlify (Project configuration → Functions) si el plan lo permite.
-  const timeout = setTimeout(() => controller.abort(), 9000);
+  // Confirmado: plan gratuito de Netlify → límite duro de 10s por
+  // función. Con eso no caben ni siquiera DOS llamadas de 9s en la misma
+  // invocación (18s > 10s) — así que cada invocación hace como mucho UNA
+  // llamada a NVIDIA. 8s deja algo de margen (arranque en frío, overhead
+  // de red) dentro de esos 10s. El reintento con el modelo de respaldo ya
+  // NO pasa aquí dentro: lo dispara el propio cliente con una segunda
+  // petición HTTP aparte (con su propio presupuesto de 10s), pasando
+  // preferFallback=true — ver translateNewsFields más abajo y quien la
+  // llama en /api/translate-detail.
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
     const res = await fetch(NVIDIA_URL, {
@@ -51,13 +52,7 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      // 429/5xx suelen fallar rápido — merece la pena probar el modelo de
-      // respaldo (reintentar el MISMO modelo ya no se hace: con el
-      // presupuesto de tiempo tan ajustado de una función serverless, un
-      // modelo distinto tiene más probabilidades de ir bien que esperar y
-      // repetir la misma llamada que ya falló).
-      const retryable = res.status === 429 || res.status >= 500;
-      return { ok: false, tryFallback: retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+      return { ok: false, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
     }
 
     const data = await res.json();
@@ -65,36 +60,35 @@ async function callOnce(
     return { ok: true, text };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, tryFallback: true, debug: `excepción: ${message}` };
+    return { ok: false, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }
 }
 
 /**
- * Traduce título + resumen + cuerpo de una noticia al español. Si el
- * modelo configurado está saturado o tarda demasiado, prueba UNA vez con
- * un modelo de respaldo distinto antes de rendirse (casi nunca están los
- * dos saturados a la vez) — ya no reintenta el mismo modelo, para que el
- * tiempo total de las dos llamadas quepa dentro del límite de una
- * función serverless (ver comentario de timeout en callOnce).
+ * Traduce título + resumen + cuerpo de una noticia al español. Hace
+ * UNA sola llamada a NVIDIA (ver por qué en el comentario de timeout de
+ * callOnce) — usa el modelo principal salvo que preferFallback sea true,
+ * en cuyo caso usa directamente el de respaldo. Quien llama a esta
+ * función decide cuándo pasar preferFallback=true: normalmente en un
+ * segundo intento, con una petición HTTP nueva, después de que el primero
+ * fallara.
  */
 export async function translateNewsFields(
   title: string,
   summary: string,
   body: string,
-  maxTokens = 2000
+  maxTokens = 2000,
+  preferFallback = false
 ): Promise<TranslationOutcome> {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) return { result: null, debug: "sin NVIDIA_API_KEY configurada" };
 
   const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
+  const model = preferFallback && primaryModel !== FALLBACK_MODEL ? FALLBACK_MODEL : primaryModel;
 
-  let attempt = await callOnce(title, summary, body, apiKey, primaryModel, maxTokens);
-
-  if (!attempt.ok && attempt.tryFallback && primaryModel !== FALLBACK_MODEL) {
-    attempt = await callOnce(title, summary, body, apiKey, FALLBACK_MODEL, maxTokens);
-  }
+  const attempt = await callOnce(title, summary, body, apiKey, model, maxTokens);
 
   if (!attempt.ok) {
     return { result: null, debug: attempt.debug };

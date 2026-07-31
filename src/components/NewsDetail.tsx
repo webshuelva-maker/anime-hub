@@ -19,14 +19,86 @@ export function NewsDetail({
 }) {
   const [title, setTitle] = useState<string | null>(null);
   const [body, setBody] = useState<string | null>(null);
-  // Solo se rellena si la traducción del artículo completo falla de
-  // verdad (no si simplemente tarda) — se muestra como último recurso y
-  // SIEMPRE con una nota visible, nunca como sustitución silenciosa.
+  // Solo se rellena si la traducción del artículo falla de verdad (no si
+  // simplemente tarda) — se muestra como último recurso y SIEMPRE con una
+  // nota visible, nunca como sustitución silenciosa.
   const [englishFallback, setEnglishFallback] = useState<string | null>(null);
   const [detailCover, setDetailCover] = useState<string | null>(null);
   const [translatingBody, setTranslatingBody] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [retryTick, setRetryTick] = useState(0);
+
+  const runDetailFetch = useCallback((targetItem: NewsItem, forceRefetch: boolean) => {
+    let cancelled = false;
+    const cached = getCachedTranslation(targetItem.source.url);
+
+    setTitle(cached?.title ?? null);
+    setBody(cached?.body ?? null);
+    setEnglishFallback(null);
+    setDetailCover(null);
+    setLoadFailed(false);
+
+    if (cached?.body) return () => {}; // ya está todo, no hace falta pedir nada
+
+    // Si ya se descargó el artículo antes (aunque la traducción fallara
+    // en su momento), reabrir la noticia lo muestra al instante — nada de
+    // spinner ni de repetir la descarga — y solo se reintenta la
+    // traducción en red si el usuario lo pide explícitamente.
+    if (cached?.articleText && !forceRefetch) {
+      setEnglishFallback(cached.articleText);
+      return () => {};
+    }
+
+    setTranslatingBody(true);
+
+    const callTranslateDetail = (articleText: string | null | undefined, preferFallback: boolean) =>
+      fetch("/api/translate-detail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
+      }).then((res) => res.json()) as Promise<{ title?: string | null; body?: string | null }>;
+
+    const params = new URLSearchParams({ url: targetItem.source.url });
+    fetch(`/api/enrich-detail?${params.toString()}`)
+      .then((res) => res.json())
+      .then(async (data: { coverImageUrl?: string | null; articleText?: string | null }) => {
+        if (cancelled) return;
+        if (data.coverImageUrl) setDetailCover(data.coverImageUrl);
+        if (data.articleText) {
+          saveCachedTranslation(targetItem.source.url, { articleText: data.articleText });
+        }
+
+        // Cada invocación de /api/translate-detail hace como mucho UNA
+        // llamada a NVIDIA (plan gratuito de Netlify, 10s duros). Si el
+        // primer intento no vuelve con traducción, este segundo intento
+        // usa el modelo de RESPALDO antes de rendirse.
+        let translated = await callTranslateDetail(data.articleText, false);
+        if (cancelled) return;
+        if (!translated.body) {
+          translated = await callTranslateDetail(data.articleText, true);
+          if (cancelled) return;
+        }
+
+        if (translated.title) setTitle(translated.title);
+        if (translated.body) {
+          setBody(translated.body);
+          saveCachedTranslation(targetItem.source.url, { title: translated.title ?? undefined, body: translated.body });
+        } else if (data.articleText) {
+          setEnglishFallback(data.articleText);
+        } else {
+          setLoadFailed(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setTranslatingBody(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Bloquea el scroll de la página de fondo mientras el modal está abierto
   useEffect(() => {
@@ -46,13 +118,6 @@ export function NewsDetail({
     };
   }, [item]);
 
-  // Se ve al instante el resumen YA traducido de la tarjeta (item.summary)
-  // — nunca item.body, que es el texto original en inglés del RSS y
-  // nunca se traduce a nivel de tarjeta. Si ya hay una traducción del
-  // artículo completo en caché, se aplica sin llamar a la IA. Si no, se
-  // piden por separado (1) el artículo original y (2) su traducción —
-  // dos llamadas en vez de una para que ninguna función serverless tenga
-  // que cubrir scrape + traducción a la vez (ver /api/enrich-detail).
   useEffect(() => {
     if (!item) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -63,61 +128,12 @@ export function NewsDetail({
       setLoadFailed(false);
       return;
     }
+    return runDetailFetch(item, false);
+  }, [item, runDetailFetch]);
 
-    let cancelled = false;
-    const cached = getCachedTranslation(item.source.url);
-    setTitle(cached?.title ?? null);
-    setBody(cached?.body ?? null);
-    setEnglishFallback(null);
-    setDetailCover(null);
-    setLoadFailed(false);
-
-    if (cached?.body) return; // ya está todo, no hace falta pedir nada
-
-    setTranslatingBody(true);
-
-    const params = new URLSearchParams({ url: item.source.url });
-    fetch(`/api/enrich-detail?${params.toString()}`)
-      .then((res) => res.json())
-      .then(async (data: { coverImageUrl?: string | null; articleText?: string | null }) => {
-        if (cancelled) return;
-        if (data.coverImageUrl) setDetailCover(data.coverImageUrl);
-
-        const translateRes = await fetch("/api/translate-detail", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: item.title, summary: item.summary, articleText: data.articleText }),
-        });
-        if (cancelled) return;
-        const translated: { title?: string | null; body?: string | null } = await translateRes.json();
-
-        if (translated.title) setTitle(translated.title);
-        if (translated.body) {
-          setBody(translated.body);
-          saveCachedTranslation(item.source.url, { title: translated.title ?? undefined, body: translated.body });
-        } else if (data.articleText) {
-          // La traducción falló pero sí se descargó el artículo — se
-          // muestra en inglés como último recurso, dejándolo claro en la
-          // interfaz (ver aviso más abajo), en vez de quedarse solo con
-          // el resumen corto para siempre.
-          setEnglishFallback(data.articleText);
-        } else {
-          setLoadFailed(true);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setLoadFailed(true);
-      })
-      .finally(() => {
-        if (!cancelled) setTranslatingBody(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [item, retryTick]);
-
-  const handleRetry = useCallback(() => setRetryTick((n) => n + 1), []);
+  const handleRetry = useCallback(() => {
+    if (item) runDetailFetch(item, true);
+  }, [item, runDetailFetch]);
 
   const shownBody = body || englishFallback || item?.summary || item?.body || "";
 
@@ -192,11 +208,11 @@ export function NewsDetail({
                 </AnimatePresence>
 
                 {translatingBody && !body && (
-                  <p className="mt-3 text-xs text-muted">Traduciendo el artículo completo…</p>
+                  <p className="mt-3 text-xs text-muted">Traduciendo el artículo…</p>
                 )}
                 {!translatingBody && englishFallback && !body && (
                   <p className="mt-3 text-xs text-muted">
-                    No se pudo traducir el artículo completo — se muestra en inglés.{" "}
+                    No se pudo traducir el artículo — se muestra en inglés.{" "}
                     <button type="button" onClick={handleRetry} className="underline hover:text-foreground">
                       Reintentar
                     </button>
@@ -204,7 +220,7 @@ export function NewsDetail({
                 )}
                 {!translatingBody && loadFailed && !body && !englishFallback && (
                   <p className="mt-3 text-xs text-muted">
-                    No se pudo cargar el artículo completo — se muestra el resumen.{" "}
+                    No se pudo cargar el artículo — se muestra el resumen.{" "}
                     <button type="button" onClick={handleRetry} className="underline hover:text-foreground">
                       Reintentar
                     </button>

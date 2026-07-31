@@ -91,10 +91,14 @@ export async function fetchArticlePage(url: string): Promise<{ text: string | nu
     }
 
     const combined = paragraphs.length > 0 ? paragraphs.join("\n\n") : null;
-    // Límite generoso para dejar sitio a un artículo real completo, pero
-    // acotado para no disparar ni el tamaño de la petición a NVIDIA ni el
-    // tiempo de traducción.
-    const text = combined && combined.length > 4000 ? `${combined.slice(0, 4000)}…` : combined;
+    // Antes eran 4000 caracteres — para artículos largos (piezas de
+    // análisis, no solo noticias breves) traducir eso necesitaba tanta
+    // generación que solía agotar el tiempo de la función serverless
+    // (ver /api/translate-detail) y se acababa mostrando en inglés. Con
+    // ~1500 caracteres (un resumen extendido, no el artículo entero) la
+    // traducción es mucho más fiable — para leer el artículo íntegro
+    // siempre queda el enlace a la fuente original.
+    const text = combined && combined.length > 1500 ? `${combined.slice(0, 1500)}…` : combined;
 
     return { text, image: extractOgImage(html) };
   } catch {

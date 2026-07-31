@@ -133,6 +133,26 @@ export function NewsFeed() {
     const CHUNK_SIZE = 3;
     const CHUNK_DELAY_MS = 1000;
 
+    const callTranslateBatch = async (
+      items: NewsItem[],
+      preferFallback: boolean
+    ): Promise<Map<string, { title?: string; summary?: string }>> => {
+      try {
+        const res = await fetch("/api/translate-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: items.map((it) => ({ id: it.id, title: it.title, summary: it.summary })),
+            preferFallback,
+          }),
+        });
+        const data: { results?: { id: string; title?: string; summary?: string }[] } = await res.json();
+        return new Map((data.results ?? []).map((r) => [r.id, r]));
+      } catch {
+        return new Map();
+      }
+    };
+
     const translateChunk = async (chunk: NewsItem[]) => {
       const stillNeeded: NewsItem[] = [];
       chunk.forEach((item) => {
@@ -144,28 +164,27 @@ export function NewsFeed() {
         }
       });
 
-      if (stillNeeded.length > 0) {
-        try {
-          const res = await fetch("/api/translate-batch", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              items: stillNeeded.map((it) => ({ id: it.id, title: it.title, summary: it.summary })),
-            }),
-          });
-          const data: { results?: { id: string; title?: string; summary?: string }[] } = await res.json();
-          const byId = new Map((data.results ?? []).map((r) => [r.id, r]));
-
-          stillNeeded.forEach((item) => {
-            const translated = byId.get(item.id);
-            if (translated?.title) {
-              updateItem(item.id, { title: translated.title, summary: translated.summary || item.summary });
-              saveCachedTranslation(item.source.url, { title: translated.title, summary: translated.summary });
-            }
-          });
-        } catch {
-          // este mini-lote falló; los demás siguen su curso igualmente
-        }
+      let pending = stillNeeded;
+      // Hasta 2 intentos por lote: cada invocación de /api/translate-batch
+      // hace como mucho UNA llamada a NVIDIA (plan gratuito de Netlify,
+      // 10s duros por función — no caben dos ahí dentro). Si el primer
+      // intento falla, este segundo intento usa el modelo de RESPALDO
+      // (preferFallback), no el mismo que ya falló — antes un solo fallo
+      // dejaba esas noticias sin traducir para siempre en esa sesión.
+      for (let attempt = 0; attempt < 2 && pending.length > 0; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
+        const byId = await callTranslateBatch(pending, attempt > 0);
+        const stillMissing: NewsItem[] = [];
+        pending.forEach((item) => {
+          const translated = byId.get(item.id);
+          if (translated?.title) {
+            updateItem(item.id, { title: translated.title, summary: translated.summary || item.summary });
+            saveCachedTranslation(item.source.url, { title: translated.title, summary: translated.summary });
+          } else {
+            stillMissing.push(item);
+          }
+        });
+        pending = stillMissing;
       }
 
       setTranslatingIds((prev) => {

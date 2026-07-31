@@ -18,7 +18,7 @@ export const runtime = "nodejs";
  * interfaz — nunca como una sustitución silenciosa.
  */
 export async function POST(req: NextRequest) {
-  let payload: { title?: string; summary?: string; articleText?: string };
+  let payload: { title?: string; summary?: string; articleText?: string; preferFallback?: boolean };
   try {
     payload = await req.json();
   } catch {
@@ -29,7 +29,13 @@ export async function POST(req: NextRequest) {
   const summary = payload.summary ?? "";
   const bodyForTranslation = payload.articleText || summary || title;
 
-  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, bodyForTranslation, 2000);
+  const { result: translated, debug: translateDebug } = await translateNewsFields(
+    title,
+    summary,
+    bodyForTranslation,
+    900,
+    payload.preferFallback === true
+  );
 
   return NextResponse.json({
     title: translated?.title ?? null,

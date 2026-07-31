@@ -5,6 +5,12 @@ interface CachedTranslation {
   title?: string;
   summary?: string;
   body?: string;
+  // Artículo original en inglés ya descargado (sin traducir). Se guarda
+  // aparte de "body" para que, si la traducción falla, reabrir la misma
+  // noticia no tenga que volver a descargar el artículo de la web
+  // original — solo reintentar la traducción, y solo si el usuario lo
+  // pide explícitamente (botón "Reintentar").
+  articleText?: string;
   savedAt: number;
 }
 

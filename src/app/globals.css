@@ -110,6 +110,14 @@ body {
   to { opacity: 1; }
 }
 
+/* El elemento animado con shimmerSweep DEBE medir el 100% del contenedor
+   (inset-0), nunca una fracción (ej. w-1/4): translateX(±100%) se calcula
+   sobre el ANCHO PROPIO del elemento, no sobre el del contenedor. Con un
+   elemento al 25% de ancho, translateX(100%) solo lo desplaza 1/4 del
+   contenedor — el barrido se quedaba recorriendo solo la mitad izquierda
+   y encima parecía ir "rápido" al cubrir tan poco recorrido real. Con el
+   elemento a 100%, el degradado central (transparent/blanco/transparent)
+   hace de "banda" visible que sí cruza el contenedor entero. */
 @keyframes shimmerSweep {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }

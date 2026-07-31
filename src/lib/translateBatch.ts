@@ -13,10 +13,6 @@ export interface BatchTranslateResult {
   summary: string;
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 const SYSTEM_PROMPT = `Traduces titulares y resúmenes de noticias de anime del inglés al español de España, de forma natural.
 
 MUY IMPORTANTE: los títulos oficiales de anime, manga, novelas ligeras, videojuegos y los nombres de estudios NUNCA se traducen — se dejan EXACTAMENTE como están en el texto original. Ejemplos que deben quedar igual: "Smoking Behind the Supermarket with You", "Jujutsu Kaisen", "Dandadan", "Chainsaw Man", "Kyoto Animation". Solo se traduce el texto descriptivo alrededor.
@@ -27,9 +23,16 @@ async function callBatch(
   items: BatchTranslateItem[],
   apiKey: string,
   model: string
-): Promise<{ ok: true; results: BatchTranslateResult[] } | { ok: false; retryable: boolean; debug: string }> {
+): Promise<{ ok: true; results: BatchTranslateResult[] } | { ok: false; debug: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  // Confirmado: plan gratuito de Netlify → 10s duros por función. Ni
+  // siquiera caben dos llamadas de 9s en la misma invocación, así que
+  // esta función hace como mucho UNA llamada a NVIDIA por invocación.
+  // 8s deja margen dentro de esos 10s. El reintento con el modelo de
+  // respaldo lo dispara el CLIENTE con una segunda petición HTTP aparte
+  // (presupuesto de 10s propio), pasando preferFallback=true — ver
+  // translateBatch más abajo y quien la llama en /api/translate-batch.
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
     const res = await fetch(NVIDIA_URL, {
@@ -49,8 +52,7 @@ async function callBatch(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      const retryable = res.status === 429 || res.status >= 500;
-      return { ok: false, retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+      return { ok: false, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
     }
 
     const data = await res.json();
@@ -58,16 +60,15 @@ async function callBatch(
     // Por si el modelo envuelve el JSON en ```json ... ``` pese a que se le pide que no.
     const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
     const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) return { ok: false, retryable: false, debug: `respuesta sin JSON: "${raw.slice(0, 150)}"` };
+    if (!match) return { ok: false, debug: `respuesta sin JSON: "${raw.slice(0, 150)}"` };
 
     const parsed = JSON.parse(match[0]);
-    if (!Array.isArray(parsed)) return { ok: false, retryable: false, debug: "el JSON devuelto no es un array" };
+    if (!Array.isArray(parsed)) return { ok: false, debug: "el JSON devuelto no es un array" };
 
     return { ok: true, results: parsed };
   } catch (e) {
-    const isTimeout = e instanceof Error && e.name === "AbortError";
     const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, retryable: !isTimeout, debug: `excepción: ${message}` };
+    return { ok: false, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }
@@ -75,23 +76,19 @@ async function callBatch(
 
 /**
  * Traduce varias noticias EN UNA SOLA LLAMADA a NVIDIA, en vez de una
- * petición por noticia. Esto es lo que de verdad soluciona los límites de
- * peticiones simultáneas: 1-2 llamadas en vez de 12-16.
+ * petición por noticia. Hace UNA sola llamada por invocación (ver
+ * comentario de timeout en callBatch) — usa el modelo principal salvo
+ * que preferFallback sea true, en cuyo caso usa directamente el de
+ * respaldo. El cliente ya reintenta con preferFallback=true si el
+ * primer intento no vuelve con traducción (ver NewsFeed.tsx).
  */
-export async function translateBatch(items: BatchTranslateItem[]): Promise<BatchTranslateResult[]> {
+export async function translateBatch(items: BatchTranslateItem[], preferFallback = false): Promise<BatchTranslateResult[]> {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey || items.length === 0) return [];
 
   const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
+  const model = preferFallback && primaryModel !== FALLBACK_MODEL ? FALLBACK_MODEL : primaryModel;
 
-  let attempt = await callBatch(items, apiKey, primaryModel);
-  if (!attempt.ok && attempt.retryable) {
-    await sleep(1000);
-    attempt = await callBatch(items, apiKey, primaryModel);
-  }
-  if (!attempt.ok && attempt.retryable && primaryModel !== FALLBACK_MODEL) {
-    attempt = await callBatch(items, apiKey, FALLBACK_MODEL);
-  }
-
+  const attempt = await callBatch(items, apiKey, model);
   return attempt.ok ? attempt.results : [];
 }
