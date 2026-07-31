@@ -23,6 +23,7 @@ export function NewsFeed() {
   const [visibleTail, setVisibleTail] = useState(6);
   const [items, setItems] = useState<NewsItem[]>(getNewsItems());
   const [status, setStatus] = useState<FeedStatus>(() => (getNewsItems().length > 0 ? "live" : "loading"));
+  const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [animeResults, setAnimeResults] = useState<AnimeSearchResult[]>([]);
   const [searchingAnime, setSearchingAnime] = useState(false);
@@ -35,6 +36,7 @@ export function NewsFeed() {
       return;
     }
     if (!silent) setStatus("loading");
+    if (silent) setRefreshing(true);
     fetch("/api/news")
       .then(async (res) => {
         const data: { items?: NewsItem[] } = await res.json();
@@ -51,6 +53,9 @@ export function NewsFeed() {
         if (!silent) {
           setStatus(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "down");
         }
+      })
+      .finally(() => {
+        if (silent) setRefreshing(false);
       });
   };
 
@@ -211,7 +216,7 @@ export function NewsFeed() {
             >
               <span className={`h-1.5 w-1.5 rounded-full ${status === "live" ? "bg-ice" : "bg-muted"}`} />
               {status === "loading" && "Conectando…"}
-              {status === "live" && "En directo · ANN"}
+              {status === "live" && (refreshing ? "Actualizando…" : "En directo")}
               {status === "offline" && "Sin conexión"}
               {status === "down" && "Feed caído"}
             </span>
@@ -427,7 +432,7 @@ export function NewsFeed() {
                   transition={{ duration: 0.18, ease: "easeOut" }}
                   className="card-hover panel flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left hover:border-ice/30"
                 >
-                  <NewsThumb relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} />
+                  <NewsThumb relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} pending={enrichingIds.has(item.id)} />
                   <div className="min-w-0 flex-1">
                     <div className="mb-1.5 flex items-center gap-2">
                       <ReliabilityBadge reliability={item.reliability} />

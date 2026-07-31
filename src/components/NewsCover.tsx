@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { NewsCategory } from "@/types/news";
 
 const CATEGORY_LABELS: Record<NewsCategory, string> = {
@@ -13,43 +12,32 @@ const CATEGORY_LABELS: Record<NewsCategory, string> = {
 };
 
 // Fotografía real con licencia libre de uso comercial (Picsum, que sirve
-// fotos de Unsplash), no arte ni fotogramas de ningún anime. Cada título
-// obtiene siempre la misma foto (semilla fija = su propio nombre).
+// fotos de Unsplash) — se usa solo como ÚLTIMO recurso, cuando ya se ha
+// terminado de buscar y de verdad no se encontró ninguna carátula real.
 function photoUrl(relatedTitle: string, width: number, height: number) {
   const seed = encodeURIComponent(relatedTitle);
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
-}
-
-// Componente aparte para que, al cambiar de "src" (usando key en el sitio
-// donde se usa), se vuelva a montar desde cero y el fundido se repita en
-// vez de aparecer de golpe.
-function FadeInImage({ src }: { src: string }) {
-  const [loaded, setLoaded] = useState(false);
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/artículo), no cabe en next/image sin configurar dominios remotos
-    <img
-      src={src}
-      alt=""
-      loading="lazy"
-      onLoad={() => setLoaded(true)}
-      className="absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-700 ease-out"
-      style={{ opacity: loaded ? 1 : 0 }}
-    />
-  );
 }
 
 export function NewsCover({
   category,
   relatedTitle,
   coverImageUrl,
+  pending = false,
   tall = false,
 }: {
   category: NewsCategory;
   relatedTitle: string;
   coverImageUrl?: string;
+  pending?: boolean;
   tall?: boolean;
 }) {
-  const placeholder = photoUrl(relatedTitle, 640, 420);
+  // Mientras se está buscando la carátula real, un fondo neutro (nada de
+  // fotos que no tienen relación). Solo si YA se terminó de buscar y no
+  // se encontró nada, se usa una foto de respaldo — mejor eso que un
+  // hueco vacío para siempre.
+  const showSkeleton = pending && !coverImageUrl;
+  const showFallbackPhoto = !pending && !coverImageUrl;
 
   return (
     <div
@@ -60,15 +48,38 @@ export function NewsCover({
       }`}
       style={{ background: "var(--panel)" }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum), no cabe en next/image sin configurar dominios remotos */}
-      <img
-        src={placeholder}
-        alt=""
-        loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+      {showSkeleton && (
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "linear-gradient(135deg, var(--panel-soft), var(--panel))",
+            animation: "skeletonPulse 1.8s ease-in-out infinite",
+          }}
+        />
+      )}
 
-      {coverImageUrl && <FadeInImage key={coverImageUrl} src={coverImageUrl} />}
+      {showFallbackPhoto && (
+        // eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum), respaldo final
+        <img
+          src={photoUrl(relatedTitle, 640, 420)}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ animation: "coverFadeIn 500ms ease-out" }}
+        />
+      )}
+
+      {coverImageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/artículo), no cabe en next/image sin configurar dominios remotos
+        <img
+          key={coverImageUrl}
+          src={coverImageUrl}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover object-top"
+          style={{ animation: "coverFadeIn 600ms ease-out" }}
+        />
+      )}
 
       <div
         className="absolute inset-0"

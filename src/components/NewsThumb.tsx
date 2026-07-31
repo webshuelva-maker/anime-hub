@@ -1,35 +1,49 @@
-"use client";
-
-import { useState } from "react";
-
-function FadeInImage({ src }: { src: string }) {
-  const [loaded, setLoaded] = useState(false);
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/artículo)
-    <img
-      src={src}
-      alt=""
-      loading="lazy"
-      onLoad={() => setLoaded(true)}
-      className="absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-700 ease-out"
-      style={{ opacity: loaded ? 1 : 0 }}
-    />
-  );
+function photoUrl(relatedTitle: string) {
+  const seed = encodeURIComponent(relatedTitle);
+  return `https://picsum.photos/seed/${seed}/120/120`;
 }
 
-export function NewsThumb({ relatedTitle, coverImageUrl }: { relatedTitle: string; coverImageUrl?: string }) {
-  const seed = encodeURIComponent(relatedTitle);
+export function NewsThumb({
+  relatedTitle,
+  coverImageUrl,
+  pending = false,
+}: {
+  relatedTitle: string;
+  coverImageUrl?: string;
+  pending?: boolean;
+}) {
+  const showSkeleton = pending && !coverImageUrl;
+  const showFallbackPhoto = !pending && !coverImageUrl;
 
   return (
     <div className="relative aspect-square w-16 flex-shrink-0 overflow-hidden rounded-lg sm:w-20" style={{ background: "var(--panel)" }}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum) */}
-      <img
-        src={`https://picsum.photos/seed/${seed}/120/120`}
-        alt=""
-        loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      {coverImageUrl && <FadeInImage key={coverImageUrl} src={coverImageUrl} />}
+      {showSkeleton && (
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(135deg, var(--panel-soft), var(--panel))", animation: "skeletonPulse 1.8s ease-in-out infinite" }}
+        />
+      )}
+      {showFallbackPhoto && (
+        // eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum), respaldo final
+        <img
+          src={photoUrl(relatedTitle)}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ animation: "coverFadeIn 500ms ease-out" }}
+        />
+      )}
+      {coverImageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/artículo)
+        <img
+          key={coverImageUrl}
+          src={coverImageUrl}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover object-top"
+          style={{ animation: "coverFadeIn 600ms ease-out" }}
+        />
+      )}
     </div>
   );
 }

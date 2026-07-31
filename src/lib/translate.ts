@@ -22,7 +22,7 @@ async function callOnce(
   model: string
 ): Promise<{ ok: true; text: string } | { ok: false; retryable: boolean; debug: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
     const res = await fetch(NVIDIA_URL, {

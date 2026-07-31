@@ -79,17 +79,7 @@ export function NewsCard({
       onClick={onOpenDetail}
     >
       <div className={`relative ${featured ? "sm:w-2/5" : ""}`}>
-        <NewsCover category={item.category} relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} tall={featured} />
-        {pending && (
-          <div className="absolute inset-0 overflow-hidden rounded-t-xl sm:rounded-tr-none">
-            <motion.div
-              className="absolute inset-0"
-              style={{ background: "rgba(6,7,10,0.55)" }}
-              animate={{ opacity: [0.3, 0.65, 0.3] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            />
-          </div>
-        )}
+        <NewsCover category={item.category} relatedTitle={item.relatedTitle} coverImageUrl={item.coverImageUrl} pending={pending} tall={featured} />
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
           {onToggleLike && <HeartButton liked={liked} onToggle={onToggleLike} />}
           {highlight && (

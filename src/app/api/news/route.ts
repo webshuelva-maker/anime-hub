@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 const FEEDS = [
   { url: "https://www.animenewsnetwork.com/all/rss.xml", platform: "Anime News Network", label: "Ver en Anime News Network" },
   { url: "https://www.crunchyroll.com/newsrss?lang=en", platform: "Crunchyroll News", label: "Ver en Crunchyroll News" },
+  { url: "https://myanimelist.net/rss/news.xml", platform: "MyAnimeList", label: "Ver en MyAnimeList" },
+  { url: "https://otakuusamagazine.com/anime/feed", platform: "Otaku USA", label: "Ver en Otaku USA" },
 ];
 
 function decodeEntities(raw: string): string {
