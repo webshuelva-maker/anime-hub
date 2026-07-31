@@ -19,7 +19,8 @@ async function callOnce(
   summary: string,
   body: string,
   apiKey: string,
-  model: string
+  model: string,
+  maxTokens: number
 ): Promise<{ ok: true; text: string } | { ok: false; sameModelRetry: boolean; tryFallback: boolean; debug: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 18000);
@@ -32,7 +33,7 @@ async function callOnce(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 2000,
+        max_tokens: maxTokens,
         messages: [
           {
             role: "system",
@@ -76,21 +77,22 @@ async function callOnce(
 export async function translateNewsFields(
   title: string,
   summary: string,
-  body: string
+  body: string,
+  maxTokens = 2000
 ): Promise<TranslationOutcome> {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) return { result: null, debug: "sin NVIDIA_API_KEY configurada" };
 
   const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
 
-  let attempt = await callOnce(title, summary, body, apiKey, primaryModel);
+  let attempt = await callOnce(title, summary, body, apiKey, primaryModel, maxTokens);
   if (!attempt.ok && attempt.sameModelRetry) {
     await sleep(800);
-    attempt = await callOnce(title, summary, body, apiKey, primaryModel);
+    attempt = await callOnce(title, summary, body, apiKey, primaryModel, maxTokens);
   }
 
   if (!attempt.ok && attempt.tryFallback && primaryModel !== FALLBACK_MODEL) {
-    attempt = await callOnce(title, summary, body, apiKey, FALLBACK_MODEL);
+    attempt = await callOnce(title, summary, body, apiKey, FALLBACK_MODEL, maxTokens);
   }
 
   if (!attempt.ok) {

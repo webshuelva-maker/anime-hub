@@ -23,7 +23,7 @@ export function NewsThumb({
             className="absolute inset-y-0 w-1/2"
             style={{
               background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent)",
-              animation: "shimmerSweep 1.4s ease-in-out infinite",
+              animation: "shimmerSweep 1.8s linear infinite",
             }}
           />
         </div>

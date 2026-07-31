@@ -59,6 +59,7 @@ export function NewsCard({
   onOpenDetail,
   featured = false,
   pending = false,
+  translating = false,
 }: {
   item: NewsItem;
   highlight?: boolean;
@@ -67,6 +68,7 @@ export function NewsCard({
   onOpenDetail?: () => void;
   featured?: boolean;
   pending?: boolean;
+  translating?: boolean;
 }) {
   return (
     <motion.article
@@ -112,7 +114,7 @@ export function NewsCard({
               + confirmado por {item.crossConfirmedBy.join(", ")}
             </span>
           )}
-          {pending && (
+          {translating && (
             <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
               <motion.span
                 className="h-1.5 w-1.5 rounded-full bg-ice"

@@ -45,9 +45,11 @@ async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promi
  * coincidencia en ninguno o si la API no responde a tiempo.
  */
 export async function findCoverImage(searchText: string): Promise<string | null> {
-  const anime = await searchAniList(searchText, "ANIME");
-  if (anime) return anime;
-  return searchAniList(searchText, "MANGA");
+  const [anime, manga] = await Promise.all([
+    searchAniList(searchText, "ANIME"),
+    searchAniList(searchText, "MANGA"),
+  ]);
+  return anime || manga;
 }
 
 export interface AnimeSearchResult {

@@ -54,3 +54,13 @@ export const ANIME_TRIVIA: string[] = [
 export function pickTrivia(seed: number): string {
   return ANIME_TRIVIA[seed % ANIME_TRIVIA.length];
 }
+
+/** Devuelve los índices de todas las curiosidades en un orden aleatorio distinto cada vez. */
+export function shuffledTriviaOrder(): number[] {
+  const order = ANIME_TRIVIA.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}

@@ -30,6 +30,7 @@ export function NewsFeed() {
   const [animeResults, setAnimeResults] = useState<AnimeSearchResult[]>([]);
   const [searchingAnime, setSearchingAnime] = useState(false);
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const pendingItemsRef = useRef<NewsItem[]>([]);
 
   const loadNews = (silent = false) => {
@@ -66,68 +67,71 @@ export function NewsFeed() {
    * carátula real, el artículo completo y la traducción. El navegador ya
    * limita solo cuántas peticiones van a la vez, así que no hace falta
    * ningún límite manual — y si una falla, las demás siguen sin problema.
-   * Si la primera respuesta no trae traducción, se reintenta una vez.
+   * La imagen y la traducción se piden EN PARALELO, cada una por su lado —
+   * así una traducción lenta nunca retiene una imagen que ya está lista.
    */
   const enrichItems = (loadedItems: NewsItem[]) => {
     const targets = loadedItems.slice(0, 16);
     pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
+    setTranslatingIds(new Set(targets.map((i) => i.id)));
 
-    targets.forEach(async (item, index) => {
-      // Se reparten en el tiempo (no todas de golpe) para no saturar a
-      // NVIDIA con 16 peticiones simultáneas — eso hacía que solo las
-      // primeras consiguieran traducirse.
-      await new Promise((r) => setTimeout(r, index * 600));
-
-      const params = new URLSearchParams({
-        relatedTitle: item.relatedTitle,
-        title: item.title,
-        summary: item.summary,
-        url: item.source.url,
-        hasImage: item.coverImageUrl ? "1" : "0",
-      });
-      const url = `/api/enrich?${params.toString()}`;
-
-      type EnrichResponse = { coverImageUrl?: string | null; title?: string | null; summary?: string | null };
-      let data: EnrichResponse = {};
-      try {
-        data = await (await fetch(url)).json();
-        if (!data.title) {
-          await new Promise((r) => setTimeout(r, 1200));
-          data = await (await fetch(url)).json();
-        }
-      } catch {
-        // se queda con lo que ya había, el resto de noticias sigue igual
-      }
-
+    const updateItem = (id: string, patch: Partial<NewsItem>) => {
       setItems((prev) => {
-        const next = prev.map((it) =>
-          it.id === item.id
-            ? {
-                ...it,
-                coverImageUrl: data.coverImageUrl || it.coverImageUrl,
-                title: data.title || it.title,
-                summary: data.summary || it.summary,
-              }
-            : it
-        );
+        const next = prev.map((it) => (it.id === id ? { ...it, ...patch } : it));
         setNewsItems(next);
         return next;
       });
+    };
 
-      // Solo se considera "resuelto" si de verdad llegó algo nuevo — si se
-      // quedó sin nada (p. ej. la pestaña estaba en segundo plano y el
-      // navegador frenó la petición), sigue en la lista de pendientes para
-      // reintentarlo cuando vuelvas a mirar la pestaña.
-      if (data.title || data.coverImageUrl) {
-        pendingItemsRef.current = pendingItemsRef.current.filter((p) => p.id !== item.id);
+    targets.forEach(async (item, index) => {
+      // La imagen es barata — se reparte poco.
+      await new Promise((r) => setTimeout(r, index * 150));
+      try {
+        const params = new URLSearchParams({
+          relatedTitle: item.relatedTitle,
+          url: item.source.url,
+          hasImage: item.coverImageUrl ? "1" : "0",
+        });
+        const data: { coverImageUrl?: string | null } = await (await fetch(`/api/enrich?${params.toString()}`)).json();
+        if (data.coverImageUrl) {
+          updateItem(item.id, { coverImageUrl: data.coverImageUrl });
+          pendingItemsRef.current = pendingItemsRef.current.filter((p) => p.id !== item.id);
+        }
+      } catch {
+        // se queda con la imagen de respaldo; el resto sigue igual
+      } finally {
+        setEnrichingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
       }
+    });
 
-      setEnrichingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item.id);
-        return next;
-      });
+    targets.forEach(async (item, index) => {
+      // La traducción es la que más tarda y la que más satura a NVIDIA —
+      // se reparte más para no lanzar 16 peticiones de golpe.
+      await new Promise((r) => setTimeout(r, index * 400));
+      try {
+        const params = new URLSearchParams({ title: item.title, summary: item.summary });
+        let data: { title?: string | null; summary?: string | null } = await (
+          await fetch(`/api/enrich-translate?${params.toString()}`)
+        ).json();
+        if (!data.title) {
+          await new Promise((r) => setTimeout(r, 1500));
+          data = await (await fetch(`/api/enrich-translate?${params.toString()}`)).json();
+        }
+        if (data.title) updateItem(item.id, { title: data.title, summary: data.summary || item.summary });
+      } catch {
+        // se queda en el idioma original; el resto sigue igual
+      } finally {
+        setTranslatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      }
     });
   };
 
@@ -373,6 +377,7 @@ export function NewsFeed() {
                     key={item.id}
                     item={item}
                     pending={enrichingIds.has(item.id)}
+                    translating={translatingIds.has(item.id)}
                     highlight={hasLearned && score > 0}
                     liked={prefs.likedNewsIds.includes(item.id)}
                     onToggleLike={() => handleToggleLike(item.id)}
@@ -396,6 +401,7 @@ export function NewsFeed() {
               featured
               pending={enrichingIds.has(featured.item.id)}
               highlight={hasLearned && featured.score > 0}
+              translating={translatingIds.has(featured.item.id)}
               liked={prefs.likedNewsIds.includes(featured.item.id)}
               onToggleLike={() => handleToggleLike(featured.item.id)}
               onOpenDetail={() => handleOpenDetail(featured.item.id, featured.item)}
@@ -414,6 +420,7 @@ export function NewsFeed() {
                   key={item.id}
                   item={item}
                   pending={enrichingIds.has(item.id)}
+                  translating={translatingIds.has(item.id)}
                   highlight={hasLearned && score > 0}
                   liked={prefs.likedNewsIds.includes(item.id)}
                   onToggleLike={() => handleToggleLike(item.id)}

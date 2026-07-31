@@ -8,19 +8,24 @@ import { ReliabilityBadge } from "./ReliabilityBadge";
 import { PlatformBadge } from "./PlatformBadge";
 import { formatRelativeDate } from "@/lib/date";
 import { recordNewsInteraction } from "@/lib/learning";
-import { ANIME_TRIVIA } from "@/lib/trivia";
+import { ANIME_TRIVIA, shuffledTriviaOrder } from "@/lib/trivia";
 
 // Si tarda más de esto, se deja de esperar y se enseña lo que haya (mejor
 // eso que quedarte mirando curiosidades para siempre).
 const MAX_WAIT_MS = 24000;
 
 function LoadingTrivia() {
-  const [index, setIndex] = useState(0);
+  // Un orden barajado distinto cada vez que se abre una noticia — así
+  // nunca se repiten empezando siempre por la misma.
+  const [order] = useState(() => shuffledTriviaOrder());
+  const [step, setStep] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => setIndex((i) => (i + 1) % ANIME_TRIVIA.length), 3200);
+    const timer = setInterval(() => setStep((s) => s + 1), 3200);
     return () => clearInterval(timer);
   }, []);
+
+  const index = order[step % order.length];
 
   return (
     <div className="flex flex-col items-center gap-5 px-8 py-16 text-center">
