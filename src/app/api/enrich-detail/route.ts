@@ -12,10 +12,11 @@ export async function GET(req: NextRequest) {
   const article = await fetchArticlePage(url);
   const bodyForTranslation = article.text || summary || title;
 
-  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, bodyForTranslation);
+  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, bodyForTranslation, 1400);
 
   return NextResponse.json({
     coverImageUrl: article.image,
+    title: translated?.title ?? null,
     body: translated?.body ?? article.text ?? null,
     translateDebug,
   });

@@ -38,7 +38,7 @@ async function callOnce(
           {
             role: "system",
             content:
-              "Traduces textos de noticias de anime del inglés al español de España, de forma natural, sin literalidades raras. No traduces nombres propios de personas, estudios ni títulos de obras si no tienen una traducción oficial conocida. Respondes ÚNICAMENTE con este formato exacto, cada etiqueta en su PROPIA línea nueva, sin nada más antes ni después:\nTITULO: <traducción>\nRESUMEN: <traducción>\nCUERPO: <traducción>",
+              "Traduces textos de noticias de anime del inglés al español de España, de forma natural, sin literalidades raras. MUY IMPORTANTE: los títulos de anime, manga, novelas ligeras, videojuegos o películas NUNCA se traducen, se dejan EXACTAMENTE como están en el texto original (en inglés o rōmaji), aunque el resto de la frase sí se traduzca. Por ejemplo, si el texto dice 'Smoking Behind the Supermarket with You Gets New Trailer', el título traducido debe ser algo como 'Smoking Behind the Supermarket with You revela nuevo tráiler' — el nombre de la obra no se toca. Tampoco traduces nombres propios de personas ni estudios. Respondes ÚNICAMENTE con este formato exacto, cada etiqueta en su PROPIA línea nueva, sin nada más antes ni después:\nTITULO: <traducción>\nRESUMEN: <traducción>\nCUERPO: <traducción>",
           },
           { role: "user", content: `TITULO: ${title}\nRESUMEN: ${summary}\nCUERPO: ${body}` },
         ],

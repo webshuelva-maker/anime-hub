@@ -56,7 +56,7 @@ export async function fetchArticlePage(url: string): Promise<{ text: string | nu
       .filter((text) => text.length > 40 && !looksLikeCode(text));
 
     const combined = paragraphs.length > 0 ? paragraphs.join("\n\n") : null;
-    const text = combined && combined.length > 4000 ? `${combined.slice(0, 4000)}…` : combined;
+    const text = combined && combined.length > 2400 ? `${combined.slice(0, 2400)}…` : combined;
 
     return { text, image: extractOgImage(html) };
   } catch {

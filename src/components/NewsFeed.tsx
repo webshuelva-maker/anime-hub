@@ -14,6 +14,7 @@ import { Avatar } from "./AvatarPicker";
 import { getNewsItems, setNewsItems } from "@/lib/newsStore";
 import { SearchBar } from "./SearchBar";
 import { AnimeSearchResult } from "@/lib/anilist";
+import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -109,30 +110,64 @@ export function NewsFeed() {
       }
     });
 
-    targets.forEach(async (item, index) => {
-      // La traducción es la que más tarda y la que más satura a NVIDIA —
-      // se reparte más para no lanzar 16 peticiones de golpe.
-      await new Promise((r) => setTimeout(r, index * 400));
-      try {
-        const params = new URLSearchParams({ title: item.title, summary: item.summary });
-        let data: { title?: string | null; summary?: string | null } = await (
-          await fetch(`/api/enrich-translate?${params.toString()}`)
-        ).json();
-        if (!data.title) {
-          await new Promise((r) => setTimeout(r, 1500));
-          data = await (await fetch(`/api/enrich-translate?${params.toString()}`)).json();
+    // Traducción por MINI-LOTES: en vez de un único lote grande (que hace
+    // esperar a que TODO termine antes de ver nada), se divide en grupos
+    // pequeños que se lanzan con un segundo de diferencia entre sí — así
+    // las primeras tarjetas se actualizan enseguida y el resto va
+    // llegando con progreso visible, sin volver a lanzar 12-16 peticiones
+    // sueltas de golpe (eso fue lo que rompió la traducción antes).
+    const CHUNK_SIZE = 3;
+    const CHUNK_DELAY_MS = 1000;
+
+    const translateChunk = async (chunk: NewsItem[]) => {
+      const stillNeeded: NewsItem[] = [];
+      chunk.forEach((item) => {
+        const cached = getCachedTranslation(item.source.url);
+        if (cached?.title) {
+          updateItem(item.id, { title: cached.title, summary: cached.summary || item.summary });
+        } else {
+          stillNeeded.push(item);
         }
-        if (data.title) updateItem(item.id, { title: data.title, summary: data.summary || item.summary });
-      } catch {
-        // se queda en el idioma original; el resto sigue igual
-      } finally {
-        setTranslatingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(item.id);
-          return next;
-        });
+      });
+
+      if (stillNeeded.length > 0) {
+        try {
+          const res = await fetch("/api/translate-batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              items: stillNeeded.map((it) => ({ id: it.id, title: it.title, summary: it.summary })),
+            }),
+          });
+          const data: { results?: { id: string; title?: string; summary?: string }[] } = await res.json();
+          const byId = new Map((data.results ?? []).map((r) => [r.id, r]));
+
+          stillNeeded.forEach((item) => {
+            const translated = byId.get(item.id);
+            if (translated?.title) {
+              updateItem(item.id, { title: translated.title, summary: translated.summary || item.summary });
+              saveCachedTranslation(item.source.url, { title: translated.title, summary: translated.summary });
+            }
+          });
+        } catch {
+          // este mini-lote falló; los demás siguen su curso igualmente
+        }
       }
-    });
+
+      setTranslatingIds((prev) => {
+        const next = new Set(prev);
+        chunk.forEach((item) => next.delete(item.id));
+        return next;
+      });
+    };
+
+    for (let i = 0; i < targets.length; i += CHUNK_SIZE) {
+      const chunk = targets.slice(i, i + CHUNK_SIZE);
+      // No se espera (await) el resultado antes de programar el siguiente
+      // — cada mini-lote actualiza sus tarjetas en cuanto está listo, en
+      // paralelo con los demás, solo escalonando CUÁNDO empiezan.
+      setTimeout(() => translateChunk(chunk), (i / CHUNK_SIZE) * CHUNK_DELAY_MS);
+    }
   };
 
   // Los navegadores frenan las pestañas en segundo plano, así que si vuelves
@@ -153,10 +188,12 @@ export function NewsFeed() {
     setPrefs(getPreferences());
 
     // Si ya teníamos una copia guardada (p. ej. el navegador recargó la
-    // pestaña en segundo plano), se usa tal cual, sin volver a pedir ni
-    // traducir nada — el refresco cada 15 minutos ya se encarga de
-    // mantenerlo al día más adelante.
-    if (!getNewsItems().length) {
+    // pestaña en segundo plano, o simplemente volviste a entrar), se ve
+    // al instante — pero además se comprueba en segundo plano si hay algo
+    // nuevo, sin esperar a los 15 minutos ni interrumpir lo que ya se ve.
+    if (getNewsItems().length) {
+      loadNews(true);
+    } else {
       loadNews();
     }
 

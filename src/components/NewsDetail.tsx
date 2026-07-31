@@ -8,50 +8,7 @@ import { ReliabilityBadge } from "./ReliabilityBadge";
 import { PlatformBadge } from "./PlatformBadge";
 import { formatRelativeDate } from "@/lib/date";
 import { recordNewsInteraction } from "@/lib/learning";
-import { ANIME_TRIVIA, shuffledTriviaOrder } from "@/lib/trivia";
-
-// Si tarda más de esto, se deja de esperar y se enseña lo que haya (mejor
-// eso que quedarte mirando curiosidades para siempre).
-const MAX_WAIT_MS = 24000;
-
-function LoadingTrivia() {
-  // Un orden barajado distinto cada vez que se abre una noticia — así
-  // nunca se repiten empezando siempre por la misma.
-  const [order] = useState(() => shuffledTriviaOrder());
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setStep((s) => s + 1), 3200);
-    return () => clearInterval(timer);
-  }, []);
-
-  const index = order[step % order.length];
-
-  return (
-    <div className="flex flex-col items-center gap-5 px-8 py-16 text-center">
-      <motion.span
-        className="h-2.5 w-2.5 rounded-full bg-ice"
-        animate={{ scale: [1, 1.6, 1], opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <p className="text-sm text-muted">Preparando el artículo completo, en español…</p>
-      <div className="relative h-14 w-full max-w-sm">
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={index}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 text-xs italic leading-relaxed text-muted"
-          >
-            {ANIME_TRIVIA[index]}
-          </motion.p>
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-}
+import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
 
 export function NewsDetail({
   item,
@@ -60,10 +17,10 @@ export function NewsDetail({
   item: NewsItem | null;
   onClose: () => void;
 }) {
-  const [fullBody, setFullBody] = useState<string | null>(null);
-  const [loadingArticle, setLoadingArticle] = useState(false);
+  const [title, setTitle] = useState<string | null>(null);
+  const [body, setBody] = useState<string | null>(null);
   const [detailCover, setDetailCover] = useState<string | null>(null);
-  const [gaveUpWaiting, setGaveUpWaiting] = useState(false);
+  const [translatingBody, setTranslatingBody] = useState(false);
 
   // Bloquea el scroll de la página de fondo mientras el modal está abierto
   useEffect(() => {
@@ -83,47 +40,41 @@ export function NewsDetail({
     };
   }, [item]);
 
-  // El artículo completo (más lento) solo se pide cuando se abre ESTA
-  // noticia en concreto, no para todas a la vez. Mientras llega, se
-  // muestra una pantalla de espera en vez de dejar ver el inglés a medias.
+  // Se ve el artículo original al instante. Si ya hay una traducción en
+  // caché, se aplica de inmediato sin llamar a la IA. Si no, se traduce en
+  // segundo plano y se sustituye con un fundido — nunca se bloquea la
+  // pantalla esperando.
   useEffect(() => {
     if (!item) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFullBody(null);
+      setTitle(null);
+      setBody(null);
       setDetailCover(null);
-      setGaveUpWaiting(false);
       return;
     }
-    setFullBody(null);
+
+    const cached = getCachedTranslation(item.source.url);
+    setTitle(cached?.title ?? null);
+    setBody(cached?.body ?? null);
     setDetailCover(null);
-    setGaveUpWaiting(false);
-    setLoadingArticle(true);
+
+    if (cached?.body) return; // ya está todo, no hace falta pedir nada
+
+    setTranslatingBody(true);
     const params = new URLSearchParams({ title: item.title, summary: item.summary, url: item.source.url });
-    const url = `/api/enrich-detail?${params.toString()}`;
-
-    const giveUpTimer = setTimeout(() => setGaveUpWaiting(true), MAX_WAIT_MS);
-
-    (async () => {
-      try {
-        let data: { coverImageUrl?: string | null; body?: string | null } = await (await fetch(url)).json();
-        if (!data.body) {
-          await new Promise((r) => setTimeout(r, 1200));
-          data = await (await fetch(url)).json();
-        }
-        if (data.body) setFullBody(data.body);
+    fetch(`/api/enrich-detail?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data: { coverImageUrl?: string | null; title?: string | null; body?: string | null }) => {
         if (data.coverImageUrl) setDetailCover(data.coverImageUrl);
-      } catch {
-        // se queda con el resumen corto que ya tenía
-      } finally {
-        clearTimeout(giveUpTimer);
-        setLoadingArticle(false);
-      }
-    })();
-
-    return () => clearTimeout(giveUpTimer);
+        if (data.title) setTitle(data.title);
+        if (data.body) {
+          setBody(data.body);
+          saveCachedTranslation(item.source.url, { title: data.title ?? undefined, body: data.body });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTranslatingBody(false));
   }, [item]);
-
-  const stillWaiting = loadingArticle && !fullBody && !gaveUpWaiting;
 
   return (
     <AnimatePresence mode="wait">
@@ -155,57 +106,67 @@ export function NewsDetail({
               ✕
             </button>
 
-            {stillWaiting ? (
-              <LoadingTrivia />
-            ) : (
-              <div className="max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain">
-                <NewsCover
-                  category={item.category}
-                  relatedTitle={item.relatedTitle}
-                  coverImageUrl={item.coverImageUrl || detailCover || undefined}
-                />
+            <div className="max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain">
+              <NewsCover
+                category={item.category}
+                relatedTitle={item.relatedTitle}
+                coverImageUrl={item.coverImageUrl || detailCover || undefined}
+              />
 
-                <div className="p-6 sm:p-8">
-                  <div className="mb-4 flex flex-wrap items-center gap-3">
-                    <ReliabilityBadge reliability={item.reliability} />
-                    <PlatformBadge platform={item.source.platform} />
-                    <span className="text-xs text-muted">{formatRelativeDate(item.publishedAt)}</span>
-                  </div>
+              <div className="p-6 sm:p-8">
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <ReliabilityBadge reliability={item.reliability} />
+                  <PlatformBadge platform={item.source.platform} />
+                  <span className="text-xs text-muted">{formatRelativeDate(item.publishedAt)}</span>
+                </div>
 
-                  <h2 className="font-heading text-2xl font-semibold leading-tight text-foreground">
-                    {item.title}
-                  </h2>
+                <AnimatePresence mode="wait">
+                  <motion.h2
+                    key={title || item.title}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.35 }}
+                    className="font-heading text-2xl font-semibold leading-tight text-foreground"
+                  >
+                    {title || item.title}
+                  </motion.h2>
+                </AnimatePresence>
 
-                  <p className="font-heading mt-3 text-sm text-muted">{item.relatedTitle}</p>
+                <p className="font-heading mt-3 text-sm text-muted">{item.relatedTitle}</p>
 
-                  <p className="mt-6 whitespace-pre-line text-[15px] leading-relaxed text-foreground/90">
-                    {fullBody || item.body}
-                  </p>
-                  {gaveUpWaiting && !fullBody && (
-                    <p className="mt-3 text-xs text-muted">
-                      Está tardando más de lo normal — de momento se ve el resumen corto.
-                    </p>
-                  )}
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={body || item.body}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                    className="mt-6 whitespace-pre-line text-[15px] leading-relaxed text-foreground/90"
+                  >
+                    {body || item.body}
+                  </motion.p>
+                </AnimatePresence>
+                {translatingBody && !body && (
+                  <p className="mt-3 text-xs text-muted">Traduciendo el artículo completo…</p>
+                )}
 
-                  <div className="rule-line my-6" />
+                <div className="rule-line my-6" />
 
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-xs text-muted">
-                      Fuente original: {item.source.platform}
-                    </span>
-                    <a
-                      href={item.source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => recordNewsInteraction(item)}
-                      className="accent-gradient rounded-full px-4 py-2 text-xs font-semibold text-white transition-transform hover:scale-105 active:scale-95"
-                    >
-                      {item.source.label} →
-                    </a>
-                  </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-xs text-muted">
+                    Fuente original: {item.source.platform}
+                  </span>
+                  <a
+                    href={item.source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => recordNewsInteraction(item)}
+                    className="accent-gradient rounded-full px-4 py-2 text-xs font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+                  >
+                    {item.source.label} →
+                  </a>
                 </div>
               </div>
-            )}
+            </div>
           </motion.div>
         </motion.div>
       )}

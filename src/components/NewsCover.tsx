@@ -51,10 +51,10 @@ export function NewsCover({
       {showSkeleton && (
         <div className="absolute inset-0 overflow-hidden" style={{ background: "var(--panel-soft)" }}>
           <div
-            className="absolute inset-y-0 w-1/2"
+            className="absolute inset-y-0 w-1/4"
             style={{
-              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent)",
-              animation: "shimmerSweep 1.8s linear infinite",
+              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent)",
+              animation: "shimmerSweep 1.6s linear infinite",
             }}
           />
         </div>
