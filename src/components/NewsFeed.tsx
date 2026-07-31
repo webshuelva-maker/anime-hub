@@ -71,7 +71,12 @@ export function NewsFeed() {
     pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
 
-    targets.forEach(async (item) => {
+    targets.forEach(async (item, index) => {
+      // Se reparten en el tiempo (no todas de golpe) para no saturar a
+      // NVIDIA con 16 peticiones simultáneas — eso hacía que solo las
+      // primeras consiguieran traducirse.
+      await new Promise((r) => setTimeout(r, index * 600));
+
       const params = new URLSearchParams({
         relatedTitle: item.relatedTitle,
         title: item.title,

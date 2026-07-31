@@ -22,7 +22,7 @@ async function callOnce(
   model: string
 ): Promise<{ ok: true; text: string } | { ok: false; retryable: boolean; debug: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), 12000);
 
   try {
     const res = await fetch(NVIDIA_URL, {
@@ -32,12 +32,12 @@ async function callOnce(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 2600,
+        max_tokens: 2000,
         messages: [
           {
             role: "system",
             content:
-              "Traduces textos de noticias de anime del inglés al español de España, de forma natural, sin literalidades raras. No traduces nombres propios de personas, estudios ni títulos de obras si no tienen una traducción oficial conocida. Respondes ÚNICAMENTE con este formato exacto, sin nada más antes ni después:\nTITULO: <traducción>\nRESUMEN: <traducción>\nCUERPO: <traducción>",
+              "Traduces textos de noticias de anime del inglés al español de España, de forma natural, sin literalidades raras. No traduces nombres propios de personas, estudios ni títulos de obras si no tienen una traducción oficial conocida. Respondes ÚNICAMENTE con este formato exacto, cada etiqueta en su PROPIA línea nueva, sin nada más antes ni después:\nTITULO: <traducción>\nRESUMEN: <traducción>\nCUERPO: <traducción>",
           },
           { role: "user", content: `TITULO: ${title}\nRESUMEN: ${summary}\nCUERPO: ${body}` },
         ],
@@ -54,8 +54,12 @@ async function callOnce(
     const text: string = data?.choices?.[0]?.message?.content ?? "";
     return { ok: true, text };
   } catch (e) {
+    // Si se agotó el tiempo esperando (modelo lento), reintentar solo
+    // duplicaría la espera sin garantías — mejor rendirse rápido en ese
+    // caso concreto y no en los demás fallos de red.
+    const isTimeout = e instanceof Error && e.name === "AbortError";
     const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, retryable: true, debug: `excepción: ${message}` };
+    return { ok: false, retryable: !isTimeout, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }
@@ -63,9 +67,9 @@ async function callOnce(
 
 /**
  * Traduce título + resumen + cuerpo de una noticia al español. Si el
- * modelo configurado está saturado (o hay un fallo de red), reintenta una
- * vez, y si sigue sin ir, prueba con un modelo de respaldo distinto antes
- * de rendirse — casi nunca están los dos saturados a la vez.
+ * modelo configurado está saturado (error rápido, no por lentitud),
+ * reintenta una vez, y si sigue sin ir, prueba con un modelo de respaldo
+ * distinto antes de rendirse — casi nunca están los dos saturados a la vez.
  */
 export async function translateNewsFields(
   title: string,
@@ -79,7 +83,7 @@ export async function translateNewsFields(
 
   let attempt = await callOnce(title, summary, body, apiKey, primaryModel);
   if (!attempt.ok && attempt.retryable) {
-    await sleep(1200);
+    await sleep(800);
     attempt = await callOnce(title, summary, body, apiKey, primaryModel);
   }
 
@@ -92,8 +96,13 @@ export async function translateNewsFields(
   }
 
   const text = attempt.text.replace(/\*\*/g, "").replace(/\*/g, "");
-  const titleMatch = text.match(/T[IÍ]TULO:\s*([\s\S]*?)(?:\n\s*RESUMEN:|$)/i);
-  const summaryMatch = text.match(/RESUMEN:\s*([\s\S]*?)(?:\n\s*CUERPO:|$)/i);
+
+  // Sin exigir que RESUMEN/CUERPO empiecen en su propia línea — algunos
+  // modelos a veces los ponen seguidos en la misma línea pese a que se les
+  // pide lo contrario, y exigir el salto de línea hacía que el título se
+  // "tragara" las demás etiquetas enteras cuando eso pasaba.
+  const titleMatch = text.match(/T[IÍ]TULO:\s*([\s\S]*?)\s*RESUMEN:/i);
+  const summaryMatch = text.match(/RESUMEN:\s*([\s\S]*?)\s*CUERPO:/i);
   const bodyMatch = text.match(/CUERPO:\s*([\s\S]*)/i);
 
   if (!titleMatch?.[1]?.trim() || !bodyMatch?.[1]?.trim()) {
