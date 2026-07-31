@@ -20,9 +20,9 @@ async function callOnce(
   body: string,
   apiKey: string,
   model: string
-): Promise<{ ok: true; text: string } | { ok: false; retryable: boolean; debug: string }> {
+): Promise<{ ok: true; text: string } | { ok: false; sameModelRetry: boolean; tryFallback: boolean; debug: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 18000);
 
   try {
     const res = await fetch(NVIDIA_URL, {
@@ -46,20 +46,22 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
+      // 429/5xx suelen fallar rápido — merece la pena tanto reintentar el
+      // mismo modelo como, si sigue sin ir, probar el de respaldo.
       const retryable = res.status === 429 || res.status >= 500;
-      return { ok: false, retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+      return { ok: false, sameModelRetry: retryable, tryFallback: retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
     }
 
     const data = await res.json();
     const text: string = data?.choices?.[0]?.message?.content ?? "";
     return { ok: true, text };
   } catch (e) {
-    // Si se agotó el tiempo esperando (modelo lento), reintentar solo
-    // duplicaría la espera sin garantías — mejor rendirse rápido en ese
-    // caso concreto y no en los demás fallos de red.
+    // Si se agotó el tiempo esperando (modelo lento), reintentar EL MISMO
+    // modelo solo duplicaría la espera sin garantías — pero un modelo
+    // DISTINTO puede ir a otra velocidad, así que ese sí merece probarse.
     const isTimeout = e instanceof Error && e.name === "AbortError";
     const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, retryable: !isTimeout, debug: `excepción: ${message}` };
+    return { ok: false, sameModelRetry: !isTimeout, tryFallback: true, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }
@@ -82,12 +84,12 @@ export async function translateNewsFields(
   const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
 
   let attempt = await callOnce(title, summary, body, apiKey, primaryModel);
-  if (!attempt.ok && attempt.retryable) {
+  if (!attempt.ok && attempt.sameModelRetry) {
     await sleep(800);
     attempt = await callOnce(title, summary, body, apiKey, primaryModel);
   }
 
-  if (!attempt.ok && attempt.retryable && primaryModel !== FALLBACK_MODEL) {
+  if (!attempt.ok && attempt.tryFallback && primaryModel !== FALLBACK_MODEL) {
     attempt = await callOnce(title, summary, body, apiKey, FALLBACK_MODEL);
   }
 

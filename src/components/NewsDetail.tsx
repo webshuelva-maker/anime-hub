@@ -12,7 +12,7 @@ import { ANIME_TRIVIA } from "@/lib/trivia";
 
 // Si tarda más de esto, se deja de esperar y se enseña lo que haya (mejor
 // eso que quedarte mirando curiosidades para siempre).
-const MAX_WAIT_MS = 14000;
+const MAX_WAIT_MS = 24000;
 
 function LoadingTrivia() {
   const [index, setIndex] = useState(0);
