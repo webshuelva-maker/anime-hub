@@ -19,7 +19,9 @@ type FeedStatus = "loading" | "live" | "offline" | "down";
 
 export function NewsFeed() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
-  const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [openItemId, setOpenItemId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.sessionStorage.getItem("anime-hub:open-item")
+  );
   const [visibleTail, setVisibleTail] = useState(6);
   const [items, setItems] = useState<NewsItem[]>(getNewsItems());
   const [status, setStatus] = useState<FeedStatus>(() => (getNewsItems().length > 0 ? "live" : "loading"));
@@ -195,6 +197,7 @@ export function NewsFeed() {
 
   const handleOpenDetail = (itemId: string, item: NewsItem) => {
     setOpenItemId(itemId);
+    window.sessionStorage.setItem("anime-hub:open-item", itemId);
     recordNewsInteraction(item);
   };
 
@@ -473,7 +476,13 @@ export function NewsFeed() {
         )}
       </div>
 
-      <NewsDetail item={openItem} onClose={() => setOpenItemId(null)} />
+      <NewsDetail
+        item={openItem}
+        onClose={() => {
+          setOpenItemId(null);
+          window.sessionStorage.removeItem("anime-hub:open-item");
+        }}
+      />
     </div>
   );
 }
