@@ -32,7 +32,7 @@ async function callOnce(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 700,
+        max_tokens: 2600,
         messages: [
           {
             role: "system",

@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { NewsCategory } from "@/types/news";
 
 const CATEGORY_LABELS: Record<NewsCategory, string> = {
@@ -17,6 +20,24 @@ function photoUrl(relatedTitle: string, width: number, height: number) {
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 }
 
+// Componente aparte para que, al cambiar de "src" (usando key en el sitio
+// donde se usa), se vuelva a montar desde cero y el fundido se repita en
+// vez de aparecer de golpe.
+function FadeInImage({ src }: { src: string }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/artículo), no cabe en next/image sin configurar dominios remotos
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      onLoad={() => setLoaded(true)}
+      className="absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-700 ease-out"
+      style={{ opacity: loaded ? 1 : 0 }}
+    />
+  );
+}
+
 export function NewsCover({
   category,
   relatedTitle,
@@ -28,6 +49,8 @@ export function NewsCover({
   coverImageUrl?: string;
   tall?: boolean;
 }) {
+  const placeholder = photoUrl(relatedTitle, 640, 420);
+
   return (
     <div
       className={`relative w-full overflow-hidden ${
@@ -37,13 +60,16 @@ export function NewsCover({
       }`}
       style={{ background: "var(--panel)" }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/Picsum), no cabe en next/image sin configurar dominios remotos */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum), no cabe en next/image sin configurar dominios remotos */}
       <img
-        src={coverImageUrl || photoUrl(relatedTitle, 640, 420)}
+        src={placeholder}
         alt=""
         loading="lazy"
-        className={`absolute inset-0 h-full w-full ${coverImageUrl ? "object-cover object-top" : "object-cover"}`}
+        className="absolute inset-0 h-full w-full object-cover"
       />
+
+      {coverImageUrl && <FadeInImage key={coverImageUrl} src={coverImageUrl} />}
+
       <div
         className="absolute inset-0"
         style={{ background: "linear-gradient(180deg, rgba(6,7,10,0.15) 0%, rgba(6,7,10,0.15) 55%, rgba(6,7,10,0.85) 100%)" }}
