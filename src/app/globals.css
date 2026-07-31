@@ -112,14 +112,16 @@ body {
 
 /* El elemento animado con shimmerSweep DEBE medir el 100% del contenedor
    (inset-0), nunca una fracción (ej. w-1/4): translateX(±100%) se calcula
-   sobre el ANCHO PROPIO del elemento, no sobre el del contenedor. Con un
-   elemento al 25% de ancho, translateX(100%) solo lo desplaza 1/4 del
-   contenedor — el barrido se quedaba recorriendo solo la mitad izquierda
-   y encima parecía ir "rápido" al cubrir tan poco recorrido real. Con el
-   elemento a 100%, el degradado central (transparent/blanco/transparent)
-   hace de "banda" visible que sí cruza el contenedor entero. */
+   sobre el ANCHO PROPIO del elemento, no sobre el del contenedor.
+   Además, el barrido en sí ocupa solo el 55% del ciclo (0%→55%) y el
+   resto (55%→100%) es una PAUSA quieta antes de repetir — sin eso, el
+   bucle se sentía nervioso/repetitivo ("todo el rato, súper rápido").
+   Se anima con timing lineal (fijado en el propio componente, no con
+   ease-in-out) para que el barrido tenga velocidad constante en vez de
+   acelerar de golpe por el medio. */
 @keyframes shimmerSweep {
   0% { transform: translateX(-100%); }
+  55% { transform: translateX(100%); }
   100% { transform: translateX(100%); }
 }
 

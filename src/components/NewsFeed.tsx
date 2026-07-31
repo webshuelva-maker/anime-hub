@@ -15,6 +15,7 @@ import { getNewsItems, setNewsItems } from "@/lib/newsStore";
 import { SearchBar } from "./SearchBar";
 import { AnimeSearchResult } from "@/lib/anilist";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
+import { runExclusive } from "@/lib/nvidiaQueue";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -126,32 +127,37 @@ export function NewsFeed() {
 
     // Traducción por MINI-LOTES: en vez de un único lote grande (que hace
     // esperar a que TODO termine antes de ver nada), se divide en grupos
-    // pequeños que se lanzan con un segundo de diferencia entre sí — así
-    // las primeras tarjetas se actualizan enseguida y el resto va
-    // llegando con progreso visible, sin volver a lanzar 12-16 peticiones
-    // sueltas de golpe (eso fue lo que rompió la traducción antes).
+    // pequeños — así las primeras tarjetas se actualizan enseguida y el
+    // resto va llegando con progreso visible. IMPORTANTE: cada llamada a
+    // NVIDIA pasa por runExclusive (ver nvidiaQueue.ts) y los lotes se
+    // procesan EN SERIE (uno espera a que el anterior termine de verdad,
+    // nada de "esperar 1s y lanzar el siguiente igualmente"): lanzarlos
+    // en paralelo con un simple retraso fijo es lo que hacía que solo el
+    // primer lote (el único sin contienda) llegara a traducirse, y todos
+    // los demás chocaran entre sí contra el límite de peticiones
+    // simultáneas de la clave de NVIDIA.
     const CHUNK_SIZE = 3;
-    const CHUNK_DELAY_MS = 1000;
 
-    const callTranslateBatch = async (
+    const callTranslateBatch = (
       items: NewsItem[],
       preferFallback: boolean
-    ): Promise<Map<string, { title?: string; summary?: string }>> => {
-      try {
-        const res = await fetch("/api/translate-batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: items.map((it) => ({ id: it.id, title: it.title, summary: it.summary })),
-            preferFallback,
-          }),
-        });
-        const data: { results?: { id: string; title?: string; summary?: string }[] } = await res.json();
-        return new Map((data.results ?? []).map((r) => [r.id, r]));
-      } catch {
-        return new Map();
-      }
-    };
+    ): Promise<Map<string, { title?: string; summary?: string }>> =>
+      runExclusive(async () => {
+        try {
+          const res = await fetch("/api/translate-batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              items: items.map((it) => ({ id: it.id, title: it.title, summary: it.summary })),
+              preferFallback,
+            }),
+          });
+          const data: { results?: { id: string; title?: string; summary?: string }[] } = await res.json();
+          return new Map((data.results ?? []).map((r) => [r.id, r]));
+        } catch {
+          return new Map();
+        }
+      });
 
     const translateChunk = async (chunk: NewsItem[]) => {
       const stillNeeded: NewsItem[] = [];
@@ -172,7 +178,7 @@ export function NewsFeed() {
       // (preferFallback), no el mismo que ya falló — antes un solo fallo
       // dejaba esas noticias sin traducir para siempre en esa sesión.
       for (let attempt = 0; attempt < 2 && pending.length > 0; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 500));
         const byId = await callTranslateBatch(pending, attempt > 0);
         const stillMissing: NewsItem[] = [];
         pending.forEach((item) => {
@@ -195,13 +201,16 @@ export function NewsFeed() {
       chunk.forEach((item) => translatingLockRef.current.delete(item.id));
     };
 
-    for (let i = 0; i < needTranslation.length; i += CHUNK_SIZE) {
-      const chunk = needTranslation.slice(i, i + CHUNK_SIZE);
-      // No se espera (await) el resultado antes de programar el siguiente
-      // — cada mini-lote actualiza sus tarjetas en cuanto está listo, en
-      // paralelo con los demás, solo escalonando CUÁNDO empiezan.
-      setTimeout(() => translateChunk(chunk), (i / CHUNK_SIZE) * CHUNK_DELAY_MS);
-    }
+    (async () => {
+      for (let i = 0; i < needTranslation.length; i += CHUNK_SIZE) {
+        const chunk = needTranslation.slice(i, i + CHUNK_SIZE);
+        // Se espera a que termine cada lote (incluido su reintento) antes
+        // de pasar al siguiente — así solo hay una petición a NVIDIA en
+        // vuelo a la vez desde toda la app (esto también sirve de cola
+        // compartida con la traducción del detalle, ver NewsDetail.tsx).
+        await translateChunk(chunk);
+      }
+    })();
   };
 
   // Los navegadores frenan las pestañas en segundo plano, así que si vuelves

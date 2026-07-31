@@ -9,6 +9,7 @@ import { PlatformBadge } from "./PlatformBadge";
 import { formatRelativeDate } from "@/lib/date";
 import { recordNewsInteraction } from "@/lib/learning";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
+import { runExclusive } from "@/lib/nvidiaQueue";
 
 export function NewsDetail({
   item,
@@ -51,11 +52,13 @@ export function NewsDetail({
     setTranslatingBody(true);
 
     const callTranslateDetail = (articleText: string | null | undefined, preferFallback: boolean) =>
-      fetch("/api/translate-detail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
-      }).then((res) => res.json()) as Promise<{ title?: string | null; body?: string | null }>;
+      runExclusive(() =>
+        fetch("/api/translate-detail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
+        }).then((res) => res.json())
+      ) as Promise<{ title?: string | null; body?: string | null }>;
 
     const params = new URLSearchParams({ url: targetItem.source.url });
     fetch(`/api/enrich-detail?${params.toString()}`)

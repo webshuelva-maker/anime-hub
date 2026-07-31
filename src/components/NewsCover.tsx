@@ -53,8 +53,8 @@ export function NewsCover({
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(90deg, transparent 35%, rgba(255,255,255,0.09) 50%, transparent 65%)",
-              animation: "shimmerSweep 1.8s ease-in-out infinite",
+              background: "linear-gradient(90deg, transparent 35%, rgba(255,255,255,0.06) 50%, transparent 65%)",
+              animation: "shimmerSweep 2.6s linear infinite",
             }}
           />
         </div>
