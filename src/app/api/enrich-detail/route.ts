@@ -1,23 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchArticlePage } from "@/lib/articleReader";
-import { translateNewsFields } from "@/lib/translate";
 
 export const runtime = "nodejs";
 
+/**
+ * Solo descarga el artículo original (rápido) — la traducción se pide
+ * APARTE en /api/translate-detail, igual que ya se hace con las
+ * tarjetas de la lista (/api/enrich + /api/translate-batch). Antes esta
+ * misma ruta hacía scrape + traducción en una sola llamada, y esa
+ * traducción (con reintento + modelo de respaldo, hasta ~50s en el peor
+ * caso) muchas veces agotaba el tiempo máximo de la función serverless
+ * de Netlify antes de terminar — la función moría a medias y el
+ * artículo casi nunca llegaba completo.
+ */
 export async function GET(req: NextRequest) {
-  const title = req.nextUrl.searchParams.get("title") ?? "";
-  const summary = req.nextUrl.searchParams.get("summary") ?? "";
   const url = req.nextUrl.searchParams.get("url") ?? "";
-
   const article = await fetchArticlePage(url);
-  const bodyForTranslation = article.text || summary || title;
-
-  const { result: translated, debug: translateDebug } = await translateNewsFields(title, summary, bodyForTranslation, 1400);
 
   return NextResponse.json({
     coverImageUrl: article.image,
-    title: translated?.title ?? null,
-    body: translated?.body ?? article.text ?? null,
-    translateDebug,
+    articleText: article.text,
   });
 }

@@ -5,10 +5,6 @@ export interface TranslationOutcome {
   debug: string;
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 // Si el modelo configurado está saturado incluso tras reintentar, se
 // prueba con este como plan B — no siempre coinciden los picos de tráfico
 // entre modelos distintos.
@@ -21,9 +17,17 @@ async function callOnce(
   apiKey: string,
   model: string,
   maxTokens: number
-): Promise<{ ok: true; text: string } | { ok: false; sameModelRetry: boolean; tryFallback: boolean; debug: string }> {
+): Promise<{ ok: true; text: string } | { ok: false; tryFallback: boolean; debug: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 18000);
+  // Netlify mata las funciones serverless estándar a los 10s (26s como
+  // máximo en plan Pro). Con 18s por intento, dos intentos ya sumaban
+  // hasta 54s — la función moría a medias sin que este código llegara a
+  // enterarse ni a devolver nada útil. Con 9s, dos intentos (principal +
+  // respaldo) caben en 18s, dentro del límite de 26s de Pro. En el plan
+  // gratuito (10s) sigue pudiendo no dar tiempo con un solo intento lento;
+  // si eso pasa a menudo conviene subir el timeout de la función en
+  // Netlify (Project configuration → Functions) si el plan lo permite.
+  const timeout = setTimeout(() => controller.abort(), 9000);
 
   try {
     const res = await fetch(NVIDIA_URL, {
@@ -47,22 +51,21 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      // 429/5xx suelen fallar rápido — merece la pena tanto reintentar el
-      // mismo modelo como, si sigue sin ir, probar el de respaldo.
+      // 429/5xx suelen fallar rápido — merece la pena probar el modelo de
+      // respaldo (reintentar el MISMO modelo ya no se hace: con el
+      // presupuesto de tiempo tan ajustado de una función serverless, un
+      // modelo distinto tiene más probabilidades de ir bien que esperar y
+      // repetir la misma llamada que ya falló).
       const retryable = res.status === 429 || res.status >= 500;
-      return { ok: false, sameModelRetry: retryable, tryFallback: retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+      return { ok: false, tryFallback: retryable, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
     }
 
     const data = await res.json();
     const text: string = data?.choices?.[0]?.message?.content ?? "";
     return { ok: true, text };
   } catch (e) {
-    // Si se agotó el tiempo esperando (modelo lento), reintentar EL MISMO
-    // modelo solo duplicaría la espera sin garantías — pero un modelo
-    // DISTINTO puede ir a otra velocidad, así que ese sí merece probarse.
-    const isTimeout = e instanceof Error && e.name === "AbortError";
     const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, sameModelRetry: !isTimeout, tryFallback: true, debug: `excepción: ${message}` };
+    return { ok: false, tryFallback: true, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
   }
@@ -70,9 +73,11 @@ async function callOnce(
 
 /**
  * Traduce título + resumen + cuerpo de una noticia al español. Si el
- * modelo configurado está saturado (error rápido, no por lentitud),
- * reintenta una vez, y si sigue sin ir, prueba con un modelo de respaldo
- * distinto antes de rendirse — casi nunca están los dos saturados a la vez.
+ * modelo configurado está saturado o tarda demasiado, prueba UNA vez con
+ * un modelo de respaldo distinto antes de rendirse (casi nunca están los
+ * dos saturados a la vez) — ya no reintenta el mismo modelo, para que el
+ * tiempo total de las dos llamadas quepa dentro del límite de una
+ * función serverless (ver comentario de timeout en callOnce).
  */
 export async function translateNewsFields(
   title: string,
@@ -86,10 +91,6 @@ export async function translateNewsFields(
   const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
 
   let attempt = await callOnce(title, summary, body, apiKey, primaryModel, maxTokens);
-  if (!attempt.ok && attempt.sameModelRetry) {
-    await sleep(800);
-    attempt = await callOnce(title, summary, body, apiKey, primaryModel, maxTokens);
-  }
 
   if (!attempt.ok && attempt.tryFallback && primaryModel !== FALLBACK_MODEL) {
     attempt = await callOnce(title, summary, body, apiKey, FALLBACK_MODEL, maxTokens);

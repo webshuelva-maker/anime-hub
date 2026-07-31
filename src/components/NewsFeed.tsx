@@ -33,6 +33,15 @@ export function NewsFeed() {
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const pendingItemsRef = useRef<NewsItem[]>([]);
+  // IDs cuya traducción ya está en curso ahora mismo. enrichItems() se
+  // dispara desde varios sitios (carga inicial, refresco silencioso cada
+  // 15 min, y al volver a la pestaña) y podían solaparse: si dos
+  // llamadas arrancaban casi a la vez, las dos lanzaban su propio
+  // "primer lote" de 3 noticias en el mismo instante, duplicando
+  // peticiones a NVIDIA justo para esas primeras tarjetas — por eso eran
+  // las que peor iban. Este set evita que una noticia ya en traducción
+  // se vuelva a encolar hasta que termine.
+  const translatingLockRef = useRef<Set<string>>(new Set());
 
   const loadNews = (silent = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -75,7 +84,12 @@ export function NewsFeed() {
     const targets = loadedItems.slice(0, 16);
     pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
-    setTranslatingIds(new Set(targets.map((i) => i.id)));
+
+    // Solo se traducen las que no estén YA traduciéndose por una llamada
+    // anterior todavía en vuelo (ver comentario de translatingLockRef).
+    const needTranslation = targets.filter((i) => !translatingLockRef.current.has(i.id));
+    needTranslation.forEach((i) => translatingLockRef.current.add(i.id));
+    setTranslatingIds(new Set(needTranslation.map((i) => i.id)));
 
     const updateItem = (id: string, patch: Partial<NewsItem>) => {
       setItems((prev) => {
@@ -159,10 +173,11 @@ export function NewsFeed() {
         chunk.forEach((item) => next.delete(item.id));
         return next;
       });
+      chunk.forEach((item) => translatingLockRef.current.delete(item.id));
     };
 
-    for (let i = 0; i < targets.length; i += CHUNK_SIZE) {
-      const chunk = targets.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < needTranslation.length; i += CHUNK_SIZE) {
+      const chunk = needTranslation.slice(i, i + CHUNK_SIZE);
       // No se espera (await) el resultado antes de programar el siguiente
       // — cada mini-lote actualiza sus tarjetas en cuanto está listo, en
       // paralelo con los demás, solo escalonando CUÁNDO empiezan.
