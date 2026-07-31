@@ -8,6 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { runExclusive } from "@/lib/nvidiaQueue";
 
 interface Message {
   role: "user" | "assistant";
@@ -154,15 +155,33 @@ export function AssistantOrb() {
     try {
       const currentPrefs = getPreferences();
       const priorTopics = buildPriorTopicsSummary(archive);
-      const res = await fetch("/api/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages,
-          context: buildAssistantContext(currentPrefs) + (priorTopics ? `\n\n${priorTopics}` : ""),
-        }),
-      });
-      const data = await res.json();
+      const contextText = buildAssistantContext(currentPrefs) + (priorTopics ? `\n\n${priorTopics}` : "");
+
+      // Alta prioridad: Ren pasa por la misma cola que la traducción de
+      // tarjetas y de detalle (ver nvidiaQueue.ts) para no chocar con
+      // ellas contra el límite de peticiones simultáneas de NVIDIA, pero
+      // se cuela delante de cualquier traducción de fondo que aún no
+      // haya empezado — el usuario está esperando la respuesta ahora
+      // mismo, no es una tarea de fondo.
+      const callAssistant = (preferFallback: boolean) =>
+        runExclusive(
+          () =>
+            fetch("/api/assistant", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ messages: nextMessages, context: contextText, preferFallback }),
+            }).then((r) => r.json()),
+          "high"
+        ) as Promise<{ reply?: string; error?: string }>;
+
+      let data = await callAssistant(false);
+      // Si el primer intento no trae respuesta útil (falló la llamada a
+      // NVIDIA), un segundo intento con el modelo de respaldo antes de
+      // rendirse — antes un solo fallo ya mostraba "se ha cortado".
+      if (!data.reply) {
+        data = await callAssistant(true);
+      }
+
       const rawReply: string = data.reply || data.error || "No he podido responder.";
       const { cleanText, actions } = parseAndRunActions(rawReply);
       const assistantMessage: Message = { role: "assistant", content: cleanText || rawReply, actions, ts: Date.now() };

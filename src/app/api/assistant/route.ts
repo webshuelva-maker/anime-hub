@@ -11,20 +11,27 @@ interface ChatMessage {
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const FALLBACK_MODEL = "meta/llama-3.1-70b-instruct";
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function callModel(
   apiKey: string,
   model: string,
   systemPrompt: string,
   messages: ChatMessage[]
-): Promise<{ ok: true; reply: string } | { ok: false; retryable: boolean }> {
+): Promise<{ ok: true; reply: string } | { ok: false }> {
+  const controller = new AbortController();
+  // Este archivo se me había quedado sin el mismo arreglo que
+  // translate.ts/translateBatch.ts: sin timeout propio (dependía de que
+  // Netlify matara la función a los 10s) y con una cadena de hasta 3
+  // llamadas (principal + reintento + respaldo) que en el plan gratuito
+  // JAMÁS caben en el límite de una función. Por eso Ren se quedaba
+  // "pensando" y acababa con "se ha cortado la conexión". Ahora: una
+  // sola llamada por invocación, 8s de margen dentro del límite de 10s.
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   try {
     const response = await fetch(NVIDIA_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
       body: JSON.stringify({
         model,
         messages: [{ role: "system", content: systemPrompt }, ...messages],
@@ -34,14 +41,16 @@ async function callModel(
     });
 
     if (!response.ok) {
-      return { ok: false, retryable: response.status === 429 || response.status >= 500 };
+      return { ok: false };
     }
 
     const data = await response.json();
     const reply: string = data?.choices?.[0]?.message?.content ?? "";
     return { ok: true, reply };
   } catch {
-    return { ok: false, retryable: true };
+    return { ok: false };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -58,7 +67,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { messages?: ChatMessage[]; context?: string };
+  let body: { messages?: ChatMessage[]; context?: string; preferFallback?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -88,15 +97,9 @@ Contexto del usuario y de la app en este momento:
 ${context}`;
 
   const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
+  const model = body.preferFallback === true && primaryModel !== FALLBACK_MODEL ? FALLBACK_MODEL : primaryModel;
 
-  let attempt = await callModel(apiKey, primaryModel, systemPrompt, messages);
-  if (!attempt.ok && attempt.retryable) {
-    await sleep(1200);
-    attempt = await callModel(apiKey, primaryModel, systemPrompt, messages);
-  }
-  if (!attempt.ok && attempt.retryable && primaryModel !== FALLBACK_MODEL) {
-    attempt = await callModel(apiKey, FALLBACK_MODEL, systemPrompt, messages);
-  }
+  const attempt = await callModel(apiKey, model, systemPrompt, messages);
 
   if (!attempt.ok) {
     // Nunca se enseña el error en crudo al usuario — solo un mensaje

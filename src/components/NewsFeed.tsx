@@ -157,7 +157,7 @@ export function NewsFeed() {
         } catch {
           return new Map();
         }
-      });
+      }, "normal");
 
     const translateChunk = async (chunk: NewsItem[]) => {
       const stillNeeded: NewsItem[] = [];

@@ -1,29 +1,58 @@
-// Todas las llamadas que acaban tocando la API de NVIDIA (traducción de
-// tarjetas Y traducción de detalle) pasan por AQUÍ para que el navegador
-// nunca tenga más de UNA en vuelo a la vez.
+// Todo lo que acaba tocando la API de NVIDIA (traducción de tarjetas,
+// traducción de detalle, Y el asistente Ren) pasa por AQUÍ para que el
+// navegador nunca tenga más de UNA petición en vuelo a la vez.
 //
-// Motivo: con el nuevo diseño (una sola llamada a NVIDIA por invocación
-// de función, ver translate.ts/translateBatch.ts), el síntoma reportado
-// —solo el primer lote de tarjetas se traduce, y el detalle SIEMPRE sale
-// en inglés da igual qué noticia sea— encaja con un límite de
-// CONCURRENCIA por clave de API en el tier gratuito de NVIDIA (p. ej.
-// "1 petición en vuelo a la vez"), no con un límite de tiempo. Antes,
-// las tarjetas se traducían en lotes lanzados en paralelo cada ~1s
-// (varias peticiones a la vez), y el detalle podía dispararse mientras
-// esas seguían en vuelo — chocando entre sí y fallando siempre que
-// hubiera más de una petición simultánea.
+// Motivo: el síntoma reportado (solo el primer lote de tarjetas se
+// traduce, el detalle se queda "traduciendo..." sin fin, y Ren se corta
+// con "los servidores están más llenos de lo normal") encaja con un
+// límite de CONCURRENCIA por clave de API en el tier gratuito de NVIDIA
+// — probablemente 1 sola petición en vuelo a la vez para toda la clave,
+// compartida por los tres consumidores (tarjetas, detalle y Ren).
 //
-// runExclusive encadena cada llamada a la anterior: la siguiente no
-// empieza hasta que la de antes termina (con éxito o error), sin
-// importar desde qué componente se llame.
-let tail: Promise<unknown> = Promise.resolve();
+// Con PRIORIDAD: las traducciones de la lista (fondo, automáticas) usan
+// prioridad "normal". El detalle de una noticia y Ren (el usuario está
+// esperando activamente, delante de la pantalla) usan "high" — se
+// cuelan delante de cualquier tarea de fondo que aún no haya EMPEZADO
+// (la que ya está en vuelo no se puede interrumpir, pero al menos no
+// hay que esperar a que se vacíen 5-6 lotes de fondo antes de que le
+// toque el turno a lo que el usuario está mirando ahora mismo).
+type Priority = "high" | "normal";
+interface Task {
+  fn: () => Promise<unknown>;
+  resolve: (v: unknown) => void;
+  reject: (e: unknown) => void;
+}
 
-export function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-  const result = tail.then(fn, fn);
-  // Si fn falla, no se debe romper la cola para los siguientes en espera.
-  tail = result.then(
-    () => undefined,
-    () => undefined
+const queue: Task[] = [];
+let running = false;
+
+function runNext() {
+  if (running) return;
+  const task = queue.shift();
+  if (!task) return;
+  running = true;
+  task.fn().then(
+    (v) => {
+      running = false;
+      task.resolve(v);
+      runNext();
+    },
+    (e) => {
+      running = false;
+      task.reject(e);
+      runNext();
+    }
   );
-  return result;
+}
+
+export function runExclusive<T>(fn: () => Promise<T>, priority: Priority = "normal"): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const task: Task = { fn, resolve: resolve as (v: unknown) => void, reject };
+    if (priority === "high") {
+      queue.unshift(task);
+    } else {
+      queue.push(task);
+    }
+    runNext();
+  });
 }

@@ -52,12 +52,14 @@ export function NewsDetail({
     setTranslatingBody(true);
 
     const callTranslateDetail = (articleText: string | null | undefined, preferFallback: boolean) =>
-      runExclusive(() =>
-        fetch("/api/translate-detail", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
-        }).then((res) => res.json())
+      runExclusive(
+        () =>
+          fetch("/api/translate-detail", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
+          }).then((res) => res.json()),
+        "high"
       ) as Promise<{ title?: string | null; body?: string | null }>;
 
     const params = new URLSearchParams({ url: targetItem.source.url });

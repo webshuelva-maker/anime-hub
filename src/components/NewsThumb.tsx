@@ -18,15 +18,10 @@ export function NewsThumb({
   return (
     <div className="relative aspect-square w-16 flex-shrink-0 overflow-hidden rounded-lg sm:w-20" style={{ background: "var(--panel)" }}>
       {showSkeleton && (
-        <div className="absolute inset-0 overflow-hidden" style={{ background: "var(--panel-soft)" }}>
-          <div
-            className="absolute inset-0"
-            style={{
-              background: "linear-gradient(90deg, transparent 35%, rgba(255,255,255,0.06) 50%, transparent 65%)",
-              animation: "shimmerSweep 2.6s linear infinite",
-            }}
-          />
-        </div>
+        <div
+          className="absolute inset-0"
+          style={{ background: "var(--panel-soft)", animation: "softPulse 1.6s ease-in-out infinite" }}
+        />
       )}
       {showFallbackPhoto && (
         // eslint-disable-next-line @next/next/no-img-element -- fuente externa (Picsum), respaldo final

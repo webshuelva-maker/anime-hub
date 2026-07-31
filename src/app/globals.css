@@ -110,19 +110,14 @@ body {
   to { opacity: 1; }
 }
 
-/* El elemento animado con shimmerSweep DEBE medir el 100% del contenedor
-   (inset-0), nunca una fracción (ej. w-1/4): translateX(±100%) se calcula
-   sobre el ANCHO PROPIO del elemento, no sobre el del contenedor.
-   Además, el barrido en sí ocupa solo el 55% del ciclo (0%→55%) y el
-   resto (55%→100%) es una PAUSA quieta antes de repetir — sin eso, el
-   bucle se sentía nervioso/repetitivo ("todo el rato, súper rápido").
-   Se anima con timing lineal (fijado en el propio componente, no con
-   ease-in-out) para que el barrido tenga velocidad constante en vez de
-   acelerar de golpe por el medio. */
-@keyframes shimmerSweep {
-  0% { transform: translateX(-100%); }
-  55% { transform: translateX(100%); }
-  100% { transform: translateX(100%); }
+/* Animación de "cargando" para las carátulas, mientras se busca la
+   imagen real. Se cambió por completo del barrido con degradado
+   (shimmerSweep) a un simple pulso de opacidad — mucho más difícil de
+   percibir como "raro" o "roto" al no tener ninguna dirección ni
+   velocidad que pueda parecer descompensada. */
+@keyframes softPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
