@@ -24,8 +24,24 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [suggestSignup, setSuggestSignup] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const missingConfig = !process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError("Escribe tu email arriba primero.");
+      return;
+    }
+    const supabase = createClient();
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    });
+    // Se muestra el mismo mensaje exista o no esa cuenta — igual que
+    // signInWithPassword, esto también podría revelar qué emails están
+    // registrados si se distinguiera.
+    setResetSent(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,13 +52,24 @@ export function LoginForm() {
 
     try {
       if (mode === "signup") {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
         if (signUpError) throw signUpError;
-        setConfirmSent(true);
+        // Truco conocido de Supabase: si el email YA tiene una cuenta
+        // confirmada, signUp() no da error (por seguridad, para no
+        // revelar qué emails están registrados) — pero devuelve
+        // "identities" vacío en vez de con la nueva identidad, a
+        // diferencia de un registro genuinamente nuevo. Antes esto
+        // enseñaba "revisa tu correo" sin que llegara nada de verdad.
+        if (signUpData.user && signUpData.user.identities && signUpData.user.identities.length === 0) {
+          setError("Ya hay una cuenta con este email. Prueba a iniciar sesión, o recupera tu contraseña si no la recuerdas.");
+          setMode("login");
+        } else {
+          setConfirmSent(true);
+        }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
@@ -86,6 +113,22 @@ export function LoginForm() {
         <h2 className="font-heading text-lg font-semibold">Revisa tu correo</h2>
         <p className="mt-2 text-sm text-muted">
           Te hemos mandado un enlace de confirmación a {email}. Ábrelo para activar tu cuenta.
+        </p>
+      </motion.div>
+    );
+  }
+
+  if (resetSent) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="panel rounded-2xl p-6 text-center"
+      >
+        <h2 className="font-heading text-lg font-semibold">Revisa tu correo</h2>
+        <p className="mt-2 text-sm text-muted">
+          Si hay una cuenta con {email}, te hemos mandado un enlace para elegir una contraseña nueva.
         </p>
       </motion.div>
     );
@@ -224,6 +267,16 @@ export function LoginForm() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {mode === "login" && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="block text-xs text-muted underline hover:text-foreground"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            )}
 
             <button
               type="submit"

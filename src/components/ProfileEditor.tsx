@@ -57,6 +57,32 @@ export function ProfileEditor() {
     setTimeout(() => setToast(null), 2000);
   };
 
+  const [newEmail, setNewEmail] = useState("");
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const handleChangeEmail = async () => {
+    if (!newEmail.trim()) return;
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+    setEmailStatus(
+      error
+        ? `No se pudo cambiar: ${error.message}`
+        : "Te hemos mandado un enlace de confirmación a la nueva dirección — ábrelo para que se aplique el cambio."
+    );
+  };
+
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      setPasswordStatus("Mínimo 6 caracteres.");
+      return;
+    }
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPasswordStatus(error ? `No se pudo cambiar: ${error.message}` : "Contraseña actualizada.");
+    if (!error) setNewPassword("");
+  };
+
   const isDirty = JSON.stringify(prefs) !== savedSnapshot;
 
   const handleSave = () => {
@@ -65,6 +91,18 @@ export function ProfileEditor() {
     setSavedSnapshot(JSON.stringify(prefs));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+
+    // Si hay sesión, el nombre también se guarda en el perfil de la
+    // nube (antes solo quedaba en este navegador, aunque ya tuviera
+    // cuenta creada).
+    if (account && account !== "loading") {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user) {
+          supabase.from("profiles").update({ display_name: prefs.displayName }).eq("id", data.user.id);
+        }
+      });
+    }
   };
 
   const handlePremiumClick = () => {
@@ -170,15 +208,6 @@ export function ProfileEditor() {
         </div>
       </div>
 
-      <div className="panel mt-6 rounded-2xl p-6">
-        <h2 className="font-heading text-lg font-semibold">Cuenta</h2>
-        <p className="mt-1 text-sm text-muted">
-          De momento tu perfil vive solo en este navegador (sin servidor todavía),
-          así que no hay usuario y contraseña reales — sería una seguridad falsa.
-          En cuanto conectemos un backend, aquí mismo añadiremos inicio de sesión de verdad.
-        </p>
-      </div>
-
       <div className="mt-8 flex justify-end">
         <button
           type="button"
@@ -224,10 +253,55 @@ export function ProfileEditor() {
               Conectado como <span className="text-foreground">{account.email}</span> ·{" "}
               {account.isPremium ? "Premium activo" : "Plan gratuito"}
             </p>
+
+            <div className="mt-5 space-y-4 border-t border-panel-border pt-5">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Cambiar email</label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder={account.email ?? ""}
+                    className="flex-1 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChangeEmail}
+                    className="whitespace-nowrap rounded-lg border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+                {emailStatus && <p className="mt-1.5 text-xs text-muted">{emailStatus}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Cambiar contraseña</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Nueva contraseña"
+                    className="flex-1 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChangePassword}
+                    className="whitespace-nowrap rounded-lg border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+                {passwordStatus && <p className="mt-1.5 text-xs text-muted">{passwordStatus}</p>}
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={handleLogout}
-              className="mt-4 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+              className="mt-5 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
             >
               Cerrar sesión
             </button>

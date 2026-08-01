@@ -9,6 +9,7 @@ import "@fontsource/inter/700.css";
 import "./globals.css";
 import { siteConfig } from "@/config/site";
 import { SiteChrome } from "@/components/SiteChrome";
+import { AmbientGlow } from "@/components/AmbientGlow";
 
 export const metadata: Metadata = {
   title: `${siteConfig.name} — ${siteConfig.tagline}`,
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
+        <AmbientGlow />
         <SiteChrome />
         {children}
       </body>
