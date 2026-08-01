@@ -47,7 +47,9 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      return { ok: false, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+      const debug = `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}`;
+      console.error(`[translate-detail] ${debug}`);
+      return { ok: false, debug };
     }
 
     const data = await res.json();
@@ -55,6 +57,7 @@ async function callOnce(
     return { ok: true, text };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    console.error(`[translate-detail] excepción: ${message}`);
     return { ok: false, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);

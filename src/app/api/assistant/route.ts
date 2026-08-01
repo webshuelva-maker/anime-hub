@@ -36,13 +36,17 @@ async function callModel(
     });
 
     if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      console.error(`[assistant] NVIDIA respondió ${response.status}: ${errBody.slice(0, 200)}`);
       return { ok: false };
     }
 
     const data = await response.json();
     const reply: string = data?.choices?.[0]?.message?.content ?? "";
     return { ok: true, reply };
-  } catch {
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[assistant] excepción: ${message}`);
     return { ok: false };
   } finally {
     clearTimeout(timeout);

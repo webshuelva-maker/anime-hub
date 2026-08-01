@@ -49,7 +49,9 @@ async function callBatch(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      return { ok: false, debug: `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}` };
+      const debug = `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}`;
+      console.error(`[translate-batch] ${debug}`);
+      return { ok: false, debug };
     }
 
     const data = await res.json();
@@ -57,7 +59,10 @@ async function callBatch(
     // Por si el modelo envuelve el JSON en ```json ... ``` pese a que se le pide que no.
     const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
     const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) return { ok: false, debug: `respuesta sin JSON: "${raw.slice(0, 150)}"` };
+    if (!match) {
+      console.error(`[translate-batch] respuesta sin JSON: "${raw.slice(0, 200)}"`);
+      return { ok: false, debug: `respuesta sin JSON: "${raw.slice(0, 150)}"` };
+    }
 
     const parsed = JSON.parse(match[0]);
     if (!Array.isArray(parsed)) return { ok: false, debug: "el JSON devuelto no es un array" };
@@ -65,6 +70,7 @@ async function callBatch(
     return { ok: true, results: parsed };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    console.error(`[translate-batch] excepción: ${message}`);
     return { ok: false, debug: `excepción: ${message}` };
   } finally {
     clearTimeout(timeout);
