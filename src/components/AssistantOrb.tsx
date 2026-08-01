@@ -258,8 +258,8 @@ export function AssistantOrb() {
                 <button
                   type="button"
                   onClick={() => setConfirmingClear(true)}
-                  aria-label="Borrar memoria de Ren"
-                  title="Borrar memoria de Ren"
+                  aria-label="Borrar conversación"
+                  title="Borrar conversación"
                   className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -374,8 +374,8 @@ export function AssistantOrb() {
 
       <ConfirmDialog
         open={confirmingClear}
-        title="Borrar memoria de Ren"
-        message={`Cada vez que entras, ${siteConfig.assistantName} ya empieza una conversación nueva por su cuenta — esto borra además todo lo que recuerda de temas anteriores. No se puede deshacer.`}
+        title="Borrar conversación"
+        message={`Esto borra el historial de esta conversación con ${siteConfig.assistantName} (los mensajes que ves aquí). Lo que recuerda de ti a largo plazo (gustos, cómo prefieres que te trate) no se toca — eso se borra aparte, desde Ajustes → Privacidad. No se puede deshacer.`}
         onConfirm={handleClearChat}
         onCancel={() => setConfirmingClear(false)}
       />

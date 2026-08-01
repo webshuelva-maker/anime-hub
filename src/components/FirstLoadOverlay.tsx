@@ -190,14 +190,23 @@ export function FirstLoadOverlay({
 
   const pct = Math.round(displayPct);
 
-  // Foco de luz que sigue al ratón — se mueve directamente el estilo del
-  // div vía ref (sin pasar por estado de React) para que vaya fino a
-  // 60fps sin generar un render por cada movimiento del ratón.
-  const mouseLightRef = useRef<HTMLDivElement>(null);
+  // En vez de un foco de luz suelto seguiendo al cursor 1:1 (se sentía
+  // como "arrastrar un círculo por la pantalla", repetitivo) — un
+  // paralaje sutil: los DOS resplandores que ya respiran solos también
+  // se desplazan un poco según dónde esté el ratón, en direcciones
+  // opuestas entre sí, dando sensación de profundidad/reacción real de
+  // la escena en vez de un elemento nuevo pegado al puntero.
+  const glow1WrapRef = useRef<HTMLDivElement>(null);
+  const glow2WrapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
-      if (mouseLightRef.current) {
-        mouseLightRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px) translate(-50%, -50%)`;
+      const relX = e.clientX / window.innerWidth - 0.5; // -0.5 a 0.5
+      const relY = e.clientY / window.innerHeight - 0.5;
+      if (glow1WrapRef.current) {
+        glow1WrapRef.current.style.transform = `translate(${relX * 50}px, ${relY * 35}px)`;
+      }
+      if (glow2WrapRef.current) {
+        glow2WrapRef.current.style.transform = `translate(${relX * -40}px, ${relY * -30}px)`;
       }
     };
     window.addEventListener("mousemove", handleMove);
@@ -214,30 +223,28 @@ export function FirstLoadOverlay({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
     >
-      {/* Resplandores ambientales — se mueven despacio Y laten, sensación
-          de "respiración" en vez de simple parpadeo de opacidad */}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -left-32 top-1/3 h-72 w-72 rounded-full"
-        style={{ background: "radial-gradient(circle, var(--ice) 0%, transparent 70%)", filter: "blur(60px)" }}
-        animate={{ opacity: [0.08, 0.2, 0.08], x: [0, 30, -10, 0], y: [0, -20, 15, 0] }}
-        transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -right-32 bottom-1/3 h-72 w-72 rounded-full"
-        style={{ background: "radial-gradient(circle, var(--accent-from) 0%, transparent 70%)", filter: "blur(60px)" }}
-        animate={{ opacity: [0.06, 0.18, 0.06], x: [0, -25, 15, 0], y: [0, 20, -15, 0] }}
-        transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-      />
-      {/* Foco de luz que sigue al ratón — solo en pantallas con puntero
-          real (en móvil no hay ratón que seguir, así que no molesta). */}
-      <div
-        ref={mouseLightRef}
-        aria-hidden
-        className="pointer-events-none absolute left-0 top-0 hidden h-96 w-96 rounded-full sm:block"
-        style={{ background: "radial-gradient(circle, var(--platinum) 0%, transparent 65%)", filter: "blur(80px)", opacity: 0.1 }}
-      />
+      {/* Resplandores ambientales — respiran solos (opacidad + deriva
+          propia vía framer-motion) Y además reaccionan al ratón (el
+          div contenedor de fuera, movido directamente por ref para que
+          vaya fino a 60fps sin generar un render por cada movimiento). */}
+      <div ref={glow1WrapRef} className="pointer-events-none absolute -left-32 top-1/3">
+        <motion.div
+          aria-hidden
+          className="h-72 w-72 rounded-full"
+          style={{ background: "radial-gradient(circle, var(--ice) 0%, transparent 70%)", filter: "blur(60px)" }}
+          animate={{ opacity: [0.08, 0.2, 0.08], x: [0, 30, -10, 0], y: [0, -20, 15, 0] }}
+          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+      <div ref={glow2WrapRef} className="pointer-events-none absolute -right-32 bottom-1/3">
+        <motion.div
+          aria-hidden
+          className="h-72 w-72 rounded-full"
+          style={{ background: "radial-gradient(circle, var(--accent-from) 0%, transparent 70%)", filter: "blur(60px)" }}
+          animate={{ opacity: [0.06, 0.18, 0.06], x: [0, -25, 15, 0], y: [0, 20, -15, 0] }}
+          transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+        />
+      </div>
 
       <motion.p
         initial={{ opacity: 0, y: 8 }}

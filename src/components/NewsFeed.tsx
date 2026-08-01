@@ -17,6 +17,8 @@ import { SearchBar } from "./SearchBar";
 import { AnimeSearchResult } from "@/lib/anilist";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
 import { runExclusive, waitWhileBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
+import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -358,15 +360,29 @@ export function NewsFeed() {
     Object.keys(prefs.genreInteractionCounts).length > 0 ||
     Object.keys(prefs.studioInteractionCounts).length > 0;
 
+  // Las noticias personalizadas (orden por afinidad) requieren cuenta —
+  // sin backend real, "afinidad" solo vivía en este navegador y no tenía
+  // sentido llamarlo "tu perfil"; con cuenta, además, es la puerta de
+  // entrada hacia premium más adelante. null mientras se comprueba, para
+  // no mostrar el aviso un instante de más si sí hay sesión.
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(() =>
+    process.env.NEXT_PUBLIC_SUPABASE_URL ? null : false
+  );
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
+  }, []);
+
   const ranked = useMemo(() => {
     return items.map((item) => ({
       item,
-      score: scoreNewsItem(item, prefs),
+      score: isLoggedIn ? scoreNewsItem(item, prefs) : 0,
     })).sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
+      if (isLoggedIn && b.score !== a.score) return b.score - a.score;
       return new Date(b.item.publishedAt).getTime() - new Date(a.item.publishedAt).getTime();
     });
-  }, [items, prefs]);
+  }, [items, prefs, isLoggedIn]);
 
   const [featured, second, third, ...tail] = ranked;
   const mainStories = [second, third].filter(Boolean) as typeof ranked;
@@ -423,7 +439,9 @@ export function NewsFeed() {
                 {prefs.displayName ? `Hola, ${prefs.displayName}` : "Hola de nuevo"}
               </p>
               <p className="text-sm text-muted">
-                {hasLearned
+                {isLoggedIn === false
+                  ? "Crea una cuenta para que esto se ordene según lo que te gusta"
+                  : hasLearned
                   ? "Ordenado según lo que has leído y marcado"
                   : "Marca ♡ en lo que te interese y el orden se ajustará solo"}
               </p>
@@ -440,6 +458,19 @@ export function NewsFeed() {
               {status === "down" && "Feed caído"}
             </span>
           </div>
+
+          {isLoggedIn === false && (
+            <Link
+              href="/login"
+              className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-ice/25 bg-panel-soft px-4 py-3 text-sm transition-colors hover:border-ice/40"
+            >
+              <span>
+                <span className="font-heading font-semibold text-ice">Noticias personalizadas</span>{" "}
+                <span className="text-muted">— crea una cuenta gratis para que el feed se ordene según tus gustos</span>
+              </span>
+              <span className="whitespace-nowrap text-xs font-semibold text-ice">Crear cuenta →</span>
+            </Link>
+          )}
 
           <div className="mt-4">
             <SearchBar

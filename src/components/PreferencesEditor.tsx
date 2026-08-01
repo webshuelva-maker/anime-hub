@@ -10,6 +10,8 @@ import { getTopAffinities } from "@/lib/learning";
 import { SelectableChip } from "./SelectableChip";
 import { TagInput } from "./TagInput";
 import { TimePicker } from "./TimePicker";
+import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 
 function AffinityBar({ name, count, max }: { name: string; count: number; max: number }) {
   const pct = Math.max(8, Math.round((count / max) * 100));
@@ -37,6 +39,15 @@ export function PreferencesEditor() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(loaded);
     setSavedSnapshot(JSON.stringify(loaded));
+  }, []);
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(() =>
+    process.env.NEXT_PUBLIC_SUPABASE_URL ? null : false
+  );
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
   }, []);
 
   const isDirty = JSON.stringify(prefs) !== savedSnapshot;
@@ -70,7 +81,19 @@ export function PreferencesEditor() {
       </p>
 
       <div className="panel mt-8 rounded-2xl p-6">
-        {!hasLearned ? (
+        {isLoggedIn === false ? (
+          <div className="text-center">
+            <p className="text-sm text-muted">
+              La afinidad por gustos es una función de cuenta — créate una gratis para que el feed aprenda de ti.
+            </p>
+            <Link
+              href="/login"
+              className="accent-gradient mt-4 inline-block rounded-full px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+            >
+              Iniciar sesión / Crear cuenta
+            </Link>
+          </div>
+        ) : !hasLearned ? (
           <p className="text-sm text-muted">
             Todavía no hay datos. Dale <span className="ice-text">♡</span> a alguna noticia en el feed y esto se irá rellenando.
           </p>
