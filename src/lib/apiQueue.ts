@@ -81,6 +81,10 @@ export function waitWhileBackgroundPaused(): Promise<void> {
 // según fuentes entre 6.000 y 30.000 tokens/minuto) — 5.500 es un valor
 // conservador para no agotarlo aunque el real sea el más bajo.
 const SAFE_TPM_BUDGET = 5500;
+// La traducción de fondo (lista) NUNCA puede gastar más del 65% del
+// presupuesto — así siempre queda un margen reservado para Ren y para
+// el detalle, que no deberían depender de que la lista les "deje hueco".
+const BACKGROUND_TPM_CEILING = SAFE_TPM_BUDGET * 0.65;
 const tokenLog: { time: number; tokens: number }[] = [];
 
 function pruneOldUsage() {
@@ -97,8 +101,9 @@ export function recordTokenUsage(estimatedTokens: number) {
   tokenLog.push({ time: Date.now(), tokens: estimatedTokens });
 }
 
-export async function waitForTokenBudget(estimatedTokens: number): Promise<void> {
-  while (currentUsage() + estimatedTokens > SAFE_TPM_BUDGET) {
+export async function waitForTokenBudget(estimatedTokens: number, priority: Priority = "normal"): Promise<void> {
+  const ceiling = priority === "high" ? SAFE_TPM_BUDGET : BACKGROUND_TPM_CEILING;
+  while (currentUsage() + estimatedTokens > ceiling) {
     await new Promise((r) => setTimeout(r, 1000));
   }
 }

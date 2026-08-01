@@ -61,6 +61,12 @@ export function NewsFeed() {
   // pantalla de carga, en vez de un giro indefinido sin información.
   // Es estado (no ref) porque se usa para renderizar la barra de progreso.
   const [initialBatchTotal, setInitialBatchTotal] = useState(0);
+  // Ids concretos del lote inicial (las 9 visibles) — translatingIds
+  // ahora también incluye la traducción de fondo (más allá de esas 9),
+  // así que el progreso de la pantalla de carga necesita saber
+  // exactamente cuáles de esos ids son "las que cuentan". Es estado (no
+  // ref) porque se lee durante el render para calcular la barra.
+  const [initialBatchIds, setInitialBatchIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     loaderShownAtRef.current = Date.now();
   }, []);
@@ -129,20 +135,29 @@ export function NewsFeed() {
     // Antes eran 16 de golpe — con el límite de tokens/minuto del plan
     // gratuito de Groq, traducir tantas de una sentada agotaba el
     // presupuesto antes de terminar. 9 cubre justo lo que se ve sin
-    // desplegar "Ver más" (portada + 2 historias + 6 de la cola); el
-    // resto se traduce solo si el usuario despliega más o abre el
-    // detalle de una noticia en concreto.
-    const targets = sorted.slice(0, 9);
+    // desplegar "Ver más" (portada + 2 historias + 6 de la cola) — eso
+    // sigue siendo lo único que carga carátula/imagen por adelantado.
+    // Pero la TRADUCCIÓN (más barata, sin imágenes de por medio) sigue
+    // en segundo plano bastante más allá de esas 9, a un ritmo mucho más
+    // lento (no hay prisa, nadie lo está esperando) — así, cuando el
+    // usuario despliega "Ver más" o abre una noticia, con suerte ya
+    // estaba traducida de fondo mientras leía otra cosa.
+    const VISIBLE_CAP = 9;
+    const BACKGROUND_TRANSLATE_CAP = 30;
+    const targets = sorted.slice(0, VISIBLE_CAP);
+    const backgroundTargets = sorted.slice(VISIBLE_CAP, BACKGROUND_TRANSLATE_CAP);
     pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
 
     // Solo se traducen las que no estén YA traduciéndose por una llamada
     // anterior todavía en vuelo (ver comentario de translatingLockRef).
     const needTranslation = targets.filter((i) => !translatingLockRef.current.has(i.id));
-    needTranslation.forEach((i) => translatingLockRef.current.add(i.id));
-    setTranslatingIds(new Set(needTranslation.map((i) => i.id)));
+    const needTranslationBackground = backgroundTargets.filter((i) => !translatingLockRef.current.has(i.id));
+    [...needTranslation, ...needTranslationBackground].forEach((i) => translatingLockRef.current.add(i.id));
+    setTranslatingIds((prev) => new Set([...prev, ...needTranslation.map((i) => i.id), ...needTranslationBackground.map((i) => i.id)]));
     if (isFirstEverLoadRef.current && initialBatchTotal === 0) {
       setInitialBatchTotal(needTranslation.length);
+      setInitialBatchIds(new Set(needTranslation.map((i) => i.id)));
     }
 
     const updateItem = (id: string, patch: Partial<NewsItem>) => {
@@ -200,7 +215,7 @@ export function NewsFeed() {
         // respuesta) — no exacta, pero suficiente para no lanzar la
         // petición a ciegas cuando el presupuesto ya está casi agotado.
         const estimatedTokens = 300 + items.length * 200;
-        await waitForTokenBudget(estimatedTokens);
+        await waitForTokenBudget(estimatedTokens, "normal");
         try {
           const res = await fetch("/api/translate-batch", {
             method: "POST",
@@ -292,6 +307,18 @@ export function NewsFeed() {
         await new Promise((r) => setTimeout(r, MIN_LOADER_MS - elapsed));
       }
       setShowInitialLoader(false);
+
+      // A partir de aquí, lo visible ya está — se sigue traduciendo el
+      // resto EN SEGUNDO PLANO, más despacio (nadie lo está esperando),
+      // mientras el usuario lee tranquilo. Así, para cuando despliegue
+      // "Ver más" o abra una noticia de más abajo, con suerte ya está
+      // traducida de fondo en vez de tener que esperar en ese momento.
+      for (let i = 0; i < needTranslationBackground.length; i += CHUNK_SIZE) {
+        const chunk = needTranslationBackground.slice(i, i + CHUNK_SIZE);
+        await waitWhileBackgroundPaused();
+        await translateChunk(chunk);
+        await new Promise((r) => setTimeout(r, 6000));
+      }
     })();
   };
 
@@ -374,7 +401,13 @@ export function NewsFeed() {
           <FirstLoadOverlay
             key="first-load"
             progress={
-              initialBatchTotal > 0 ? Math.min(1, (initialBatchTotal - translatingIds.size) / initialBatchTotal) : 0
+              initialBatchTotal > 0
+                ? Math.min(
+                    1,
+                    (initialBatchTotal - [...translatingIds].filter((id) => initialBatchIds.has(id)).length) /
+                      initialBatchTotal
+                  )
+                : 0
             }
           />
         )}

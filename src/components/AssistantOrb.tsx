@@ -172,7 +172,7 @@ export function AssistantOrb() {
       const callAssistant = (preferFallback: boolean) =>
         runExclusive(async () => {
           const estimatedTokens = 500 + nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
-          await waitForTokenBudget(estimatedTokens);
+          await waitForTokenBudget(estimatedTokens, "high");
           const result = await fetch("/api/assistant", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

@@ -60,7 +60,7 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
       const prefs = getPreferences();
       const estimatedTokens = 1000;
       const data: { facts?: string[] } = await runExclusive(async () => {
-        await waitForTokenBudget(estimatedTokens);
+        await waitForTokenBudget(estimatedTokens, "normal");
         const res = await fetch("/api/trivia", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -122,34 +122,59 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
     >
-      {/* Resplandores ambientales — muy lentos y suaves, decoración pura */}
+      {/* Resplandores ambientales — se mueven despacio Y laten, sensación
+          de "respiración" en vez de simple parpadeo de opacidad */}
       <motion.div
         aria-hidden
         className="pointer-events-none absolute -left-32 top-1/3 h-72 w-72 rounded-full"
         style={{ background: "radial-gradient(circle, var(--ice) 0%, transparent 70%)", filter: "blur(60px)" }}
-        animate={{ opacity: [0.08, 0.18, 0.08] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        animate={{ opacity: [0.08, 0.2, 0.08], x: [0, 30, -10, 0], y: [0, -20, 15, 0] }}
+        transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
         aria-hidden
         className="pointer-events-none absolute -right-32 bottom-1/3 h-72 w-72 rounded-full"
         style={{ background: "radial-gradient(circle, var(--accent-from) 0%, transparent 70%)", filter: "blur(60px)" }}
-        animate={{ opacity: [0.06, 0.16, 0.06] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1.2 }}
+        animate={{ opacity: [0.06, 0.18, 0.06], x: [0, -25, 15, 0], y: [0, 20, -15, 0] }}
+        transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
       />
 
-      <p className="font-heading text-lg tracking-[0.15em] text-foreground/90">{siteConfig.name}</p>
-      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted">Preparando tu feed</p>
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="font-heading text-lg tracking-[0.15em] text-foreground/90"
+      >
+        {siteConfig.name}
+      </motion.p>
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+        className="mt-1 text-xs uppercase tracking-[0.2em] text-muted"
+      >
+        Preparando tu feed
+      </motion.p>
 
-      {/* Barra de progreso real, crece desde el centro hacia los lados */}
-      <div className="relative mt-8 h-[3px] w-56 overflow-hidden rounded-full" style={{ background: "var(--panel-border)" }}>
+      {/* Barra de progreso real, crece desde el centro hacia los lados.
+          Transición larga (2.2s) a propósito: si se anima rápido y luego
+          se queda quieta esperando el siguiente dato, se percibe como
+          "salta y para" — con una transición larga, se la ve avanzando
+          poco a poco de forma continua durante todo ese hueco. */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.2 }}
+        className="relative mt-8 h-[3px] w-56 overflow-hidden rounded-full"
+        style={{ background: "var(--panel-border)" }}
+      >
         <motion.div
           className="absolute inset-y-0 left-1/2 rounded-full"
           style={{ background: "linear-gradient(90deg, var(--accent-from), var(--ice))", x: "-50%" }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 2.2, ease: "easeOut" }}
         />
-      </div>
+      </motion.div>
       <p className="mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
 
       <div className="mt-8 h-20 w-full max-w-md">

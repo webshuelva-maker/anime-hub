@@ -54,7 +54,7 @@ export function NewsDetail({
     const callTranslateDetail = (articleText: string | null | undefined, preferFallback: boolean) =>
       runExclusive(async () => {
         const estimatedTokens = 400 + (articleText?.length ?? 0) / 3; // artículo completo, más caro que un lote de tarjetas
-        await waitForTokenBudget(estimatedTokens);
+        await waitForTokenBudget(estimatedTokens, "high");
         const result = await fetch("/api/translate-detail", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
