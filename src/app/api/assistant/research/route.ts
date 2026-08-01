@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falta GROQ_API_KEY en el servidor." }, { status: 503 });
   }
 
-  let body: { question?: string };
+  let body: { question?: string; previousTopic?: string };
   try {
     body = await req.json();
   } catch {
@@ -37,7 +37,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Pregunta vacía." }, { status: 400 });
   }
 
-  const outcome = await runResearch(apiKey, question, 22000);
+  const previousTopic = (body.previousTopic ?? "").trim();
+  const effectiveQuestion =
+    previousTopic && question.length < 70 ? `${question} (se refiere a: ${previousTopic})` : question;
+
+  const outcome = await runResearch(apiKey, effectiveQuestion, 22000);
 
   // La ficha de AniList se busca SIEMPRE, haya funcionado la búsqueda web
   // o no: es gratis, es rápida, y es el dato duro sobre el que apoyar la
@@ -59,6 +63,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     dossier: outcome.dossier,
+    webFailed: !outcome.grounded,
     factsText: facts ? factsToPromptText(facts) : "",
     confidence,
     confidenceLine: confidenceInstruction(confidence),

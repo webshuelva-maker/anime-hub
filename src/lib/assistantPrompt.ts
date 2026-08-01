@@ -17,26 +17,54 @@ export interface ChatMessage {
   content: string;
 }
 
-export function buildResearchBlock(researchText: string, confidenceLine: string): string {
+/**
+ * Bloque de investigación que se le inyecta a Ren.
+ *
+ * `webFailed` es la parte importante: cuando la búsqueda no ha devuelto
+ * ni una fuente, NO se le pasa ningún dossier y se le prohíbe dar
+ * detalles concretos. Antes, un dossier sin fuentes detrás se le
+ * presentaba como "acabas de investigar esto", y el modelo rellenaba el
+ * hueco inventando tuits del director y documentos filtrados que no
+ * existían. Sin fuentes, la respuesta correcta es "no lo sé".
+ */
+export function buildResearchBlock(params: {
+  researchText: string;
+  confidenceLine: string;
+  webFailed: boolean;
+}): string {
+  const { researchText, confidenceLine, webFailed } = params;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const ANTI_INVENTO = `- PROHIBIDO dar cualquier dato concreto que no esté escrito literalmente aquí arriba: nombres de directores o productores, tuits, declaraciones, documentos filtrados, cifras, porcentajes y fechas. Si no está escrito arriba, para ti NO EXISTE y no se menciona. Esto es innegociable, aunque creas recordarlo.
+- Nada de "se rumorea que", "hay una filtración que dice", "el director comentó" si eso no aparece arriba con su fuente.`;
+
+  if (webFailed) {
+    return `\n\nHAS INTENTADO BUSCARLO EN INTERNET AHORA MISMO (hoy es ${today}) Y LA BÚSQUEDA NO HA DEVUELTO NINGUNA FUENTE.
+${researchText ? `\nLo único verificado que tienes es esto:\n\n${researchText}\n` : ""}
+Cómo responder:
+- Empieza diciendo claro que ahora mismo no has podido comprobarlo en fuentes de internet.
+- Si arriba hay ficha de AniList, apóyate SOLO en ella: es un dato fiable.
+${ANTI_INVENTO}
+- Puedes hablar de la serie en general con lo que sepas (de qué va, cuántas temporadas hubo hace tiempo), pero no de noticias, anuncios ni rumores recientes.
+- Corto y claro. Dos o tres frases bastan.`;
+  }
+
   if (!researchText.trim()) return "";
 
-  return `\n\nACABAS DE INVESTIGAR ESTO EN INTERNET AHORA MISMO (hoy es ${new Date()
-    .toISOString()
-    .slice(0, 10)}). Es tu fuente principal para esta respuesta, por encima de lo que creas recordar:
+  return `\n\nACABAS DE INVESTIGAR ESTO EN INTERNET AHORA MISMO (hoy es ${today}). Es tu única fuente para esta respuesta, por encima de lo que creas recordar:
 
 ${researchText}
 
 ${confidenceLine}
 
 Cómo usarlo al responder:
+- PRIMERA FRASE: responde a la pregunta directamente. "Sí", "No", "Todavía no se sabe", "Está confirmado pero sin fecha". Sin rodeos ni preámbulos. Los detalles van después.
 - Di SIEMPRE de forma clara qué está confirmado oficialmente y qué es solo rumor. No los mezcles en la misma frase como si valieran lo mismo.
-- Si está confirmado que sale pero sin fecha, dilo así de claro: confirmado, fecha sin anunciar.
-- Si un rumor es sólido (fuente que suele acertar, varias fuentes coincidiendo), puedes decir que apunta fuerte y por qué — pero sin venderlo como oficial.
+${ANTI_INVENTO}
 - Si la ficha de AniList y la web se contradicen, fíate de AniList para lo que ya está registrado y de la web para anuncios muy recientes, y avisa de la contradicción en una frase.
-- No te inventes ninguna fecha, cifra ni declaración que no esté escrita aquí arriba. Si no aparece, di que no se sabe.
 - Menciona las fuentes por su nombre (Anime News Network, la cuenta oficial, el estudio...) pero NO pegues enlaces: la app ya los enseña debajo de tu mensaje.
 - No describas tu proceso de búsqueda ("he buscado en...", "según mis búsquedas"). Responde directamente, como quien ya lo sabe.
-- Sigue siendo breve y natural. Un párrafo corto o unas pocas líneas, no un informe.`;
+- Frases cortas y en orden. Si algo no se sabe, dilo en una frase y punto: no rellenes con especulación.`;
 }
 
 export function buildSystemPrompt(context: string, researchBlock: string): string {

@@ -36,6 +36,7 @@ interface ResearchResponse {
   sources?: ResearchSource[];
   confidence?: Confidence | null;
   confidenceLine?: string;
+  webFailed?: boolean;
   canonicalTitle?: string | null;
   debug?: string;
 }
@@ -74,10 +75,13 @@ async function runStreamingTurn(opts: {
   apiMessages: { role: "user" | "assistant"; content: string }[];
   contextText: string;
   question: string;
+  previousTopic: string | null;
   onStep: (step: Step) => void;
   onSources: (payload: {
     sources: ResearchSource[];
     confidence: Confidence;
+    webFailed?: boolean;
+    topic?: string | null;
     facts: { title: string; genres: string[]; studios: string[] } | null;
   }) => void;
   onToken: (chunk: string) => void;
@@ -96,6 +100,7 @@ async function runStreamingTurn(opts: {
         messages: opts.apiMessages,
         context: opts.contextText,
         question: opts.question,
+        previousTopic: opts.previousTopic,
       }),
     });
 
@@ -137,6 +142,8 @@ async function runStreamingTurn(opts: {
           const payload = data as unknown as {
             sources: ResearchSource[];
             confidence: Confidence;
+            webFailed?: boolean;
+            topic?: string | null;
             facts: { title: string; genres: string[]; studios: string[] } | null;
           };
           sources = payload.sources ?? [];
@@ -241,8 +248,13 @@ function StepIcon({ status }: { status: Step["status"] }) {
       />
     );
   }
-  if (status === "done") return <span className="ice-text w-2.5 flex-shrink-0 text-[10px] leading-none">✓</span>;
-  if (status === "failed") return <span className="w-2.5 flex-shrink-0 text-[10px] leading-none text-muted">✕</span>;
+  if (status === "done") return <span className="ice-text w-2.5 flex-shrink-0 text-[11px] leading-none">✓</span>;
+  if (status === "failed")
+    return (
+      <span className="w-2.5 flex-shrink-0 text-[11px] leading-none" style={{ color: "#b7965f" }}>
+        ✕
+      </span>
+    );
   return <span className="w-2.5 flex-shrink-0 text-[10px] leading-none text-muted">–</span>;
 }
 
@@ -250,18 +262,36 @@ function StepIcon({ status }: { status: Step["status"] }) {
 function StepsList({ steps }: { steps: Step[] }) {
   if (steps.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-panel-border/70 bg-panel-soft/40 px-2.5 py-2">
+    <div className="panel-elevated flex flex-col gap-1.5 rounded-xl border border-panel-border px-3 py-2.5">
       {steps.map((s) => (
         <motion.div
           key={s.id}
           initial={{ opacity: 0, x: -4 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
-          className={`flex items-center gap-2 text-[11px] ${s.sub ? "pl-4" : ""}`}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className={`flex items-center gap-2 text-[12px] leading-snug ${s.sub ? "pl-4" : ""}`}
         >
           <StepIcon status={s.status} />
-          <span className={s.status === "done" ? "text-muted line-through" : "text-foreground"}>{s.label}</span>
-          {s.detail && <span className="truncate text-[10px] text-muted">· {s.detail}</span>}
+          <span
+            className={
+              s.status === "done"
+                ? "text-foreground line-through decoration-panel-border"
+                : s.status === "failed"
+                  ? "text-foreground"
+                  : "text-foreground"
+            }
+            style={{ opacity: s.status === "done" ? 0.75 : 1 }}
+          >
+            {s.label}
+          </span>
+          {s.detail && (
+            <span
+              className="truncate text-[11px]"
+              style={{ color: s.status === "failed" ? "#b7965f" : "var(--muted)" }}
+            >
+              · {s.detail}
+            </span>
+          )}
         </motion.div>
       ))}
     </div>
@@ -270,7 +300,10 @@ function StepsList({ steps }: { steps: Step[] }) {
 
 /** Versión plegada, para no dejar el historial lleno de pasos ya cumplidos. */
 function StepsSummary({ steps }: { steps: Step[] }) {
-  const [open, setOpen] = useState(false);
+  // Abierto por defecto: los pasos son parte de la respuesta, no un
+  // extra escondido. Antes solo se veían de refilón mientras trabajaba y
+  // desaparecían justo cuando querías leerlos.
+  const [open, setOpen] = useState(true);
   if (steps.length === 0) return null;
 
   return (
@@ -403,6 +436,8 @@ export function AssistantOrb() {
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Última serie investigada, para entender las preguntas encadenadas. */
+  const lastTopicRef = useRef<string | null>(null);
 
   const appendToArchive = (msgs: Message[]) => {
     setArchive((prev) => {
@@ -520,7 +555,8 @@ export function AssistantOrb() {
       // se mandan tal cual, Groq responde 400 "property 'ts' is
       // unsupported" en cuanto hay más de un mensaje en la conversación.
       const apiMessages = nextMessages.map((m) => ({ role: m.role, content: m.content }));
-      const willResearch = shouldResearch(text).needed;
+      const previousTopic = lastTopicRef.current;
+      const willResearch = shouldResearch(text, previousTopic ?? undefined).needed;
       setPhase(willResearch ? "research" : "writing");
 
       const estimatedTokens = 500 + (willResearch ? 1600 : 0) +
@@ -537,6 +573,7 @@ export function AssistantOrb() {
           apiMessages,
           contextText,
           question: text,
+          previousTopic,
           onStep: (step) =>
             setSteps((prev) => {
               const idx = prev.findIndex((s) => s.id === step.id);
@@ -549,6 +586,7 @@ export function AssistantOrb() {
             setLiveSources(payload.sources);
             setLiveConfidence(payload.confidence);
             setPhase("writing");
+            if (payload.topic) lastTopicRef.current = payload.topic;
             if (payload.facts?.title) {
               recordAnimeInterest(
                 payload.facts.title,
@@ -580,7 +618,9 @@ export function AssistantOrb() {
       setSteps([]);
       setStreamText("");
 
-      let research: { dossier: string; factsText: string; confidenceLine: string } | undefined;
+      let research:
+        | { dossier: string; factsText: string; confidenceLine: string; webFailed: boolean }
+        | undefined;
       let researchSources: ResearchSource[] = [];
       let confidence: Confidence | null = null;
 
@@ -592,24 +632,24 @@ export function AssistantOrb() {
             const res = await fetch("/api/assistant/research", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ question: text }),
+              body: JSON.stringify({ question: text, previousTopic }),
             }).then((res) => res.json());
             recordTokenUsage(1600);
             return res;
           }, "high")) as ResearchResponse;
 
-          if (r?.dossier || r?.factsText) {
-            research = {
-              dossier: r.dossier ?? "",
-              factsText: r.factsText ?? "",
-              confidenceLine: r.confidenceLine ?? "",
-            };
-          }
+          research = {
+            dossier: r?.dossier ?? "",
+            factsText: r?.factsText ?? "",
+            confidenceLine: r?.confidenceLine ?? "",
+            webFailed: r?.webFailed === true,
+          };
           researchSources = r?.sources ?? [];
           confidence = r?.confidence ?? null;
           if (confidence) setLiveConfidence(confidence);
           setLiveSources(researchSources);
 
+          if (r?.facts?.title) lastTopicRef.current = r.facts.title;
           if (r?.facts?.title && !boostedTitles.has(r.facts.title.toLowerCase())) {
             recordAnimeInterest(r.facts.title, r.facts.genres ?? [], r.facts.studios ?? []);
             boostedTitles.add(r.facts.title.toLowerCase());

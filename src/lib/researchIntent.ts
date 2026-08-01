@@ -66,7 +66,7 @@ const OPINION =
 
 const YEAR = /\b20\d{2}\b/;
 
-export function shouldResearch(text: string): ResearchIntent {
+export function shouldResearch(text: string, previousTopic?: string): ResearchIntent {
   const clean = text.trim();
 
   if (clean.length < 6) {
@@ -90,6 +90,16 @@ export function shouldResearch(text: string): ResearchIntent {
 
   if (TOPIC.test(clean) && asking && !opinion) {
     return { needed: true, reason: "pregunta sobre el estado de una serie" };
+  }
+
+  // Preguntas de seguimiento: "¿y ha terminado ya?", "tercera ya hay no?".
+  // Sueltas no parecen consultas de actualidad, pero encadenadas a una
+  // investigación anterior lo son — y responderlas de memoria es
+  // justo como se colaban datos inventados.
+  if (previousTopic && clean.length <= 70 && !opinion) {
+    if (asking || TOPIC.test(clean) || /\b(ya|todav[íi]a|entonces|sigue|acab[óo]|termin\w*)\b/i.test(clean)) {
+      return { needed: true, reason: `seguimiento sobre ${previousTopic}` };
+    }
   }
 
   return { needed: false, reason: "charla o consulta de conocimiento general" };

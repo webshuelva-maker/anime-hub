@@ -45,6 +45,14 @@ interface GroqCompoundResponse {
 
 export interface ResearchOutcome {
   ok: boolean;
+  /**
+   * true solo si la búsqueda web devolvió fuentes REALES. Si es false, el
+   * dossier se descarta entero: un texto sin fuentes detrás es el modelo
+   * escribiendo de memoria, y eso es exactamente lo que produjo el fallo
+   * de los "tuits del director" y el "documento filtrado de Studio Bind"
+   * que no existen. Sin fuentes, no hay investigación.
+   */
+  grounded: boolean;
   /** Texto estructurado con OFICIAL / RUMORES / CONTEXTO. */
   dossier: string;
   sources: ResearchSource[];
@@ -107,6 +115,28 @@ function extractQueries(reasoning: string, sources: ResearchSource[]): string[] 
   return queries.slice(0, 4);
 }
 
+/**
+ * Plan B para recuperar las fuentes: cuando el campo estructurado
+ * search_results viene vacío, las URLs siguen apareciendo dentro del
+ * texto del razonamiento (bloques "Title: ... URL: <https://...>").
+ * Rescatarlas de ahí evita quedarnos con cero fuentes y tirar una
+ * investigación que sí se hizo.
+ */
+function extractSourcesFromReasoning(reasoning: string): ResearchSource[] {
+  const found: ResearchSource[] = [];
+  const seen = new Set<string>();
+  const pattern = /(?:Title:\s*(.+?)\s*\n)?\s*URL:\s*<?(https?:\/\/[^\s>)]+)>?/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(reasoning)) !== null) {
+    const url = match[2];
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    found.push(classifySource(url, match[1] ?? ""));
+  }
+  return found;
+}
+
 async function callCompound(
   apiKey: string,
   model: string,
@@ -129,6 +159,10 @@ async function callCompound(
         messages: [{ role: "user", content: buildResearchPrompt(question) }],
         temperature: 0.2, // es una tarea de datos, no de creatividad
         max_tokens: 900,
+        // Se habilitan explícitamente las herramientas: por defecto el
+        // sistema decide si busca o no, y cuando decidía no buscar
+        // devolvía un texto escrito de memoria con pinta de investigado.
+        compound_custom: { tools: { enabled_tools: ["web_search", "visit_website"] } },
         search_settings: {
           exclude_domains: ["pinterest.com", "*.pinterest.com"],
         },
@@ -139,6 +173,7 @@ async function callCompound(
       const errBody = await res.text().catch(() => "");
       return {
         ok: false,
+        grounded: false,
         dossier: "",
         sources: [],
         queries: [],
@@ -150,8 +185,9 @@ async function callCompound(
     const message = data?.choices?.[0]?.message;
     const content = message?.content ?? "";
 
+    const reasoning = message?.reasoning ?? "";
     const seen = new Set<string>();
-    const sources: ResearchSource[] = [];
+    let sources: ResearchSource[] = [];
     for (const tool of message?.executed_tools ?? []) {
       for (const r of tool.search_results?.results ?? []) {
         if (!r.url || seen.has(r.url)) continue;
@@ -159,21 +195,27 @@ async function callCompound(
         sources.push(classifySource(r.url, r.title ?? ""));
       }
     }
+    if (sources.length === 0) sources = extractSourcesFromReasoning(reasoning);
 
     if (!content.trim()) {
-      return { ok: false, dossier: "", sources, queries: [], debug: "respuesta vacía de Groq" };
+      return { ok: false, grounded: false, dossier: "", sources, queries: [], debug: "respuesta vacía de Groq" };
     }
+
+    // Sin ninguna fuente, el dossier NO se devuelve: da igual lo
+    // convincente que suene, no hay nada que lo respalde.
+    const grounded = sources.length > 0;
 
     return {
       ok: true,
-      dossier: content,
+      grounded,
+      dossier: grounded ? content : "",
       sources: sources.slice(0, 8),
-      queries: extractQueries(message?.reasoning ?? "", sources),
-      debug: "ok",
+      queries: extractQueries(reasoning, sources),
+      debug: grounded ? "ok" : "el buscador no devolvió ninguna fuente: dossier descartado",
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, dossier: "", sources: [], queries: [], debug: `excepción: ${msg}` };
+    return { ok: false, grounded: false, dossier: "", sources: [], queries: [], debug: `excepción: ${msg}` };
   } finally {
     clearTimeout(timeout);
   }
@@ -186,8 +228,19 @@ export async function runResearch(
   timeoutMs = 22000
 ): Promise<ResearchOutcome> {
   const first = await callCompound(apiKey, RESEARCH_MODEL, question, timeoutMs);
-  if (first.ok) return first;
-  return callCompound(apiKey, RESEARCH_FALLBACK_MODEL, question, Math.min(timeoutMs, 15000));
+  // Se reintenta no solo cuando falla, sino también cuando "funciona"
+  // pero sin una sola fuente: eso significa que no llegó a buscar, y una
+  // segunda pasada con el sistema rápido suele sí hacerlo.
+  if (first.ok && first.grounded) return first;
+
+  const second = await callCompound(
+    apiKey,
+    RESEARCH_FALLBACK_MODEL,
+    question,
+    Math.min(timeoutMs, 15000)
+  );
+  if (second.ok && second.grounded) return second;
+  return first.ok ? first : second;
 }
 
 export function extractCanonicalTitle(dossier: string): string | null {

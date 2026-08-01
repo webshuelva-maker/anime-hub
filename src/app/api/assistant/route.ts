@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     messages?: ChatMessage[];
     context?: string;
     preferFallback?: boolean;
-    research?: { dossier?: string; factsText?: string; confidenceLine?: string };
+    research?: { dossier?: string; factsText?: string; confidenceLine?: string; webFailed?: boolean };
   };
   try {
     body = await req.json();
@@ -94,7 +94,11 @@ export async function POST(req: NextRequest) {
     .filter((t) => t && t.trim().length > 0)
     .join("\n\n");
 
-  const researchBlock = buildResearchBlock(researchText, body.research?.confidenceLine ?? "");
+  const researchBlock = buildResearchBlock({
+    researchText,
+    confidenceLine: body.research?.confidenceLine ?? "",
+    webFailed: body.research?.webFailed === true,
+  });
   const systemPrompt = buildSystemPrompt(context, researchBlock);
 
   const model = body.preferFallback === true ? FALLBACK_MODEL : PRIMARY_MODEL;

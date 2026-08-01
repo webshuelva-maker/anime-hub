@@ -40,6 +40,9 @@ interface StreamBody {
   messages?: ChatMessage[];
   context?: string;
   question?: string;
+  /** Serie de la que iba la última investigación, para entender preguntas
+   *  de seguimiento tipo "¿y ha terminado ya?" sin repetir el título. */
+  previousTopic?: string;
 }
 
 function sse(event: string, data: unknown): string {
@@ -102,6 +105,7 @@ export async function POST(req: NextRequest) {
   const messages = (body.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
   const context = body.context ?? "";
   const question = (body.question ?? "").trim();
+  const previousTopic = (body.previousTopic ?? "").trim();
 
   if (!apiKey) {
     return new Response("Falta GROQ_API_KEY.", { status: 503 });
@@ -120,15 +124,26 @@ export async function POST(req: NextRequest) {
       let confidenceLine = "";
 
       try {
-        const needsResearch = question.length > 0 && shouldResearch(question).needed;
+        const needsResearch =
+          question.length > 0 && shouldResearch(question, previousTopic).needed;
+        let webFailed = false;
 
         if (needsResearch) {
+          // Una pregunta de seguimiento ("¿y ha terminado ya?") no dice
+          // de qué serie habla: se le añade el tema anterior para que la
+          // búsqueda no salga a ciegas.
+          const effectiveQuestion =
+            previousTopic && question.length < 70
+              ? `${question} (se refiere a: ${previousTopic})`
+              : question;
+
           // --- Paso 1: búsqueda web real -----------------------------
           send("step", { id: "search", label: "Buscando en internet", status: "running" });
 
-          const outcome = await runResearch(apiKey, question, 22000);
+          const outcome = await runResearch(apiKey, effectiveQuestion, 22000);
+          webFailed = !outcome.grounded;
 
-          if (outcome.ok) {
+          if (outcome.grounded) {
             send("step", {
               id: "search",
               label: "Buscando en internet",
@@ -139,14 +154,16 @@ export async function POST(req: NextRequest) {
             // Las consultas reales que ejecutó, una a una.
             for (const q of outcome.queries) {
               send("step", { id: `q:${q}`, label: `«${q}»`, status: "done", sub: true });
-              await pause(220);
+              await pause(500);
             }
           } else {
+            // Sin fuentes no hay investigación: se dice tal cual, en vez
+            // de dejar que parezca que sí encontró algo.
             send("step", {
               id: "search",
               label: "Buscando en internet",
               status: "failed",
-              detail: "sin resultados",
+              detail: "sin fuentes utilizables",
             });
           }
 
@@ -177,11 +194,15 @@ export async function POST(req: NextRequest) {
           send("sources", {
             sources: outcome.sources,
             confidence,
+            webFailed,
+            topic: facts?.title ?? canonicalTitle ?? null,
             facts: facts
               ? { title: facts.title, genres: facts.genres, studios: facts.studios }
               : null,
           });
 
+          // El dossier ya viene vacío si no hubo fuentes (ver lib/research.ts),
+          // así que aquí solo puede quedar la ficha de AniList, que sí es fiable.
           researchText = [facts ? factsToPromptText(facts) : "", outcome.dossier]
             .filter((t) => t.trim().length > 0)
             .join("\n\n");
@@ -194,7 +215,7 @@ export async function POST(req: NextRequest) {
 
         const systemPrompt = buildSystemPrompt(
           context,
-          buildResearchBlock(researchText, confidenceLine)
+          buildResearchBlock({ researchText, confidenceLine, webFailed })
         );
 
         const groqRes = await fetch(GROQ_URL, {
