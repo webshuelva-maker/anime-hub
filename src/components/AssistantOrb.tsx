@@ -592,8 +592,15 @@ export function AssistantOrb() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 6 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            style={{ transformOrigin: "bottom right" }}
-            className="fixed bottom-24 right-5 z-40 h-[29rem] w-[23rem] max-w-[calc(100vw-2.5rem)] rounded-[1.75rem] p-[1px] shadow-2xl shadow-black/60 sm:right-6"
+            // En el móvil, 29rem fijos + el hueco de abajo se salían de la
+            // pantalla visible (la barra del navegador se come parte de
+            // 100vh). Con dvh y un máximo calculado, el panel siempre cabe.
+            style={{
+              transformOrigin: "bottom right",
+              bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
+              height: "min(29rem, calc(100dvh - 9rem))",
+            }}
+            className="fixed right-4 z-40 w-[23rem] max-w-[calc(100vw-2rem)] rounded-[1.75rem] p-[1px] shadow-2xl shadow-black/60 sm:right-6"
           >
             {/* Borde sutil con degradado — separado del contenido para un acabado más cuidado */}
             <div
@@ -658,7 +665,7 @@ export function AssistantOrb() {
                       {m.role === "assistant" && <Sparkle active={false} size={16} />}
                       <div className="flex max-w-[78%] flex-col gap-1.5">
                         <div
-                          className={`rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
+                          className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
                             m.role === "user"
                               ? "accent-gradient text-white"
                               : "panel-elevated border border-panel-border/70 text-foreground"
@@ -685,7 +692,7 @@ export function AssistantOrb() {
                       {streamText ? (
                         <div className="flex items-end gap-2">
                           <Sparkle active={false} size={16} />
-                          <div className="panel-elevated max-w-[78%] rounded-2xl border border-panel-border/70 px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
+                          <div className="panel-elevated max-w-[78%] whitespace-pre-wrap rounded-2xl border border-panel-border/70 px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
                             {streamText}
                             {/* Cursor de escritura: se ve que está redactando en vivo. */}
                             <motion.span
@@ -742,7 +749,10 @@ export function AssistantOrb() {
         )}
       </AnimatePresence>
 
-      <div className="fixed bottom-5 right-5 z-40 sm:right-6">
+      <div
+        style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+        className="fixed right-4 z-40 sm:right-6"
+      >
         <motion.div
           className="pointer-events-none absolute inset-0 rounded-full"
           style={{ background: "radial-gradient(circle, var(--ice), transparent 70%)" }}
@@ -759,7 +769,7 @@ export function AssistantOrb() {
           whileHover={{ scale: 1.06 }}
           whileTap={{ scale: 0.92 }}
           aria-label={`Abrir a ${siteConfig.assistantName}`}
-          className="panel relative flex h-16 w-16 items-center justify-center rounded-full border border-ice/25 shadow-xl shadow-black/50"
+          className="panel relative flex h-14 w-14 items-center justify-center rounded-full border border-ice/25 shadow-xl shadow-black/50 sm:h-16 sm:w-16"
         >
           <Sparkle active={false} size={34} />
         </motion.button>

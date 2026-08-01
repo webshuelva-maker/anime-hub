@@ -217,8 +217,11 @@ export function FirstLoadOverlay({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6 text-center"
-      style={{ background: "var(--background)" }}
+      // 100dvh (no 100vh) y respeto del área segura: en el móvil la barra
+      // del navegador se come la parte de abajo de 100vh, y por eso el
+      // botón de omitir quedaba fuera de la pantalla.
+      style={{ height: "100dvh", background: "var(--background)" }}
+      className="fixed inset-x-0 top-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6 text-center"
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
@@ -309,7 +312,8 @@ export function FirstLoadOverlay({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="absolute bottom-6 right-6 flex flex-col items-end gap-2"
+            style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+            className="absolute right-5 flex flex-col items-end gap-2 sm:right-6"
             onMouseEnter={() => setSkipHovered(true)}
             onMouseLeave={() => setSkipHovered(false)}
           >

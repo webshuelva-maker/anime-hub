@@ -152,7 +152,7 @@ export async function searchWeb(
     .filter((q) => q.trim())
     .map((q) => ({ label: "bing-web", url: bingWebUrl(q) }));
 
-  const batches = await Promise.all(jobs.map((j) => fetchRss(j.url, 6000)));
+  const batches = await Promise.all(jobs.map((j) => fetchRss(j.url, 4500)));
   const debug = jobs.map((j, i) => `${j.label}:${batches[i].length}`).join(" ");
 
   const seen = new Set<string>();
@@ -188,7 +188,7 @@ export async function searchNews(
     jobs.push({ label: "bing", url: bingNewsUrl(q) });
   }
 
-  const batches = await Promise.all(jobs.map((j) => fetchRss(j.url, 6000)));
+  const batches = await Promise.all(jobs.map((j) => fetchRss(j.url, 4500)));
 
   // Diagnóstico por buscador: si algún día vuelve a salir "0 fuentes",
   // esto dice cuál falló en vez de dejarlo a la adivinación.

@@ -30,7 +30,15 @@ function isEnabled(): boolean {
   }
 }
 
-function tone(freq: number, duration: number, volume: number, type: OscillatorType = "sine", delay = 0) {
+function tone(
+  freq: number,
+  duration: number,
+  volume: number,
+  type: OscillatorType = "sine",
+  delay = 0,
+  /** Corta los agudos: es lo que separa un "bip" de una nota suave. */
+  lowpass?: number
+) {
   const audioCtx = getContext();
   if (!audioCtx || !isEnabled()) return;
 
@@ -40,14 +48,27 @@ function tone(freq: number, duration: number, volume: number, type: OscillatorTy
   osc.frequency.value = freq;
 
   const start = audioCtx.currentTime + delay;
+  // Ataque más lento (30ms en vez de 8ms): un sonido que "entra" en vez
+  // de golpear. Es la diferencia entre una campanita cara y un pitido de
+  // microondas, y era la queja con los sonidos de Ren.
   gain.gain.setValueAtTime(0, start);
-  gain.gain.linearRampToValueAtTime(volume, start + 0.008);
+  gain.gain.linearRampToValueAtTime(volume, start + 0.03);
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
 
   osc.connect(gain);
-  gain.connect(audioCtx.destination);
+
+  if (lowpass) {
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = lowpass;
+    gain.connect(filter);
+    filter.connect(audioCtx.destination);
+  } else {
+    gain.connect(audioCtx.destination);
+  }
+
   osc.start(start);
-  osc.stop(start + duration + 0.02);
+  osc.stop(start + duration + 0.05);
 }
 
 /** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
@@ -76,15 +97,22 @@ export function playHover() {
   tone(1100, 0.035, 0.035);
 }
 
-/** Al mandarle un mensaje a Ren — dos notas ascendentes, sensación de "se va". */
+/**
+ * Al mandarle un mensaje a Ren. Una sola nota grave, muy floja, filtrada
+ * y con caída larga: se percibe como un "toc" de aire más que como un
+ * aviso. Antes eran dos notas ascendentes bastante marcadas, que era
+ * justo lo que sonaba a app gratuita.
+ */
 export function playSend() {
-  tone(440, 0.08, 0.17);
-  tone(660, 0.12, 0.15, "sine", 0.06);
+  tone(392, 0.32, 0.055, "sine", 0, 1400);
 }
 
-/** Cuando Ren responde — tres notas descendentes que se asientan, como una campanita. */
+/**
+ * Cuando Ren responde. Dos notas a distancia de quinta, la segunda casi
+ * inaudible, con filtro y caída larga — más cerca de una nota de arpa
+ * que de una notificación.
+ */
 export function playReceive() {
-  tone(880, 0.08, 0.17);
-  tone(660, 0.09, 0.15, "sine", 0.06);
-  tone(550, 0.16, 0.13, "sine", 0.12);
+  tone(523.25, 0.4, 0.05, "sine", 0, 1600);
+  tone(784, 0.5, 0.03, "sine", 0.09, 1600);
 }

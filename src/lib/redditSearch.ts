@@ -105,7 +105,7 @@ export async function searchReddit(
     });
   }
 
-  const batches = await Promise.all(urls.map((u) => fetchReddit(u.url, 6000)));
+  const batches = await Promise.all(urls.map((u) => fetchReddit(u.url, 4500)));
   const debug = urls.map((u, i) => `${u.label}:${batches[i].length}`).join(" ");
 
   const seen = new Set<string>();
