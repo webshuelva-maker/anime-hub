@@ -48,3 +48,27 @@ export function runExclusive<T>(fn: () => Promise<T>, priority: Priority = "norm
     runNext();
   });
 }
+
+// Ren tiene prioridad en la cola, pero eso no evita que el presupuesto
+// de tokens/minuto de Groq ya esté agotado por la traducción de fondo
+// justo cuando el usuario le habla (la cola solo decide el ORDEN, no
+// libera cupo ya gastado). Mientras Ren está esperando respuesta, la
+// traducción de fondo de la lista se pausa del todo — unos segundos
+// de retraso en traducir tarjetas es mucho menos grave que Ren fallando
+// en mitad de una conversación activa.
+let backgroundPaused = false;
+
+export function setBackgroundPaused(paused: boolean) {
+  backgroundPaused = paused;
+}
+
+export function waitWhileBackgroundPaused(): Promise<void> {
+  if (!backgroundPaused) return Promise.resolve();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!backgroundPaused) resolve();
+      else setTimeout(check, 300);
+    };
+    check();
+  });
+}

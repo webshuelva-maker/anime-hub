@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { NewsCard } from "./NewsCard";
 import { NewsThumb } from "./NewsThumb";
 import { NewsDetail } from "./NewsDetail";
+import { FirstLoadOverlay } from "./FirstLoadOverlay";
 import { ReliabilityBadge } from "./ReliabilityBadge";
 import { getPreferences, DEFAULT_PREFERENCES } from "@/lib/storage";
 import { NewsItem, UserPreferences } from "@/types/news";
@@ -15,7 +16,7 @@ import { getNewsItems, setNewsItems } from "@/lib/newsStore";
 import { SearchBar } from "./SearchBar";
 import { AnimeSearchResult } from "@/lib/anilist";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
-import { runExclusive } from "@/lib/apiQueue";
+import { runExclusive, waitWhileBackgroundPaused } from "@/lib/apiQueue";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -43,6 +44,21 @@ export function NewsFeed() {
   // las que peor iban. Este set evita que una noticia ya en traducción
   // se vuelva a encolar hasta que termine.
   const translatingLockRef = useRef<Set<string>>(new Set());
+
+  // Pantalla de carga a pantalla completa: SOLO si de verdad no había
+  // nada en caché al entrar (primera visita real, o caché borrada). En
+  // cualquier otro caso (visita normal, refresco silencioso cada 15 min)
+  // no se muestra — eso ya lo cubre el aviso pequeño "Actualizando…".
+  const [showInitialLoader, setShowInitialLoader] = useState(() => getNewsItems().length === 0);
+
+  useEffect(() => {
+    if (!showInitialLoader) return;
+    // Red de seguridad: si Groq está teniendo un mal día y la traducción
+    // no termina nunca, no se puede dejar al usuario atrapado en la
+    // pantalla de carga para siempre.
+    const safety = setTimeout(() => setShowInitialLoader(false), 18000);
+    return () => clearTimeout(safety);
+  }, [showInitialLoader]);
 
   const loadNews = (silent = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -82,13 +98,27 @@ export function NewsFeed() {
    * así una traducción lenta nunca retiene una imagen que ya está lista.
    */
   const enrichItems = (loadedItems: NewsItem[]) => {
+    // BUG encontrado: esto tomaba los primeros 9 en el orden en que
+    // llegan del feed (RSS combinado), que NO es el mismo orden en que
+    // se muestran en pantalla — "ranked" reordena por afinidad/fecha más
+    // abajo. Por eso lo primero en traducirse a veces no coincidía con
+    // "Portada" ni "Historias principales", que podían tocarles lotes
+    // posteriores (más lentos o sujetos al límite de Groq). Se ordena
+    // aquí con el MISMO criterio que "ranked" antes de recortar, para
+    // que lo que se traduce primero sea justo lo que se ve primero.
+    const sorted = [...loadedItems].sort((a, b) => {
+      const scoreDiff = scoreNewsItem(b, prefs) - scoreNewsItem(a, prefs);
+      if (scoreDiff !== 0) return scoreDiff;
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    });
+
     // Antes eran 16 de golpe — con el límite de tokens/minuto del plan
     // gratuito de Groq, traducir tantas de una sentada agotaba el
     // presupuesto antes de terminar. 9 cubre justo lo que se ve sin
     // desplegar "Ver más" (portada + 2 historias + 6 de la cola); el
     // resto se traduce solo si el usuario despliega más o abre el
     // detalle de una noticia en concreto.
-    const targets = loadedItems.slice(0, 9);
+    const targets = sorted.slice(0, 9);
     pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
 
@@ -209,6 +239,7 @@ export function NewsFeed() {
     (async () => {
       for (let i = 0; i < needTranslation.length; i += CHUNK_SIZE) {
         const chunk = needTranslation.slice(i, i + CHUNK_SIZE);
+        await waitWhileBackgroundPaused();
         // Se espera a que termine cada lote (incluido su reintento) antes
         // de pasar al siguiente — así solo hay una petición a Groq en
         // vuelo a la vez desde toda la app (esto también sirve de cola
@@ -224,6 +255,10 @@ export function NewsFeed() {
           await new Promise((r) => setTimeout(r, 2500));
         }
       }
+      // La pantalla de carga inicial (si estaba activa) ya puede cerrarse
+      // — no hace falta esperar a nada más, esto siempre es un no-op
+      // inofensivo si ya estaba cerrada.
+      setShowInitialLoader(false);
     })();
   };
 
@@ -301,6 +336,8 @@ export function NewsFeed() {
 
   return (
     <div>
+      <AnimatePresence>{showInitialLoader && <FirstLoadOverlay key="first-load" />}</AnimatePresence>
+
       <div className="border-b border-panel-border/70">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <div className="flex items-center gap-3">

@@ -49,16 +49,7 @@ export function NewsCover({
       style={{ background: "var(--panel)" }}
     >
       {showSkeleton && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: "var(--panel-soft)" }}>
-          <div
-            className="h-7 w-7 rounded-full"
-            style={{
-              border: "2.5px solid rgba(255,255,255,0.15)",
-              borderTopColor: "rgba(255,255,255,0.75)",
-              animation: "spin 3.5s linear infinite",
-            }}
-          />
-        </div>
+        <div className="absolute inset-0" style={{ background: "var(--panel-soft)" }} />
       )}
 
       {showFallbackPhoto && (

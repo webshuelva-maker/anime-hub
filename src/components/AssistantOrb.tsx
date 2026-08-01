@@ -8,7 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { runExclusive } from "@/lib/apiQueue";
+import { runExclusive, setBackgroundPaused } from "@/lib/apiQueue";
 
 interface Message {
   role: "user" | "assistant";
@@ -153,6 +153,13 @@ export function AssistantOrb() {
     const slowTimer = setTimeout(() => setSlowResponse(true), 4000);
 
     try {
+      // Se pausa la traducción de fondo de la lista mientras Ren espera
+      // respuesta — la cola con prioridad decide el ORDEN, pero no
+      // libera cupo de tokens/minuto ya gastado por Groq; sin esto, si
+      // la lista estaba traduciendo justo cuando se le habla a Ren, se
+      // quedaba sin presupuesto y Ren fallaba con "servidores llenos".
+      setBackgroundPaused(true);
+
       const currentPrefs = getPreferences();
       const priorTopics = buildPriorTopicsSummary(archive);
       const contextText = buildAssistantContext(currentPrefs) + (priorTopics ? `\n\n${priorTopics}` : "");
@@ -196,6 +203,7 @@ export function AssistantOrb() {
       clearTimeout(slowTimer);
       setSlowResponse(false);
       setLoading(false);
+      setBackgroundPaused(false);
     }
   };
 
