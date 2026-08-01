@@ -82,7 +82,13 @@ export function NewsFeed() {
    * así una traducción lenta nunca retiene una imagen que ya está lista.
    */
   const enrichItems = (loadedItems: NewsItem[]) => {
-    const targets = loadedItems.slice(0, 16);
+    // Antes eran 16 de golpe — con el límite de tokens/minuto del plan
+    // gratuito de Groq, traducir tantas de una sentada agotaba el
+    // presupuesto antes de terminar. 9 cubre justo lo que se ve sin
+    // desplegar "Ver más" (portada + 2 historias + 6 de la cola); el
+    // resto se traduce solo si el usuario despliega más o abre el
+    // detalle de una noticia en concreto.
+    const targets = loadedItems.slice(0, 9);
     pendingItemsRef.current = targets;
     setEnrichingIds(new Set(targets.map((i) => i.id)));
 
@@ -208,6 +214,15 @@ export function NewsFeed() {
         // vuelo a la vez desde toda la app (esto también sirve de cola
         // compartida con la traducción del detalle, ver NewsDetail.tsx).
         await translateChunk(chunk);
+        // Además, una pausa fija entre lotes: Groq responde tan rápido
+        // (menos de 1s) que sin esto se podían encadenar 5-6 peticiones
+        // en el mismo minuto y agotar su límite de tokens/minuto del
+        // plan gratuito — eso hacía que solo el primer lote (y a veces
+        // Ren, si tenía la mala suerte de pedir justo entonces) fueran
+        // los únicos que cabían antes de que el límite se llenara.
+        if (i + CHUNK_SIZE < needTranslation.length) {
+          await new Promise((r) => setTimeout(r, 2500));
+        }
       }
     })();
   };
@@ -549,7 +564,11 @@ export function NewsFeed() {
               <div className="mt-6 flex justify-center">
                 <button
                   type="button"
-                  onClick={() => setVisibleTail((n) => n + 8)}
+                  onClick={() => {
+                    const newlyVisible = tail.slice(visibleTail, visibleTail + 8).map(({ item }) => item);
+                    setVisibleTail((n) => n + 8);
+                    enrichItems(newlyVisible);
+                  }}
                   className="rounded-full border border-panel-border px-5 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
                 >
                   Ver {Math.min(8, tail.length - visibleTail)} más

@@ -24,7 +24,7 @@ export function NewsThumb({
             style={{
               border: "2px solid rgba(255,255,255,0.15)",
               borderTopColor: "rgba(255,255,255,0.75)",
-              animation: "spin 1.6s linear infinite",
+              animation: "spin 3.5s linear infinite",
             }}
           />
         </div>

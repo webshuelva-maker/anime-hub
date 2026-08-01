@@ -79,6 +79,8 @@ export function NewsDetail({
         let translated = await callTranslateDetail(data.articleText, false);
         if (cancelled) return;
         if (!translated.body) {
+          await new Promise((r) => setTimeout(r, 1500));
+          if (cancelled) return;
           translated = await callTranslateDetail(data.articleText, true);
           if (cancelled) return;
         }

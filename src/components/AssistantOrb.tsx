@@ -178,6 +178,7 @@ export function AssistantOrb() {
       // Groq), un segundo intento con el modelo de respaldo antes de
       // rendirse — antes un solo fallo ya mostraba "se ha cortado".
       if (!data.reply) {
+        await new Promise((r) => setTimeout(r, 1500));
         data = await callAssistant(true);
       }
 
