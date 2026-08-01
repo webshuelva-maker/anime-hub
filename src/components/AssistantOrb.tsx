@@ -169,6 +169,15 @@ export function AssistantOrb() {
       // de cualquier traducción de fondo que aún no
       // haya empezado — el usuario está esperando la respuesta ahora
       // mismo, no es una tarea de fondo.
+      // Groq valida el formato de los mensajes de forma estricta: SOLO
+      // acepta "role" y "content", nada más. Los mensajes de la interfaz
+      // llevan además "ts" (y a veces "actions") para uso interno — si
+      // se mandan tal cual, Groq responde 400 "property 'ts' is
+      // unsupported" en cuanto hay más de un mensaje en la conversación.
+      // Esto es lo que llevaba rompiendo a Ren desde el principio, no el
+      // presupuesto de tokens.
+      const apiMessages = nextMessages.map((m) => ({ role: m.role, content: m.content }));
+
       const callAssistant = (preferFallback: boolean) =>
         runExclusive(async () => {
           const estimatedTokens = 500 + nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
@@ -176,7 +185,7 @@ export function AssistantOrb() {
           const result = await fetch("/api/assistant", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: nextMessages, context: contextText, preferFallback }),
+            body: JSON.stringify({ messages: apiMessages, context: contextText, preferFallback }),
           }).then((r) => r.json());
           recordTokenUsage(estimatedTokens);
           return result;

@@ -232,16 +232,41 @@ export function FirstLoadOverlay({
         <AnimatePresence mode="wait">
           <motion.p
             key={index}
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.02 }}
-            transition={{ duration: 0.6, ease: "easeInOut" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.7, ease: "easeInOut" }}
             className="text-[15px] leading-relaxed text-foreground/85"
           >
             {facts[index] ?? ""}
           </motion.p>
         </AnimatePresence>
       </div>
+
+      {/* Botón de omitir: aparece una vez hay avance real de sobra (35%)
+          — para entonces lo esencial ya suele estar listo. Deja entrar
+          ya, con lo que haya; seguir esperando trae más noticias
+          traducidas y personalizadas de una sentada. */}
+      <AnimatePresence>
+        {pct >= 35 && (
+          <motion.button
+            type="button"
+            onClick={onComplete}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="absolute bottom-6 right-6 flex flex-col items-end gap-1"
+          >
+            <span className="rounded-full border border-panel-border bg-panel px-4 py-2 text-xs font-medium text-foreground/90 transition-colors hover:border-ice/40 hover:text-foreground">
+              Omitir →
+            </span>
+            <span className="max-w-[180px] text-right text-[10px] leading-tight text-muted">
+              Esperar un poco más trae más noticias ya traducidas
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

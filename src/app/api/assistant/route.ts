@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Petición inválida." }, { status: 400 });
   }
 
-  const messages = body.messages ?? [];
+  const messages = (body.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
   const context = body.context ?? "";
 
   const systemPrompt = `Eres ${siteConfig.assistantName}, el asistente personal dentro de la app "${siteConfig.name}", una app de noticias y seguimiento de anime.
