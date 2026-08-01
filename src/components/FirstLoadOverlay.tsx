@@ -38,15 +38,16 @@ const FALLBACK_FACTS = [
 
 /**
  * Pantalla de carga a pantalla completa — SOLO en la primera visita real
- * (sin nada en caché todavía). Iteración 3: la barra ya NO depende solo
- * de datos reales a saltos (33%→67%) ni de una espera fija — calcula un
- * tiempo estimado según cuánto trabajo hay (estimatedDurationMs, lo pasa
- * NewsFeed) y avanza de forma continua y asintótica hacia el 99% durante
- * ese tiempo; si la traducción real termina antes, salta a 100 y se
- * cierra; si tarda más de lo estimado, sigue acercándose al 99% sin
- * quedarse nunca clavada. El cierre (onComplete) lo decide ESTE
- * componente, cuando su propio contador llega de verdad a 100 — así
- * nunca desaparece la pantalla a mitad de cuenta.
+ * (sin nada en caché todavía). Iteración 4: la barra respeta SIEMPRE el
+ * tiempo mínimo calculado (estimatedDurationMs, lo pasa NewsFeed según
+ * cuánto hay que traducir) para ir de 0 a 100 — si el trabajo real
+ * termina antes, la barra NO se acelera ni salta, sigue su ritmo normal
+ * (antes hacía eso, y si la traducción iba rápida la pantalla
+ * desaparecía casi al instante, sin dar tiempo ni a ver el botón de
+ * omitir). Si el trabajo real tarda más de lo estimado, sigue
+ * acercándose al 99% sin quedarse nunca clavada. Solo llega a 100 (y
+ * cierra, vía onComplete) cuando se cumplen LAS DOS cosas: ya pasó el
+ * tiempo mínimo Y el trabajo real terminó de verdad.
  */
 export function FirstLoadOverlay({
   progress,
@@ -148,9 +149,30 @@ export function FirstLoadOverlay({
     const tick = (now: number) => {
       if (finished) return;
       const elapsed = now - startTime;
-      const asymptotic = 99 * (1 - Math.exp(-elapsed / estimatedDurationMs));
+      const t = elapsed / estimatedDurationMs;
       const done = progressRef.current >= 1;
-      const value = done ? 100 : Math.min(99, asymptotic);
+      const minTimeElapsed = t >= 1;
+
+      let value: number;
+      if (done && minTimeElapsed) {
+        // Las dos condiciones cumplidas: trabajo real terminado Y ya ha
+        // pasado el tiempo mínimo calculado — ahora sí, a 100 y se cierra.
+        value = 100;
+      } else if (t <= 1) {
+        // Fase normal: curva de frenado suave hacia 99%, ritmo fijado
+        // por el tiempo estimado — NUNCA se acelera solo porque el
+        // trabajo real ya haya terminado (eso es justo lo que hacía que
+        // la pantalla desapareciera de golpe sin llegar a enseñar nada,
+        // ni el botón de omitir, si la traducción iba rápida).
+        value = 99 * (1 - Math.pow(1 - t, 2));
+      } else {
+        // Se pasó del tiempo estimado y el trabajo real AÚN no ha
+        // terminado — sigue acercándose muy despacio a ~99.7% en vez de
+        // quedarse clavada esperando.
+        const overtime = elapsed - estimatedDurationMs;
+        value = 99 + 0.7 * (1 - Math.exp(-overtime / 4000));
+      }
+
       setDisplayPct((prev) => (value > prev ? value : prev));
       if (value >= 100) {
         finished = true;
