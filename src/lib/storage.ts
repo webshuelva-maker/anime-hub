@@ -19,6 +19,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   studioInteractionCounts: {},
   likedNewsIds: [],
   searchHistory: [],
+  soundEnabled: true,
 };
 
 export function getPreferences(): UserPreferences {

@@ -12,6 +12,8 @@ import { TagInput } from "./TagInput";
 import { TimePicker } from "./TimePicker";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { playToggle, playError } from "@/lib/sound";
 
 function AffinityBar({ name, count, max }: { name: string; count: number; max: number }) {
   const pct = Math.max(8, Math.round((count / max) * 100));
@@ -63,8 +65,11 @@ export function PreferencesEditor() {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const [confirmingReset, setConfirmingReset] = useState(false);
+
   const handleReset = () => {
     clearPreferences();
+    playError();
     router.push("/onboarding");
   };
 
@@ -217,13 +222,37 @@ export function PreferencesEditor() {
             />
           </button>
         </div>
+
+        <div className="mt-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Sonidos de interfaz</p>
+            <p className="text-xs text-muted">Clics suaves al pulsar botones, dar &quot;me gusta&quot;, etc.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !prefs.soundEnabled;
+              setPrefs((p) => ({ ...p, soundEnabled: next }));
+              if (next) playToggle();
+            }}
+            className={`h-6 w-11 rounded-full transition-colors ${
+              prefs.soundEnabled ? "accent-gradient" : "bg-panel-border"
+            }`}
+          >
+            <motion.span
+              className="block h-5 w-5 rounded-full bg-white"
+              animate={{ x: prefs.soundEnabled ? 22 : 2 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
-          onClick={handleReset}
-          className="text-sm font-medium text-muted transition-colors hover:text-accent"
+          onClick={() => setConfirmingReset(true)}
+          className="rounded-full border border-rumor/40 px-4 py-2 text-sm font-medium text-rumor transition-colors hover:bg-rumor/10"
         >
           Borrar todo y empezar de cero
         </button>
@@ -250,6 +279,15 @@ export function PreferencesEditor() {
           {saved ? "Guardado" : isDirty ? "Guardar cambios" : "Sin cambios"}
         </motion.button>
       </div>
+
+      <ConfirmDialog
+        open={confirmingReset}
+        title="Borrar todo y empezar de cero"
+        message="Esto borra tu nombre, avatar, géneros y estudios favoritos, animes favoritos, plataformas, la hora del resumen diario, y todo lo que la app ha aprendido de ti (afinidad, me gusta, historial de búsqueda) — y te lleva de vuelta al onboarding inicial, como si acabaras de entrar por primera vez. No se puede deshacer."
+        confirmLabel="Sí, borrar todo"
+        onConfirm={handleReset}
+        onCancel={() => setConfirmingReset(false)}
+      />
     </div>
   );
 }

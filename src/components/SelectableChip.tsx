@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { playClick } from "@/lib/sound";
 
 export function SelectableChip({
   label,
@@ -14,7 +15,10 @@ export function SelectableChip({
   return (
     <motion.button
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        onClick();
+        playClick();
+      }}
       whileHover={{ scale: 1.04 }}
       whileTap={{ scale: 0.94 }}
       transition={{ type: "spring", stiffness: 400, damping: 22 }}

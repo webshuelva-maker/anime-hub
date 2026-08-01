@@ -10,6 +10,7 @@ import { Toast } from "./Toast";
 import { clearRenMemory } from "@/lib/renMemory";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { playSuccess } from "@/lib/sound";
 
 interface AccountProfile {
   email: string | null;
@@ -90,6 +91,7 @@ export function ProfileEditor() {
     savePreferences(prefs);
     setSavedSnapshot(JSON.stringify(prefs));
     setSaved(true);
+    playSuccess();
     setTimeout(() => setSaved(false), 2000);
 
     // Si hay sesión, el nombre también se guarda en el perfil de la
@@ -148,15 +150,22 @@ export function ProfileEditor() {
           </div>
         </div>
 
-        <div className="px-6 pb-8 pt-4">
-          <input
-            type="text"
-            value={prefs.displayName}
-            maxLength={24}
-            onChange={(e) => setPrefs((p) => ({ ...p, displayName: e.target.value }))}
-            placeholder="Tu nombre"
-            className="font-heading w-full bg-transparent text-center text-2xl font-semibold text-foreground outline-none placeholder:text-muted"
-          />
+        <div className="px-6 pb-8 pt-4 text-center">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted">Tu nombre (editable)</p>
+          <div className="mt-1 inline-flex items-center gap-1.5 border-b border-dashed border-panel-border pb-1 transition-colors focus-within:border-ice/50">
+            <input
+              type="text"
+              value={prefs.displayName}
+              maxLength={24}
+              onChange={(e) => setPrefs((p) => ({ ...p, displayName: e.target.value }))}
+              placeholder="Tu nombre"
+              className="font-heading bg-transparent text-center text-2xl font-semibold text-foreground outline-none placeholder:text-muted"
+              style={{ width: `${Math.max(4, (prefs.displayName || "Tu nombre").length)}ch` }}
+            />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted">
+              <path d="m18 2 4 4-12 12H6v-4L18 2Z" />
+            </svg>
+          </div>
           {!prefs.avatarPhotoDataUrl && currentMeaning && (
             <p className="mt-1 text-sm text-muted">emblema · {currentMeaning}</p>
           )}

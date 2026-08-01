@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
+import { playToggle } from "@/lib/sound";
 
 type Mode = "login" | "signup";
 
@@ -186,6 +187,7 @@ export function LoginForm() {
               setMode("login");
               setError(null);
               setSuggestSignup(false);
+              playToggle();
             }}
             className={`relative z-10 flex-1 rounded-full py-2 font-medium transition-colors ${
               mode === "login" ? "text-white" : "text-muted"
@@ -199,6 +201,7 @@ export function LoginForm() {
               setMode("signup");
               setError(null);
               setSuggestSignup(false);
+              playToggle();
             }}
             className={`relative z-10 flex-1 rounded-full py-2 font-medium transition-colors ${
               mode === "signup" ? "text-white" : "text-muted"

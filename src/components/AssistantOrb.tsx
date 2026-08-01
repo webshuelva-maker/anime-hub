@@ -8,6 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { playToggle } from "@/lib/sound";
 import { runExclusive, setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 interface Message {
@@ -362,7 +363,10 @@ export function AssistantOrb() {
         />
         <motion.button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setOpen((v) => !v);
+            playToggle();
+          }}
           whileHover={{ scale: 1.06 }}
           whileTap={{ scale: 0.92 }}
           aria-label={`Abrir a ${siteConfig.assistantName}`}

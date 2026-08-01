@@ -19,6 +19,7 @@ import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCa
 import { runExclusive, waitWhileBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { playSuccess, playToggle } from "@/lib/sound";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -401,6 +402,7 @@ export function NewsFeed() {
     if (!item) return;
     toggleLike(item);
     setPrefs(getPreferences());
+    playSuccess();
   };
 
   const handleOpenDetail = (itemId: string, item: NewsItem) => {
@@ -734,6 +736,7 @@ export function NewsFeed() {
                     const newlyVisible = tail.slice(visibleTail, visibleTail + 8).map(({ item }) => item);
                     setVisibleTail((n) => n + 8);
                     enrichItems(newlyVisible);
+                    playToggle();
                   }}
                   className="rounded-full border border-panel-border px-5 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
                 >
