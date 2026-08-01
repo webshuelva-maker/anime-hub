@@ -31,14 +31,14 @@ const EXPLICIT =
  * estado de algo AHORA, no por conocimiento general.
  */
 const STRONG =
-  /\b(cu[áa]ndo|fecha|estren\w*|sale|saldr[áa]|sali[óo]|lanzamiento|anunci\w*|confirm\w*|cancel\w*|renov\w*|retras\w*|aplaz\w*|rumor(?:es)?|filtraci[óo]n|filtraciones|leaks?|tr[áa]iler|trailer|se\s+sabe|novedades)\b/i;
+  /\b(cu[áa]ndo|fecha|estren\w*|sale|saldr[áa]|sali[óo]|lanzamiento|anunci\w*|confirm\w*|cancel\w*|renov\w*|retras\w*|aplaz\w*|rumor(?:es)?|filtraci[óo]n|filtraciones|leaks?|tr[áa]iler|trailer|se\s+sabe|novedades|contin[úu]a\w*|emiti[ée]ndose|en\s+emisi[óo]n)\b/i;
 
 /**
  * Temas que solo son de actualidad si además hay tono de pregunta o de
  * duda. "Película" a secas puede ser charla; "¿hay película?" no.
  */
 const TOPIC =
-  /\b(temporada|season|parte\s*\d|cour|episodio|cap[íi]tulo|pel[íi]cula|film|ova|especial|secuela|continuaci[óo]n|adaptaci[óo]n|doblaje|reparto|arco)\b/i;
+  /\b(temporadas?|seasons?|parte\s*\d|cour|episodios?|cap[íi]tulos?|pel[íi]culas?|films?|ova|especiales?|secuelas?|continuaci[óo]n|adaptaci[óo]n|doblaje|reparto|arcos?)\b/i;
 
 /**
  * Señales de que se está preguntando o dudando AUNQUE NO HAYA "?".
@@ -50,19 +50,27 @@ const TOPIC =
  * interrogación al chatear.
  */
 const ASKING =
-  /[?¿]|\b(sabes|sab[ée]is|se\s+sabe|habr[áa]|hay|va\s+a\s+haber|van\s+a|tendr[áa]|existe|existir[áa]|es\s+cierto|dime|cu[ée]ntame|alguna|alg[úu]n|qu[ée]|cu[áa]l|cu[áa]ndo|c[óo]mo|si)\b/i;
-
-/** "cuarta temporada", "temporada 4", "season 3", "S2". */
-const NUMBERED_SEASON =
-  /\b(primera|segunda|tercera|cuarta|quinta|sexta|s[ée]ptima|octava|novena|d[ée]cima)\s+(temporada|parte)\b|\b(temporada|season|parte)\s*\d+\b/i;
+  /[?¿]|\b(sabes|sab[ée]is|se\s+sabe|habr[áa]|hay|va\s+a\s+haber|van\s+a|tendr[áa]|existe|existir[áa]|es\s+cierto|dime|cu[ée]ntame|alguna|alg[úu]n|qu[ée]|cu[áa]l|cu[áa]nt\w*|cu[áa]ndo|c[óo]mo|quisiera|quiero\s+saber|me\s+gustar[íi]a|si)\b/i;
 
 /**
- * Frases que son claramente un comentario personal, no una consulta. Sin
- * esto, "me encanta la segunda temporada de X" dispararía una búsqueda de
- * diez segundos para nada.
+ * "cuarta temporada", "temporada 4", "season 3", y también "3 temporada"
+ * o "2ª temporada": el número puede ir delante o detrás. Antes solo se
+ * reconocía con el número detrás, así que "si hay 3 temporada" no
+ * disparaba nada.
+ */
+const NUMBERED_SEASON =
+  /\b(primera|segunda|tercera|cuarta|quinta|sexta|s[ée]ptima|octava|novena|d[ée]cima)\s+(temporada|parte)\b|\b(temporada|season|parte)\s*\d+\b|\b\d+\s*[ªº]?\s*(temporada|parte|season)\b/i;
+
+/**
+ * Frases que son claramente un comentario personal, no una consulta.
+ *
+ * Cuidado con "me gustaría saber": ESO ES UNA PREGUNTA, no una opinión.
+ * El patrón anterior cogía la raíz "me gust" y se tragaba "me gustaría
+ * saber si hay 3 temporada", justo lo contrario de charla. Ahora solo
+ * cuentan las formas en presente ("me gusta", "me gustan").
  */
 const OPINION =
-  /\b(me\s+encant|me\s+gust|me\s+flip|estoy\s+viendo|acabo\s+de\s+ver|he\s+visto|termin[ée]|odio|no\s+me\s+gust|qu[ée]\s+tal\s+est|opinas|recomi[ée]nda|recomienda)\w*/i;
+  /\b(me\s+gustan?\b|me\s+encant\w*|me\s+flip\w*|estoy\s+viendo|acabo\s+de\s+ver|he\s+visto|termin[ée]\b|odio\b|no\s+me\s+gust\w*|qu[ée]\s+tal\s+est\w*|opinas|recomi[ée]nda\w*|recomienda\w*)/i;
 
 const YEAR = /\b20\d{2}\b/;
 
@@ -88,7 +96,11 @@ export function shouldResearch(text: string, previousTopic?: string): ResearchIn
     return { needed: true, reason: "menciona una temporada concreta por número" };
   }
 
-  if (TOPIC.test(clean) && asking && !opinion) {
+  // Aquí NO se mira "opinion": si hay tema de serie Y tono de pregunta,
+  // es una consulta. Una frase de opinión pura ("me encanta la segunda
+  // temporada de X") no lleva marca de pregunta, así que no entra por
+  // aquí de todas formas.
+  if (TOPIC.test(clean) && asking) {
     return { needed: true, reason: "pregunta sobre el estado de una serie" };
   }
 

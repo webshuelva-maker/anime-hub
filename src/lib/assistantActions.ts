@@ -80,6 +80,14 @@ function runAction(type: AssistantAction["type"], value: string): string | null 
   }
 
   if (type === "remember") {
+    // Nunca se guarda un supuesto nombre del usuario. Si el modelo se
+    // inventa uno una vez y se archiva, queda grabado para siempre y
+    // vuelve en cada conversación como si fuera un dato real. El nombre
+    // solo puede venir del perfil, que lo escribe el propio usuario.
+    if (/\b(se\s+llama|su\s+nombre|el\s+usuario\s+es\s+[A-ZÁÉÍÓÚÑ])/i.test(value)) {
+      return null;
+    }
+
     addRenMemory(value);
     // Sin confirmación visible en el chat — recordar algo no debería
     // interrumpir la conversación con un mensaje de sistema cada vez,

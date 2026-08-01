@@ -30,6 +30,13 @@ export function addRenMemory(fact: string): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
+/** Borra un recuerdo concreto (desde la lista de Ajustes). */
+export function removeRenMemory(fact: string): void {
+  if (typeof window === "undefined") return;
+  const next = getRenMemory().filter((m) => m !== fact);
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+}
+
 export function clearRenMemory(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(STORAGE_KEY);

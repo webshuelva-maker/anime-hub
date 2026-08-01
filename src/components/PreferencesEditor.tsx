@@ -14,6 +14,8 @@ import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { playToggle, playError } from "@/lib/sound";
+import { getRenMemory, removeRenMemory } from "@/lib/renMemory";
+import { siteConfig } from "@/config/site";
 
 function AffinityBar({ name, count, max }: { name: string; count: number; max: number }) {
   const pct = Math.max(8, Math.round((count / max) * 100));
@@ -66,6 +68,21 @@ export function PreferencesEditor() {
   };
 
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [memories, setMemories] = useState<string[]>([]);
+
+  // Lo que Ren ha ido guardando de ti. Se lee al montar (vive en el
+  // navegador) y se puede borrar pieza a pieza: si alguna vez archiva
+  // algo que no es verdad, tiene que poder quitarse sin borrarlo todo.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMemories(getRenMemory());
+  }, []);
+
+  const handleForget = (fact: string) => {
+    removeRenMemory(fact);
+    setMemories((prev) => prev.filter((m) => m !== fact));
+    playToggle();
+  };
 
   const handleReset = () => {
     clearPreferences();
@@ -165,6 +182,44 @@ export function PreferencesEditor() {
                 </motion.span>
               ))}
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rule-line my-8" />
+
+      <h2 className="font-heading text-lg font-semibold">Lo que {siteConfig.assistantName} recuerda de ti</h2>
+      <p className="mt-1 text-sm text-muted">
+        Cosas que ha ido guardando mientras hablabais. Si algo no es verdad, quítalo y dejará de tenerlo en cuenta.
+      </p>
+
+      <div className="panel mt-4 rounded-2xl p-6">
+        {memories.length === 0 ? (
+          <p className="text-sm text-muted">
+            Todavía no recuerda nada tuyo. Se irá llenando según habléis.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {memories.map((m) => (
+              <motion.div
+                key={m}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="flex items-start gap-3 rounded-xl border border-panel-border/70 bg-panel-soft/40 px-3 py-2"
+              >
+                <span className="flex-1 text-sm leading-snug text-foreground">{m}</span>
+                <button
+                  type="button"
+                  onClick={() => handleForget(m)}
+                  aria-label="Olvidar esto"
+                  title="Olvidar esto"
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
+                >
+                  ✕
+                </button>
+              </motion.div>
+            ))}
           </div>
         )}
       </div>
