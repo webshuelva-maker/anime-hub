@@ -126,6 +126,56 @@ const UNVERIFIED_DOMAINS = [
   "facebook.com",
 ];
 
+/**
+ * Cuentas oficiales en redes sociales. Un anuncio en la cuenta oficial de
+ * una plataforma o de un estudio ES oficial, aunque esté en X o en
+ * YouTube — pero en la misma red conviven con filtradores anónimos, así
+ * que la única forma honesta de distinguirlos es una lista explícita.
+ * Lo que no esté aquí se queda en "sin verificar", que es lo correcto.
+ */
+const OFFICIAL_SOCIAL_HANDLES = [
+  "crunchyroll",
+  "crunchyroll_es",
+  "crunchyrolles",
+  "crunchyroll_pt",
+  "netflix",
+  "netflixanime",
+  "netflixes",
+  "primevideo",
+  "primevideoes",
+  "hbomax",
+  "streamonmax",
+  "animeboxes",
+  "animebox_es",
+  "disneyplus",
+  "disneyplusesp",
+  "aniplex_plus",
+  "aniplexusa",
+  "shonenjump",
+  "jump_henshubu",
+  "mangamo",
+  "toei_anim",
+  "mappa_info",
+  "ufotable",
+  "wit_studio",
+  "cloverworks_inc",
+  "anime_news",
+  "animetv_jp",
+];
+
+/** Extrae el "handle" de una URL de red social, si lo tiene. */
+function socialHandle(url: string, domain: string): string | null {
+  const social = /^(x\.com|twitter\.com|youtube\.com|instagram\.com|tiktok\.com)$/.test(domain);
+  if (!social) return null;
+  try {
+    const path = new URL(url).pathname.replace(/^\/+/, "");
+    const first = path.split("/")[0].replace(/^@/, "").toLowerCase();
+    return first || null;
+  } catch {
+    return null;
+  }
+}
+
 export function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -142,6 +192,13 @@ export function classifySource(url: string, title: string): ResearchSource {
   const domain = domainOf(url);
 
   let tier: SourceTier = "sin-verificar";
+
+  // Antes que nada: ¿es una cuenta oficial en una red social?
+  const handle = socialHandle(url, domain);
+  if (handle && OFFICIAL_SOCIAL_HANDLES.includes(handle)) {
+    return { title: title.trim() || domain, url, domain: `${domain}/${handle}`, tier: "oficial" };
+  }
+
   if (matches(domain, UNVERIFIED_DOMAINS)) {
     tier = "sin-verificar";
   } else if (matches(domain, PRESS_DOMAINS)) {

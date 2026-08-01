@@ -1,150 +1,78 @@
-import { classifySource, ResearchSource } from "./sourceTiers";
+import { ResearchSource, classifySource } from "./sourceTiers";
+import { searchNews, searchWeb, hitsToPromptText, newestDate, NewsHit } from "./newsSearch";
+import { searchReddit, redditToPromptText, RedditHit } from "./redditSearch";
+import { getAnimeFacts, factsToPromptText, AnimeFacts } from "./animeFacts";
+import { searchJikanAnime, getJikanNews, jikanFactsToPromptText, JikanFacts } from "./jikan";
+import { shouldResearch, guessTopicFromQuestion } from "./researchIntent";
 
 /**
- * Toda la lógica de investigación real vive aquí, no en la ruta, porque
- * ahora la usan DOS rutas: la clásica (/api/assistant/research, que
- * devuelve un JSON de una vez) y la nueva en directo
- * (/api/assistant/stream, que va contando los pasos según ocurren). Si
- * estuviera duplicada, una de las dos se quedaría desactualizada tarde o
- * temprano.
+ * La investigación de Ren, reconstruida.
+ *
+ * Antes tenía dos problemas de fondo:
+ *
+ * 1. Decidía si algo era una pregunta con una LISTA DE PALABRAS. Eso
+ *    obliga al usuario a acertar con el vocabulario exacto y se rompe con
+ *    sinónimos, con otro idioma o con palabras a medias. Ahora lo decide
+ *    un modelo leyendo la conversación, que es justo para lo que sirve un
+ *    modelo. La lista de palabras queda solo como red de seguridad por si
+ *    esa llamada falla.
+ *
+ * 2. Delegaba la búsqueda en un sistema que decidía por su cuenta si
+ *    buscaba, y cuando decidía que no, volvía sin nada — de ahí los
+ *    "0 fuentes". Ahora buscamos nosotros, siempre, en varias fuentes a la
+ *    vez y en paralelo: buscadores de noticias, ficha de AniList, ficha de
+ *    MyAnimeList y las noticias que MAL tiene de ese anime concreto.
  */
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const INTENT_MODEL = "llama-3.1-8b-instant"; // decidir esto no debe costar segundos
 
-/**
- * "Compound" es el sistema agéntico de Groq: mismo endpoint y misma
- * clave que el resto de la app, pero con búsqueda web REAL integrada del
- * lado del servidor. groq/compound permite varias búsquedas por petición
- * (lo que hace falta para contrastar oficial contra rumor);
- * groq/compound-mini solo permite una pero es unas 3 veces más rápido,
- * y se usa de respaldo.
- */
-export const RESEARCH_MODEL = "groq/compound";
-export const RESEARCH_FALLBACK_MODEL = "groq/compound-mini";
-
-interface GroqSearchResult {
-  title?: string;
-  url?: string;
-  content?: string;
-  score?: number;
-}
-
-interface GroqExecutedTool {
-  search_results?: { results?: GroqSearchResult[] };
-}
-
-interface GroqCompoundResponse {
-  choices?: {
-    message?: {
-      content?: string;
-      reasoning?: string;
-      executed_tools?: GroqExecutedTool[];
-    };
-  }[];
-}
-
-export interface ResearchOutcome {
-  ok: boolean;
-  /**
-   * true solo si la búsqueda web devolvió fuentes REALES. Si es false, el
-   * dossier se descarta entero: un texto sin fuentes detrás es el modelo
-   * escribiendo de memoria, y eso es exactamente lo que produjo el fallo
-   * de los "tuits del director" y el "documento filtrado de Studio Bind"
-   * que no existen. Sin fuentes, no hay investigación.
-   */
-  grounded: boolean;
-  /** Texto estructurado con OFICIAL / RUMORES / CONTEXTO. */
-  dossier: string;
-  sources: ResearchSource[];
-  /** Búsquedas que el modelo ejecutó de verdad, tal cual las escribió. */
+export interface Intent {
+  needsResearch: boolean;
+  /** Serie de la que trata, resuelta aunque el usuario no la nombre aquí. */
+  topic: string;
+  /** Consultas listas para buscar, en inglés y en español. */
   queries: string[];
   debug: string;
 }
 
-function buildResearchPrompt(question: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-
-  return `Eres un investigador de noticias de anime y manga. Hoy es ${today}.
-
-PREGUNTA DEL USUARIO: "${question}"
-
-Busca en internet información REAL y ACTUAL para responderla. Haz como máximo 3 búsquedas, en inglés y/o japonés si hace falta (así se encuentran los anuncios de verdad, no solo webs de rumores en español).
-
-Lo más importante de tu trabajo es SEPARAR dos cosas que suelen mezclarse:
-1. Lo CONFIRMADO oficialmente: anuncios del estudio, la editorial, la web o cuenta oficial de la obra, la plataforma que la emite, o una revista japonesa que publica el anuncio.
-2. Lo que solo son RUMORES o filtraciones: filtradores, foros, agregadores de noticias, "se espera que", cuentas no oficiales.
-
-Un rumor puede ser muy probable y aun así seguir siendo un rumor. Dilo tal cual, no lo asciendas a confirmado.
-
-Responde EXACTAMENTE con este formato, sin añadir nada antes ni después:
-
-TITULO_CANONICO: <título en romaji del anime principal del que trata la pregunta, o NINGUNO si no va de un anime concreto>
-ESTADO: <uno de: confirmado-con-fecha | confirmado-sin-fecha | en-produccion | solo-rumores | sin-informacion | terminado | ya-emitido>
-FECHA_MAS_RECIENTE: <fecha aproximada AAAA-MM de la noticia MÁS NUEVA que hayas encontrado sobre esto, o DESCONOCIDA>
-OFICIAL:
-- <dato confirmado — quién lo anunció y cuándo. Si no hay nada confirmado, escribe "nada confirmado todavía">
-RUMORES:
-- <rumor — de dónde sale, de cuándo es, y si es creíble o no y por qué. Si no hay rumores, escribe "sin rumores relevantes">
-CONTEXTO:
-- <cualquier dato útil para entender la situación: retrasos, declaraciones, ventas, estado del manga original, etc.>`;
+interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 /**
- * Saca del campo "reasoning" las búsquedas que el modelo ejecutó
- * realmente. Groq las escribe ahí con la forma <tool>search(...)</tool>,
- * así que se pueden enseñar al usuario tal cual: son las consultas de
- * verdad, no una reconstrucción inventada.
+ * Decide, con un modelo, si el último mensaje necesita datos actuales de
+ * internet — y de qué serie habla, resolviendo referencias como "¿y ha
+ * terminado ya?" a partir de lo hablado antes.
  */
-function extractQueries(reasoning: string, sources: ResearchSource[]): string[] {
-  const queries: string[] = [];
-  const pattern = /<tool>\s*(?:search|web_search|visit|visit_website)\s*\(([^)]{2,120})\)/gi;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(reasoning)) !== null) {
-    const q = match[1].trim().replace(/^["']|["']$/g, "");
-    if (q && !queries.includes(q)) queries.push(q);
-  }
-
-  // Plan B: si el formato del razonamiento cambia y el patrón falla, al
-  // menos enseñamos los sitios que se leyeron, que también es real.
-  if (queries.length === 0 && sources.length > 0) {
-    for (const s of sources.slice(0, 3)) {
-      if (!queries.includes(s.domain)) queries.push(s.domain);
-    }
-  }
-
-  return queries.slice(0, 4);
-}
-
-/**
- * Plan B para recuperar las fuentes: cuando el campo estructurado
- * search_results viene vacío, las URLs siguen apareciendo dentro del
- * texto del razonamiento (bloques "Title: ... URL: <https://...>").
- * Rescatarlas de ahí evita quedarnos con cero fuentes y tirar una
- * investigación que sí se hizo.
- */
-function extractSourcesFromReasoning(reasoning: string): ResearchSource[] {
-  const found: ResearchSource[] = [];
-  const seen = new Set<string>();
-  const pattern = /(?:Title:\s*(.+?)\s*\n)?\s*URL:\s*<?(https?:\/\/[^\s>)]+)>?/gi;
-
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(reasoning)) !== null) {
-    const url = match[2];
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    found.push(classifySource(url, match[1] ?? ""));
-  }
-  return found;
-}
-
-async function callCompound(
+export async function classifyIntent(
   apiKey: string,
-  model: string,
-  question: string,
-  timeoutMs: number
-): Promise<ResearchOutcome> {
+  messages: ConversationMessage[]
+): Promise<Intent> {
+  const recent = messages.slice(-6);
+  const lastUser = [...recent].reverse().find((m) => m.role === "user")?.content ?? "";
+
+  const transcript = recent
+    .map((m) => `${m.role === "user" ? "USUARIO" : "REN"}: ${m.content}`)
+    .join("\n");
+
+  const prompt = `Analiza esta conversación de una app de anime y decide si el ÚLTIMO mensaje del usuario necesita información actual de internet para responderse bien.
+
+Necesita búsqueda si pregunta por algo que cambia con el tiempo: si existe o se ha confirmado una temporada, película u OVA; cuándo sale algo; si una serie sigue emitiéndose o ya terminó; cuántas temporadas o episodios hay; rumores, anuncios, retrasos, cancelaciones o novedades. Da igual cómo esté escrito, en qué idioma, con faltas, sin signos de interrogación o como una frase suelta ("3 temporada?", "y la peli", "is season 4 confirmed", "que se sabe").
+
+NO necesita búsqueda si es un saludo, charla, una opinión, una recomendación general, o una pregunta sobre la trama, los personajes o el pasado lejano de una obra.
+
+Si el último mensaje no nombra la serie pero se entiende por lo anterior, resuélvela tú.
+
+Responde SOLO con este JSON, sin texto alrededor ni markdown:
+{"needsResearch": true|false, "topic": "nombre de la serie en romaji o inglés, o cadena vacía", "queryEn": "búsqueda en inglés", "queryEs": "búsqueda en español"}
+
+Conversación:
+${transcript}`;
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
     const res = await fetch(GROQ_URL, {
@@ -152,111 +80,181 @@ async function callCompound(
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
       body: JSON.stringify({
-        model,
-        // Compound se documenta con mensajes de usuario, no de sistema —
-        // todas las instrucciones van dentro del propio mensaje para no
-        // depender de un comportamiento no documentado.
-        messages: [{ role: "user", content: buildResearchPrompt(question) }],
-        temperature: 0.2, // es una tarea de datos, no de creatividad
-        max_tokens: 900,
-        // Se habilitan explícitamente las herramientas: por defecto el
-        // sistema decide si busca o no, y cuando decidía no buscar
-        // devolvía un texto escrito de memoria con pinta de investigado.
-        compound_custom: { tools: { enabled_tools: ["web_search", "visit_website"] } },
-        search_settings: {
-          exclude_domains: ["pinterest.com", "*.pinterest.com"],
-        },
+        model: INTENT_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        max_tokens: 200,
+        response_format: { type: "json_object" },
       }),
     });
 
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      return {
-        ok: false,
-        grounded: false,
-        dossier: "",
-        sources: [],
-        queries: [],
-        debug: `Groq (investigación) respondió ${res.status}: ${errBody.slice(0, 300)}`,
-      };
-    }
+    if (!res.ok) throw new Error(`intent ${res.status}`);
 
-    const data: GroqCompoundResponse = await res.json();
-    const message = data?.choices?.[0]?.message;
-    const content = message?.content ?? "";
+    const data = await res.json();
+    const raw = data?.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(String(raw).replace(/```json|```/g, "").trim());
 
-    const reasoning = message?.reasoning ?? "";
-    const seen = new Set<string>();
-    let sources: ResearchSource[] = [];
-    for (const tool of message?.executed_tools ?? []) {
-      for (const r of tool.search_results?.results ?? []) {
-        if (!r.url || seen.has(r.url)) continue;
-        seen.add(r.url);
-        sources.push(classifySource(r.url, r.title ?? ""));
-      }
-    }
-    if (sources.length === 0) sources = extractSourcesFromReasoning(reasoning);
-
-    if (!content.trim()) {
-      return { ok: false, grounded: false, dossier: "", sources, queries: [], debug: "respuesta vacía de Groq" };
-    }
-
-    // Sin ninguna fuente, el dossier NO se devuelve: da igual lo
-    // convincente que suene, no hay nada que lo respalde.
-    const grounded = sources.length > 0;
+    const topic = String(parsed.topic ?? "").trim();
+    const queries = [parsed.queryEn, parsed.queryEs]
+      .map((q: unknown) => String(q ?? "").trim())
+      .filter((q: string) => q.length > 1);
 
     return {
-      ok: true,
-      grounded,
-      dossier: grounded ? content : "",
-      sources: sources.slice(0, 8),
-      queries: extractQueries(reasoning, sources),
-      debug: grounded ? "ok" : "el buscador no devolvió ninguna fuente: dossier descartado",
+      needsResearch: parsed.needsResearch === true,
+      topic,
+      queries: queries.length > 0 ? queries : topic ? [topic] : [],
+      debug: "decidido por el modelo",
     };
   } catch (e) {
+    // Red de seguridad: si el clasificador falla, se cae a la heurística
+    // de palabras. Es peor, pero es mejor que no investigar nada.
+    const fallback = shouldResearch(lastUser);
+    const topic = guessTopicFromQuestion(lastUser);
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, grounded: false, dossier: "", sources: [], queries: [], debug: `excepción: ${msg}` };
+    return {
+      needsResearch: fallback.needed,
+      topic,
+      queries: topic ? [topic] : [],
+      debug: `clasificador caído (${msg}), usando heurística: ${fallback.reason}`,
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-/** Investiga con el sistema grande y, si falla, reintenta con el rápido. */
-export async function runResearch(
-  apiKey: string,
-  question: string,
-  timeoutMs = 22000
-): Promise<ResearchOutcome> {
-  const first = await callCompound(apiKey, RESEARCH_MODEL, question, timeoutMs);
-  // Se reintenta no solo cuando falla, sino también cuando "funciona"
-  // pero sin una sola fuente: eso significa que no llegó a buscar, y una
-  // segunda pasada con el sistema rápido suele sí hacerlo.
-  if (first.ok && first.grounded) return first;
-
-  const second = await callCompound(
-    apiKey,
-    RESEARCH_FALLBACK_MODEL,
-    question,
-    Math.min(timeoutMs, 15000)
-  );
-  if (second.ok && second.grounded) return second;
-  return first.ok ? first : second;
+export interface Evidence {
+  /** Todo lo encontrado, ya en texto y listo para el prompt. */
+  text: string;
+  sources: ResearchSource[];
+  anilist: AnimeFacts | null;
+  jikan: JikanFacts | null;
+  hits: NewsHit[];
+  /** Resultados de la pasada de rumores (web abierta + Reddit). */
+  rumorHits: NewsHit[];
+  redditHits: RedditHit[];
+  /** Fecha de la noticia más reciente encontrada (ISO) o null. */
+  newest: string | null;
+  /** true si no hay absolutamente nada en lo que apoyarse. */
+  empty: boolean;
+  debug: string;
 }
 
-export function extractCanonicalTitle(dossier: string): string | null {
-  const match = dossier.match(/TITULO_CANONICO:\s*(.+)/i);
-  if (!match) return null;
-  const value = match[1].trim().replace(/^["“]|["”]$/g, "");
-  if (!value || /^ninguno$/i.test(value)) return null;
-  return value;
+/**
+ * Reúne pruebas de todas las fuentes A LA VEZ. Ninguna es imprescindible:
+ * si una falla, las demás siguen valiendo, y solo se da por vacía la
+ * investigación cuando fallan todas.
+ */
+/**
+ * Construye las consultas de la SEGUNDA pasada, la de rumores.
+ *
+ * Hace falta porque las fuentes de noticias serias no publican nada hasta
+ * que está confirmado: buscando solo ahí, lo que "se dice" antes del
+ * anuncio oficial no aparece nunca. Estas consultas van a la web abierta
+ * y a Reddit, donde sí circulan filtraciones y comentarios de staff.
+ */
+function buildRumorQueries(topic: string, queries: string[]): string[] {
+  const base = topic || queries[0] || "";
+  if (!base) return [];
+  return [
+    `${base} leak OR rumor OR "not confirmed" new season`,
+    `${base} filtración OR rumor nueva temporada`,
+  ];
 }
 
-export function extractStatus(dossier: string): string | null {
-  const match = dossier.match(/ESTADO:\s*([a-zñáéíóú-]+)/i);
-  return match ? match[1].toLowerCase() : null;
-}
+/**
+ * Reúne pruebas de todas las fuentes A LA VEZ, en dos pasadas que se
+ * lanzan juntas:
+ *
+ *   CONFIRMADO → buscadores de noticias, AniList, MyAnimeList y las
+ *                noticias que MAL tiene de ese anime.
+ *   RUMORES    → búsqueda web abierta (llega a X, foros, blogs de fans,
+ *                donde anuncian las cuentas oficiales y donde viven las
+ *                filtraciones) y Reddit.
+ *
+ * Las dos van etiquetadas por separado en el texto que recibe Ren, para
+ * que no pueda mezclarlas aunque quiera. Ninguna fuente es
+ * imprescindible: solo se da la investigación por vacía si fallan todas.
+ */
+export async function gatherEvidence(topic: string, queries: string[]): Promise<Evidence> {
+  const searchTerms = queries.length > 0 ? queries : topic ? [topic] : [];
+  const rumorTerms = buildRumorQueries(topic, queries);
 
-export function extractLatestDate(dossier: string): string | null {
-  const match = dossier.match(/FECHA_MAS_RECIENTE:\s*(\d{4}-\d{2})/i);
-  return match ? match[1] : null;
+  const [news, web, reddit, anilist, jikan] = await Promise.all([
+    searchTerms.length > 0
+      ? searchNews(searchTerms, 8)
+      : Promise.resolve({ hits: [] as NewsHit[], debug: "sin consulta" }),
+    rumorTerms.length > 0
+      ? searchWeb(rumorTerms, 6)
+      : Promise.resolve({ hits: [] as NewsHit[], debug: "sin consulta" }),
+    rumorTerms.length > 0
+      ? searchReddit(rumorTerms, 5)
+      : Promise.resolve({ hits: [] as RedditHit[], debug: "sin consulta" }),
+    topic ? getAnimeFacts(topic) : Promise.resolve(null),
+    topic ? searchJikanAnime(topic) : Promise.resolve(null),
+  ]);
+
+  // Noticias que MyAnimeList tiene de ESE anime concreto: una fuente
+  // dirigida al título exacto, que no depende de que un buscador
+  // generalista acierte con la consulta.
+  const malNews = jikan ? await getJikanNews(jikan.malId, 4) : [];
+
+  const sources: ResearchSource[] = [];
+  const pushSource = (src: ResearchSource) => {
+    if (!sources.some((s) => s.url === src.url)) sources.push(src);
+  };
+  news.hits.forEach((h) => pushSource(h.source));
+  for (const n of malNews) pushSource(classifySource(n.url, n.title));
+  web.hits.forEach((h) => pushSource(h.source));
+  reddit.hits.forEach((h) => pushSource(h.source));
+
+  // La web oficial y las plataformas que da AniList son fuentes oficiales
+  // de pleno derecho, y además responden al "¿dónde puedo verlo?".
+  for (const link of anilist?.externalLinks ?? []) {
+    if (link.type === "OFFICIAL" || link.type === "STREAMING") {
+      pushSource(classifySource(link.url, `${link.site} — ${anilist?.title ?? ""}`.trim()));
+    }
+  }
+
+  const blocks: string[] = [];
+  if (anilist) blocks.push(factsToPromptText(anilist));
+  if (jikan) blocks.push(jikanFactsToPromptText(jikan));
+  if (news.hits.length > 0) {
+    blocks.push(`NOTICIAS PUBLICADAS POR MEDIOS (lo verificable):\n\n${hitsToPromptText(news.hits)}`);
+  }
+  if (malNews.length > 0) {
+    blocks.push(
+      `NOTICIAS DE MYANIMELIST SOBRE ESTA SERIE:\n\n${malNews
+        .map(
+          (n) =>
+            `- ${n.title} (${n.date ? n.date.slice(0, 10) : "sin fecha"})${n.excerpt ? `\n  ${n.excerpt}` : ""}`
+        )
+        .join("\n")}`
+    );
+  }
+  if (web.hits.length > 0 || reddit.hits.length > 0) {
+    const parts: string[] = [];
+    if (web.hits.length > 0) parts.push(hitsToPromptText(web.hits));
+    if (reddit.hits.length > 0) parts.push(`Comunidades:\n${redditToPromptText(reddit.hits)}`);
+    blocks.push(
+      `RUMORES Y FUENTES SIN VERIFICAR (búsqueda abierta en web, redes y foros — NADA de aquí está confirmado salvo que venga de una cuenta oficial, que va marcada como tal):\n\n${parts.join("\n\n")}`
+    );
+  }
+
+  const malNewsDates = malNews.map((n) => n.date).filter((d): d is string => Boolean(d));
+  const allDates = [newestDate(news.hits), ...malNewsDates]
+    .filter((d): d is string => Boolean(d))
+    .sort();
+
+  return {
+    text: blocks.join("\n\n"),
+    sources: sources.slice(0, 10),
+    anilist,
+    jikan,
+    hits: news.hits,
+    rumorHits: web.hits,
+    redditHits: reddit.hits,
+    newest: allDates.length > 0 ? allDates[allDates.length - 1] : null,
+    empty: blocks.length === 0,
+    debug: `tema="${topic}" | noticias: ${news.debug} | web: ${web.debug} | reddit: ${reddit.debug} | anilist:${anilist ? "sí" : "no"} | mal:${jikan ? "sí" : "no"} | noticias-mal:${malNews.length}`,
+  };
 }

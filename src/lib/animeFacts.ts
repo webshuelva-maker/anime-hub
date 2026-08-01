@@ -30,6 +30,7 @@ query ($search: String) {
     popularity
     averageScore
     siteUrl
+    externalLinks { site url type language }
     studios(isMain: true) { nodes { name } }
     relations {
       edges {
@@ -76,6 +77,8 @@ export interface AnimeFacts {
   popularity: number | null;
   averageScore: number | null;
   siteUrl: string | null;
+  /** Web oficial y plataformas donde se emite, según AniList. */
+  externalLinks: { site: string; url: string; type: string | null; language: string | null }[];
   relations: AnimeRelation[];
 }
 
@@ -182,6 +185,14 @@ export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | nu
       popularity: typeof m.popularity === "number" ? m.popularity : null,
       averageScore: typeof m.averageScore === "number" ? m.averageScore : null,
       siteUrl: m.siteUrl ?? null,
+      externalLinks: (m.externalLinks ?? [])
+        .filter((l: { site?: string; url?: string }) => l?.site && l?.url)
+        .map((l: { site: string; url: string; type?: string; language?: string }) => ({
+          site: l.site,
+          url: l.url,
+          type: l.type ?? null,
+          language: l.language ?? null,
+        })),
       relations,
     };
   } catch {
@@ -214,6 +225,15 @@ export function factsToPromptText(facts: AnimeFacts): string {
     );
   }
   if (facts.studios.length) lines.push(`- Estudio: ${facts.studios.join(", ")}`);
+
+  // La web oficial y las plataformas donde se emite: es lo más fiable que
+  // hay para "¿dónde puedo verlo?" y para saber quién anuncia qué.
+  const official = facts.externalLinks.filter((l) => l.type === "OFFICIAL" || /official/i.test(l.site));
+  const streaming = facts.externalLinks.filter((l) => l.type === "STREAMING");
+  if (official.length) lines.push(`- Web oficial: ${official.map((l) => l.url).join(", ")}`);
+  if (streaming.length) {
+    lines.push(`- Se puede ver en: ${streaming.map((l) => `${l.site}${l.language ? ` (${l.language})` : ""}`).join(", ")}`);
+  }
   if (facts.genres.length) lines.push(`- Géneros: ${facts.genres.join(", ")}`);
 
   const sequels = facts.relations.filter((r) => r.relationType === "SEQUEL");

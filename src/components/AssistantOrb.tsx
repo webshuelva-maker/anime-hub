@@ -6,7 +6,6 @@ import { siteConfig } from "@/config/site";
 import { getPreferences } from "@/lib/storage";
 import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
-import { shouldResearch } from "@/lib/researchIntent";
 import { ResearchSource, TIER_COLOR, TIER_LABEL } from "@/lib/sourceTiers";
 import { Confidence, CONFIDENCE_COLOR } from "@/lib/confidence";
 import { recordAnimeInterest, boostCategories } from "@/lib/learning";
@@ -74,13 +73,9 @@ interface StreamTurnResult {
 async function runStreamingTurn(opts: {
   apiMessages: { role: "user" | "assistant"; content: string }[];
   contextText: string;
-  question: string;
-  previousTopic: string | null;
   onStep: (step: Step) => void;
   onSources: (payload: {
     sources: ResearchSource[];
-    confidence: Confidence;
-    webFailed?: boolean;
     topic?: string | null;
     facts: { title: string; genres: string[]; studios: string[] } | null;
   }) => void;
@@ -96,12 +91,7 @@ async function runStreamingTurn(opts: {
     const res = await fetch("/api/assistant/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: opts.apiMessages,
-        context: opts.contextText,
-        question: opts.question,
-        previousTopic: opts.previousTopic,
-      }),
+      body: JSON.stringify({ messages: opts.apiMessages, context: opts.contextText }),
     });
 
     if (!res.ok || !res.body) return { ok: false, raw: "", sources, confidence, steps };
@@ -141,13 +131,10 @@ async function runStreamingTurn(opts: {
         } else if (event === "sources") {
           const payload = data as unknown as {
             sources: ResearchSource[];
-            confidence: Confidence;
-            webFailed?: boolean;
             topic?: string | null;
             facts: { title: string; genres: string[]; studios: string[] } | null;
           };
           sources = payload.sources ?? [];
-          confidence = payload.confidence ?? null;
           opts.onSources(payload);
         } else if (event === "token") {
           const chunk = String(data.text ?? "");
@@ -155,6 +142,9 @@ async function runStreamingTurn(opts: {
           opts.onToken(chunk);
         } else if (event === "done") {
           raw = String(data.raw ?? "");
+          // La confianza llega al final, con la respuesta ya escrita:
+          // enseñarla antes es valorar algo que todavía no se ha dicho.
+          if (data.confidence) confidence = data.confidence as Confidence;
         } else if (event === "error") {
           // Si ya había texto en pantalla, se conserva; si no, se
           // devuelve fallo para que el cliente use la vía clásica.
@@ -431,13 +421,10 @@ export function AssistantOrb() {
   const [steps, setSteps] = useState<Step[]>([]);
   const [streamText, setStreamText] = useState("");
   const [liveSources, setLiveSources] = useState<ResearchSource[]>([]);
-  const [liveConfidence, setLiveConfidence] = useState<Confidence | null>(null);
   const [slowResponse, setSlowResponse] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  /** Última serie investigada, para entender las preguntas encadenadas. */
-  const lastTopicRef = useRef<string | null>(null);
 
   const appendToArchive = (msgs: Message[]) => {
     setArchive((prev) => {
@@ -532,7 +519,6 @@ export function AssistantOrb() {
     setSteps([]);
     setStreamText("");
     setLiveSources([]);
-    setLiveConfidence(null);
     const slowTimer = setTimeout(() => setSlowResponse(true), 4000);
 
     const boostedTitles = new Set<string>();
@@ -555,12 +541,13 @@ export function AssistantOrb() {
       // se mandan tal cual, Groq responde 400 "property 'ts' is
       // unsupported" en cuanto hay más de un mensaje en la conversación.
       const apiMessages = nextMessages.map((m) => ({ role: m.role, content: m.content }));
-      const previousTopic = lastTopicRef.current;
-      const willResearch = shouldResearch(text, previousTopic ?? undefined).needed;
-      setPhase(willResearch ? "research" : "writing");
+      // Ya no se decide aquí si hay que investigar: lo decide el servidor
+      // con un modelo que lee la conversación. El cliente solo enseña los
+      // pasos que le van llegando.
+      setPhase("research");
 
-      const estimatedTokens = 500 + (willResearch ? 1600 : 0) +
-        nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
+      const estimatedTokens =
+        1200 + nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
 
       // ---- VÍA PRINCIPAL: respuesta en directo -----------------------
       // Un único stream que va contando los pasos reales (buscar,
@@ -572,21 +559,23 @@ export function AssistantOrb() {
         const result = await runStreamingTurn({
           apiMessages,
           contextText,
-          question: text,
-          previousTopic,
-          onStep: (step) =>
+          onStep: (step) => {
+            // Si el clasificador dice que no hace falta buscar, se pasa
+            // ya a "escribiendo" en vez de dejar "investigando" puesto.
+            if (step.id === "intent" && step.status === "done" && step.detail === "no hace falta buscar") {
+              setPhase("writing");
+            }
             setSteps((prev) => {
               const idx = prev.findIndex((s) => s.id === step.id);
               if (idx === -1) return [...prev, step];
               const copy = [...prev];
               copy[idx] = step;
               return copy;
-            }),
+            });
+          },
           onSources: (payload) => {
             setLiveSources(payload.sources);
-            setLiveConfidence(payload.confidence);
             setPhase("writing");
-            if (payload.topic) lastTopicRef.current = payload.topic;
             if (payload.facts?.title) {
               recordAnimeInterest(
                 payload.facts.title,
@@ -624,7 +613,7 @@ export function AssistantOrb() {
       let researchSources: ResearchSource[] = [];
       let confidence: Confidence | null = null;
 
-      if (willResearch) {
+      {
         setPhase("research");
         try {
           const r = (await runExclusive(async () => {
@@ -632,7 +621,7 @@ export function AssistantOrb() {
             const res = await fetch("/api/assistant/research", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ question: text, previousTopic }),
+              body: JSON.stringify({ question: text, messages: apiMessages }),
             }).then((res) => res.json());
             recordTokenUsage(1600);
             return res;
@@ -646,10 +635,8 @@ export function AssistantOrb() {
           };
           researchSources = r?.sources ?? [];
           confidence = r?.confidence ?? null;
-          if (confidence) setLiveConfidence(confidence);
           setLiveSources(researchSources);
 
-          if (r?.facts?.title) lastTopicRef.current = r.facts.title;
           if (r?.facts?.title && !boostedTitles.has(r.facts.title.toLowerCase())) {
             recordAnimeInterest(r.facts.title, r.facts.genres ?? [], r.facts.studios ?? []);
             boostedTitles.add(r.facts.title.toLowerCase());
@@ -699,7 +686,6 @@ export function AssistantOrb() {
       setSteps([]);
       setStreamText("");
       setLiveSources([]);
-      setLiveConfidence(null);
       setBackgroundPaused(false);
     }
   };
@@ -806,11 +792,6 @@ export function AssistantOrb() {
                       {steps.length > 0 && (
                         <div className="w-full pl-6">
                           <StepsList steps={steps} />
-                        </div>
-                      )}
-                      {liveConfidence && (
-                        <div className="w-full pl-6">
-                          <ConfidenceCard confidence={liveConfidence} />
                         </div>
                       )}
                       {liveSources.length > 0 && (
