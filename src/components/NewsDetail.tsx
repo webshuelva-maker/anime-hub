@@ -9,7 +9,7 @@ import { PlatformBadge } from "./PlatformBadge";
 import { formatRelativeDate } from "@/lib/date";
 import { recordNewsInteraction } from "@/lib/learning";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
-import { runExclusive } from "@/lib/nvidiaQueue";
+import { runExclusive } from "@/lib/apiQueue";
 
 export function NewsDetail({
   item,
@@ -73,7 +73,7 @@ export function NewsDetail({
         }
 
         // Cada invocación de /api/translate-detail hace como mucho UNA
-        // llamada a NVIDIA (plan gratuito de Netlify, 10s duros). Si el
+        // llamada a NVIDIA. Si el
         // primer intento no vuelve con traducción, este segundo intento
         // usa el modelo de RESPALDO antes de rendirse.
         let translated = await callTranslateDetail(data.articleText, false);

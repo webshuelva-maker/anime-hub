@@ -18,13 +18,8 @@ async function callModel(
   messages: ChatMessage[]
 ): Promise<{ ok: true; reply: string } | { ok: false }> {
   const controller = new AbortController();
-  // Este archivo se me había quedado sin el mismo arreglo que
-  // translate.ts/translateBatch.ts: sin timeout propio (dependía de que
-  // Netlify matara la función a los 10s) y con una cadena de hasta 3
-  // llamadas (principal + reintento + respaldo) que en el plan gratuito
-  // JAMÁS caben en el límite de una función. Por eso Ren se quedaba
-  // "pensando" y acababa con "se ha cortado la conexión". Ahora: una
-  // sola llamada por invocación, 8s de margen dentro del límite de 10s.
+  // Plan gratuito de Netlify → 10s duros por función. UNA sola llamada
+  // a NVIDIA por invocación, 8s de margen.
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {

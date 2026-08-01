@@ -111,13 +111,13 @@ body {
 }
 
 /* Animación de "cargando" para las carátulas, mientras se busca la
-   imagen real. Se cambió por completo del barrido con degradado
-   (shimmerSweep) a un simple pulso de opacidad — mucho más difícil de
-   percibir como "raro" o "roto" al no tener ninguna dirección ni
-   velocidad que pueda parecer descompensada. */
-@keyframes softPulse {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
+   imagen real. Iteración 3: ni barrido con degradado (shimmerSweep) ni
+   pulso de opacidad (softPulse) — un spinner giratorio simple. Es el
+   patrón de carga más estándar y reconocible que existe, y al no tener
+   ninguna dirección ni velocidad relativa a calcular (solo gira sobre sí
+   mismo a velocidad constante), no hay forma de que "se vea rota". */
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -5,9 +5,8 @@ export interface TranslationOutcome {
   debug: string;
 }
 
-// Si el modelo configurado está saturado incluso tras reintentar, se
-// prueba con este como plan B — no siempre coinciden los picos de tráfico
-// entre modelos distintos.
+// Si el modelo configurado está saturado, se prueba con este como plan B
+// — no siempre coinciden los picos de tráfico entre modelos distintos.
 const FALLBACK_MODEL = "meta/llama-3.1-70b-instruct";
 
 async function callOnce(
@@ -20,14 +19,10 @@ async function callOnce(
 ): Promise<{ ok: true; text: string } | { ok: false; debug: string }> {
   const controller = new AbortController();
   // Confirmado: plan gratuito de Netlify → límite duro de 10s por
-  // función. Con eso no caben ni siquiera DOS llamadas de 9s en la misma
-  // invocación (18s > 10s) — así que cada invocación hace como mucho UNA
-  // llamada a NVIDIA. 8s deja algo de margen (arranque en frío, overhead
-  // de red) dentro de esos 10s. El reintento con el modelo de respaldo ya
-  // NO pasa aquí dentro: lo dispara el propio cliente con una segunda
-  // petición HTTP aparte (con su propio presupuesto de 10s), pasando
-  // preferFallback=true — ver translateNewsFields más abajo y quien la
-  // llama en /api/translate-detail.
+  // función. Cada invocación hace como mucho UNA llamada a NVIDIA (8s de
+  // margen dentro de esos 10s) — el reintento con el modelo de respaldo
+  // lo dispara el propio cliente con una segunda petición HTTP aparte,
+  // pasando preferFallback=true (ver /api/translate-detail y NewsDetail.tsx).
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
@@ -67,13 +62,12 @@ async function callOnce(
 }
 
 /**
- * Traduce título + resumen + cuerpo de una noticia al español. Hace
- * UNA sola llamada a NVIDIA (ver por qué en el comentario de timeout de
- * callOnce) — usa el modelo principal salvo que preferFallback sea true,
- * en cuyo caso usa directamente el de respaldo. Quien llama a esta
- * función decide cuándo pasar preferFallback=true: normalmente en un
- * segundo intento, con una petición HTTP nueva, después de que el primero
- * fallara.
+ * Traduce título + resumen + cuerpo de una noticia al español. Hace UNA
+ * sola llamada a NVIDIA por invocación — usa el modelo principal salvo
+ * que preferFallback sea true, en cuyo caso usa directamente el de
+ * respaldo. Quien llama a esta función decide cuándo pasar
+ * preferFallback=true (normalmente en un segundo intento, con una
+ * petición HTTP nueva, después de que el primero fallara).
  */
 export async function translateNewsFields(
   title: string,

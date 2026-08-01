@@ -15,7 +15,7 @@ import { getNewsItems, setNewsItems } from "@/lib/newsStore";
 import { SearchBar } from "./SearchBar";
 import { AnimeSearchResult } from "@/lib/anilist";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
-import { runExclusive } from "@/lib/nvidiaQueue";
+import { runExclusive } from "@/lib/apiQueue";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -128,14 +128,14 @@ export function NewsFeed() {
     // Traducción por MINI-LOTES: en vez de un único lote grande (que hace
     // esperar a que TODO termine antes de ver nada), se divide en grupos
     // pequeños — así las primeras tarjetas se actualizan enseguida y el
-    // resto va llegando con progreso visible. IMPORTANTE: cada llamada a
-    // NVIDIA pasa por runExclusive (ver nvidiaQueue.ts) y los lotes se
+    // resto va llegando con progreso visible. Cada llamada a NVIDIA pasa
+    // por runExclusive (ver apiQueue.ts) y los lotes se
     // procesan EN SERIE (uno espera a que el anterior termine de verdad,
     // nada de "esperar 1s y lanzar el siguiente igualmente"): lanzarlos
     // en paralelo con un simple retraso fijo es lo que hacía que solo el
     // primer lote (el único sin contienda) llegara a traducirse, y todos
-    // los demás chocaran entre sí contra el límite de peticiones
-    // simultáneas de la clave de NVIDIA.
+    // los demás chocaran entre sí contra un límite de concurrencia de la
+    // clave de NVIDIA — de ahí la cola en serie (ver apiQueue.ts).
     const CHUNK_SIZE = 3;
 
     const callTranslateBatch = (
@@ -172,8 +172,7 @@ export function NewsFeed() {
 
       let pending = stillNeeded;
       // Hasta 2 intentos por lote: cada invocación de /api/translate-batch
-      // hace como mucho UNA llamada a NVIDIA (plan gratuito de Netlify,
-      // 10s duros por función — no caben dos ahí dentro). Si el primer
+      // hace como mucho UNA llamada a NVIDIA. Si el primer
       // intento falla, este segundo intento usa el modelo de RESPALDO
       // (preferFallback), no el mismo que ya falló — antes un solo fallo
       // dejaba esas noticias sin traducir para siempre en esa sesión.

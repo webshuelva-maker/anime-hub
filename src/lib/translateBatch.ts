@@ -25,13 +25,10 @@ async function callBatch(
   model: string
 ): Promise<{ ok: true; results: BatchTranslateResult[] } | { ok: false; debug: string }> {
   const controller = new AbortController();
-  // Confirmado: plan gratuito de Netlify → 10s duros por función. Ni
-  // siquiera caben dos llamadas de 9s en la misma invocación, así que
-  // esta función hace como mucho UNA llamada a NVIDIA por invocación.
-  // 8s deja margen dentro de esos 10s. El reintento con el modelo de
-  // respaldo lo dispara el CLIENTE con una segunda petición HTTP aparte
-  // (presupuesto de 10s propio), pasando preferFallback=true — ver
-  // translateBatch más abajo y quien la llama en /api/translate-batch.
+  // Plan gratuito de Netlify → 10s duros por función. Esta función hace
+  // como mucho UNA llamada a NVIDIA por invocación (8s de margen); el
+  // reintento con el modelo de respaldo lo dispara el cliente con una
+  // segunda petición HTTP aparte (ver NewsFeed.tsx).
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
@@ -76,11 +73,9 @@ async function callBatch(
 
 /**
  * Traduce varias noticias EN UNA SOLA LLAMADA a NVIDIA, en vez de una
- * petición por noticia. Hace UNA sola llamada por invocación (ver
- * comentario de timeout en callBatch) — usa el modelo principal salvo
- * que preferFallback sea true, en cuyo caso usa directamente el de
- * respaldo. El cliente ya reintenta con preferFallback=true si el
- * primer intento no vuelve con traducción (ver NewsFeed.tsx).
+ * petición por noticia. Hace UNA sola llamada por invocación — usa el
+ * modelo principal salvo que preferFallback sea true, en cuyo caso usa
+ * directamente el de respaldo.
  */
 export async function translateBatch(items: BatchTranslateItem[], preferFallback = false): Promise<BatchTranslateResult[]> {
   const apiKey = process.env.NVIDIA_API_KEY;

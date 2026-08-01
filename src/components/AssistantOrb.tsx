@@ -8,7 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { runExclusive } from "@/lib/nvidiaQueue";
+import { runExclusive } from "@/lib/apiQueue";
 
 interface Message {
   role: "user" | "assistant";
@@ -158,9 +158,8 @@ export function AssistantOrb() {
       const contextText = buildAssistantContext(currentPrefs) + (priorTopics ? `\n\n${priorTopics}` : "");
 
       // Alta prioridad: Ren pasa por la misma cola que la traducción de
-      // tarjetas y de detalle (ver nvidiaQueue.ts) para no chocar con
-      // ellas contra el límite de peticiones simultáneas de NVIDIA, pero
-      // se cuela delante de cualquier traducción de fondo que aún no
+      // tarjetas y de detalle (ver apiQueue.ts), pero se cuela delante
+      // de cualquier traducción de fondo que aún no
       // haya empezado — el usuario está esperando la respuesta ahora
       // mismo, no es una tarea de fondo.
       const callAssistant = (preferFallback: boolean) =>
@@ -226,7 +225,7 @@ export function AssistantOrb() {
                 <div className="relative">
                   <p className="font-heading text-sm font-semibold">{siteConfig.assistantName}</p>
                   <p className="text-[11px] text-muted">
-                    {loading ? "escribiendo…" : "en línea · Llama 3.1 vía NVIDIA"}
+                    {loading ? "escribiendo…" : "en línea"}
                   </p>
                 </div>
                 <button
