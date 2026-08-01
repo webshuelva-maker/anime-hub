@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { DEFAULT_PREFERENCES, getPreferences, savePreferences } from "@/lib/storage";
 import { UserPreferences } from "@/types/news";
 import { AVATAR_OPTIONS } from "@/data/options";
@@ -58,10 +59,36 @@ export function ProfileEditor() {
     setTimeout(() => setToast(null), 2000);
   };
 
+  // Antes se podía cambiar el email o la contraseña sin verificar nada —
+  // si alguien conseguía entrar en una sesión ya abierta (por ejemplo un
+  // ordenador compartido con la sesión iniciada), podía secuestrar la
+  // cuenta cambiando la contraseña sin más. Ahora las dos acciones piden
+  // primero la contraseña ACTUAL, y se comprueba de verdad volviendo a
+  // iniciar sesión con ella antes de aplicar el cambio.
+  const [currentPassword, setCurrentPassword] = useState("");
+
+  const verifyCurrentPassword = async (): Promise<boolean> => {
+    if (!currentPassword) {
+      setEmailStatus("Escribe tu contraseña actual para confirmar el cambio.");
+      setPasswordStatus("Escribe tu contraseña actual para confirmar el cambio.");
+      return false;
+    }
+    if (!account || account === "loading" || !account.email) return false;
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email: account.email, password: currentPassword });
+    if (error) {
+      setEmailStatus("Contraseña actual incorrecta.");
+      setPasswordStatus("Contraseña actual incorrecta.");
+      return false;
+    }
+    return true;
+  };
+
   const [newEmail, setNewEmail] = useState("");
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const handleChangeEmail = async () => {
     if (!newEmail.trim()) return;
+    if (!(await verifyCurrentPassword())) return;
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
     setEmailStatus(
@@ -69,6 +96,7 @@ export function ProfileEditor() {
         ? `No se pudo cambiar: ${error.message}`
         : "Te hemos mandado un enlace de confirmación a la nueva dirección — ábrelo para que se aplique el cambio."
     );
+    if (!error) setCurrentPassword("");
   };
 
   const [newPassword, setNewPassword] = useState("");
@@ -78,10 +106,14 @@ export function ProfileEditor() {
       setPasswordStatus("Mínimo 6 caracteres.");
       return;
     }
+    if (!(await verifyCurrentPassword())) return;
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setPasswordStatus(error ? `No se pudo cambiar: ${error.message}` : "Contraseña actualizada.");
-    if (!error) setNewPassword("");
+    if (!error) {
+      setNewPassword("");
+      setCurrentPassword("");
+    }
   };
 
   const isDirty = JSON.stringify(prefs) !== savedSnapshot;
@@ -240,7 +272,15 @@ export function ProfileEditor() {
       </div>
 
       <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">
-        <h2 className="font-heading text-lg font-semibold">Cuenta</h2>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-panel-soft text-ice">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" strokeLinecap="round" />
+            </svg>
+          </span>
+          <h2 className="font-heading text-lg font-semibold">Cuenta</h2>
+        </div>
         {account === "loading" && <p className="mt-2 text-sm text-muted">Comprobando…</p>}
         {account === null && (
           <>
@@ -248,12 +288,14 @@ export function ProfileEditor() {
               Todavía no has iniciado sesión — tu perfil solo se guarda en este navegador. Crea una cuenta para
               guardarlo en la nube y, más adelante, activar premium.
             </p>
-            <Link
-              href="/login"
-              className="accent-gradient mt-4 inline-block rounded-full px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
-            >
-              Iniciar sesión / Crear cuenta
-            </Link>
+            <motion.div className="mt-4 inline-block" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
+              <Link
+                href="/login"
+                className="accent-gradient inline-block rounded-full px-5 py-2 text-sm font-semibold text-white"
+              >
+                Iniciar sesión / Crear cuenta
+              </Link>
+            </motion.div>
           </>
         )}
         {account && account !== "loading" && (
@@ -263,7 +305,24 @@ export function ProfileEditor() {
               {account.isPremium ? "Premium activo" : "Plan gratuito"}
             </p>
 
-            <div className="mt-5 space-y-4 border-t border-panel-border pt-5">
+            <div className="mt-5 rounded-xl border border-panel-border bg-panel-soft/40 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="5" y="11" width="14" height="9" rx="1.5" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" strokeLinecap="round" />
+                </svg>
+                Por seguridad, confirma tu contraseña actual para cambiar el email o la contraseña
+              </div>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Tu contraseña actual"
+                className="mt-2 w-full rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+              />
+            </div>
+
+            <div className="mt-4 space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Cambiar email</label>
                 <div className="flex gap-2">
@@ -274,13 +333,16 @@ export function ProfileEditor() {
                     placeholder={account.email ?? ""}
                     className="flex-1 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
                   />
-                  <button
+                  <motion.button
                     type="button"
                     onClick={handleChangeEmail}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 22 }}
                     className="whitespace-nowrap rounded-lg border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
                   >
                     Cambiar
-                  </button>
+                  </motion.button>
                 </div>
                 {emailStatus && <p className="mt-1.5 text-xs text-muted">{emailStatus}</p>}
               </div>
@@ -295,25 +357,31 @@ export function ProfileEditor() {
                     placeholder="Nueva contraseña"
                     className="flex-1 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
                   />
-                  <button
+                  <motion.button
                     type="button"
                     onClick={handleChangePassword}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 22 }}
                     className="whitespace-nowrap rounded-lg border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
                   >
                     Cambiar
-                  </button>
+                  </motion.button>
                 </div>
                 {passwordStatus && <p className="mt-1.5 text-xs text-muted">{passwordStatus}</p>}
               </div>
             </div>
 
-            <button
+            <motion.button
               type="button"
               onClick={handleLogout}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 400, damping: 22 }}
               className="mt-5 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
             >
               Cerrar sesión
-            </button>
+            </motion.button>
           </>
         )}
       </div>
@@ -324,13 +392,16 @@ export function ProfileEditor() {
           Ren recuerda cosas de tus conversaciones (gustos, cómo prefieres que te trate) en este navegador. Puedes
           borrar esa memoria cuando quieras, sin que afecte al resto de tu perfil.
         </p>
-        <button
+        <motion.button
           type="button"
           onClick={handleClearRenMemory}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.96 }}
+          transition={{ type: "spring", stiffness: 400, damping: 22 }}
           className="mt-4 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
         >
           Borrar memoria de Ren
-        </button>
+        </motion.button>
       </div>
 
       <div className="panel-elevated relative mt-10 overflow-hidden rounded-2xl border border-ice/25 p-6">

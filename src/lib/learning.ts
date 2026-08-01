@@ -105,6 +105,24 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
   score += item.genres.filter((g) => prefs.genres.includes(g)).length * 0.5;
   score += item.studios.filter((s) => prefs.studios.includes(s)).length * 0.5;
 
+  // Popularidad (de AniList) como desempate para usuarios nuevos: si
+  // todavía no sabemos casi nada de sus gustos, se prioriza lo conocido
+  // sobre lo desconocido — así la primera impresión no es una lista de
+  // animes que nadie reconoce. En cuanto hay señales reales de afinidad
+  // (géneros/estudios reforzados con el uso, "me gusta", favoritos), su
+  // peso baja hasta casi desaparecer: lo que de verdad le gusta al
+  // usuario manda por encima de lo famoso que sea.
+  const totalAffinitySignal =
+    Object.values(prefs.genreInteractionCounts).reduce((a, b) => a + b, 0) +
+    Object.values(prefs.studioInteractionCounts).reduce((a, b) => a + b, 0) +
+    prefs.likedNewsIds.length * 3 +
+    prefs.favoriteTitles.length * 3;
+  const COLD_START_THRESHOLD = 15; // a partir de aquí, la popularidad casi no pesa ya
+  const popularityWeight = Math.max(0, 1 - totalAffinitySignal / COLD_START_THRESHOLD);
+  if (typeof item.popularity === "number" && item.popularity > 0 && popularityWeight > 0) {
+    score += Math.log10(item.popularity + 1) * popularityWeight * 1.5;
+  }
+
   return score;
 }
 

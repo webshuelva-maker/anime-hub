@@ -52,21 +52,21 @@ function tone(freq: number, duration: number, volume: number, type: OscillatorTy
 
 /** Clic suave — botones normales, cambiar de pestaña. */
 export function playClick() {
-  tone(720, 0.06, 0.05);
+  tone(720, 0.07, 0.12);
 }
 
 /** Confirmación — guardar, dar a "me gusta", completar una acción. */
 export function playSuccess() {
-  tone(600, 0.09, 0.05);
-  tone(900, 0.12, 0.045, "sine", 0.05);
+  tone(600, 0.1, 0.12);
+  tone(900, 0.14, 0.11, "sine", 0.05);
 }
 
 /** Desplegar/plegar — acordeones, "ver más", abrir el chat de Ren. */
 export function playToggle() {
-  tone(500, 0.05, 0.04);
+  tone(500, 0.06, 0.1);
 }
 
 /** Aviso suave — errores de formulario, algo que no se ha podido hacer. */
 export function playError() {
-  tone(220, 0.12, 0.045, "triangle");
+  tone(220, 0.13, 0.11, "triangle");
 }

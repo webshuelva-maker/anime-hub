@@ -7,10 +7,16 @@ query ($search: String, $type: MediaType) {
       extraLarge
       large
     }
+    popularity
   }
 }`;
 
-async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promise<string | null> {
+interface AniListMatch {
+  cover: string | null;
+  popularity: number | null;
+}
+
+async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promise<AniListMatch> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
 
@@ -25,12 +31,13 @@ async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promi
       body: JSON.stringify({ query: QUERY, variables: { search: searchText, type } }),
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { cover: null, popularity: null };
     const data = await res.json();
     const cover = data?.data?.Media?.coverImage?.extraLarge || data?.data?.Media?.coverImage?.large;
-    return cover ?? null;
+    const popularity = typeof data?.data?.Media?.popularity === "number" ? data.data.Media.popularity : null;
+    return { cover: cover ?? null, popularity };
   } catch {
-    return null;
+    return { cover: null, popularity: null };
   } finally {
     clearTimeout(timeout);
   }
@@ -41,15 +48,18 @@ async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promi
  * apps de terceros muestren carátulas oficiales) la portada real de un
  * anime o manga a partir de un texto de búsqueda. Prueba primero como
  * anime y, si no hay coincidencia (muchas noticias son de manga puro, sin
- * adaptación todavía), prueba como manga. Devuelve null si no hay
- * coincidencia en ninguno o si la API no responde a tiempo.
+ * adaptación todavía), prueba como manga. Devuelve también "popularity"
+ * (cuánta gente tiene ese título en su lista en AniList) — es la señal
+ * que se usa para priorizar animes conocidos cuando la app todavía no
+ * sabe qué le gusta al usuario (ver scoreNewsItem en learning.ts).
  */
-export async function findCoverImage(searchText: string): Promise<string | null> {
+export async function findCoverImage(searchText: string): Promise<{ coverImageUrl: string | null; popularity: number | null }> {
   const [anime, manga] = await Promise.all([
     searchAniList(searchText, "ANIME"),
     searchAniList(searchText, "MANGA"),
   ]);
-  return anime || manga;
+  const best = anime.cover ? anime : manga;
+  return { coverImageUrl: best.cover, popularity: best.popularity };
 }
 
 export interface AnimeSearchResult {

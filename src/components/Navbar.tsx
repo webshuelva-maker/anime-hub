@@ -8,6 +8,7 @@ import { getPreferences, PREFERENCES_CHANGED_EVENT } from "@/lib/storage";
 import { Avatar } from "./AvatarPicker";
 import { FullscreenButton } from "./FullscreenButton";
 import { BrandMark } from "./BrandMark";
+import { playToggle } from "@/lib/sound";
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
@@ -49,6 +50,7 @@ export function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
+                onClick={() => !active && playToggle()}
                 className={`rounded-full px-3 py-1.5 text-sm font-medium ${
                   active ? "bg-panel-soft text-foreground" : "text-muted hover:text-foreground"
                 }`}

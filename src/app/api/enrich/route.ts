@@ -16,17 +16,26 @@ export async function GET(req: NextRequest) {
   const alreadyHasImage = req.nextUrl.searchParams.get("hasImage") === "1";
 
   if (alreadyHasImage) {
-    return NextResponse.json({ coverImageUrl: null });
+    const match = await findCoverImage(guessSeriesName(relatedTitle));
+    const prominence: "mainstream" | "indie" | null = match.popularity === null ? null : match.popularity >= 20000 ? "mainstream" : "indie";
+    return NextResponse.json({ coverImageUrl: null, popularity: match.popularity, prominence });
   }
 
-  const [aniListCover, article] = await Promise.all([
+  const [aniListMatch, article] = await Promise.all([
     findCoverImage(guessSeriesName(relatedTitle)),
     fetchArticlePage(url),
   ]);
 
   // Preferimos la carátula oficial de AniList; si no hay, la propia imagen
   // de la página del artículo (og:image, casi siempre presente).
-  const coverImageUrl = aniListCover || article.image || null;
+  const coverImageUrl = aniListMatch.coverImageUrl || article.image || null;
 
-  return NextResponse.json({ coverImageUrl });
+  // "popularity" de AniList = cuánta gente tiene ese título en su lista —
+  // un proxy razonable de lo conocido que es. El corte en 20.000 es una
+  // estimación (grandes franquicias suelen estar muy por encima; series
+  // de nicho, muy por debajo) — se puede ajustar si hace falta.
+  const popularity = aniListMatch.popularity;
+  const prominence: "mainstream" | "indie" | null = popularity === null ? null : popularity >= 20000 ? "mainstream" : "indie";
+
+  return NextResponse.json({ coverImageUrl, popularity, prominence });
 }

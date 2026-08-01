@@ -45,6 +45,7 @@ export interface NewsItem {
   relatedTitle: string; // anime al que se refiere la noticia
   crossConfirmedBy?: Platform[]; // si varias fuentes confirman lo mismo
   prominence: Prominence;
+  popularity?: number; // de AniList — cuánta gente tiene el título en su lista, usado para priorizar animes conocidos con usuarios nuevos
 }
 
 export interface UserPreferences {

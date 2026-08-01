@@ -132,3 +132,16 @@ body {
      que "reducir movimiento" debería significar de verdad. */
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* El autocompletado de Chrome/Safari pinta los campos con un fondo casi
+   blanco por su cuenta (no se puede pisar con background-color a secas,
+   el navegador lo ignora) — se ve muy fuera de sitio en un tema oscuro.
+   El truco es usar box-shadow con un color enorme por dentro, que sí
+   tiene prioridad sobre el fondo nativo del autocompletado. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--foreground);
+  box-shadow: 0 0 0 1000px var(--panel-soft) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}

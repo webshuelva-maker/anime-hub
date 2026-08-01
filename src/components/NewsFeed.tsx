@@ -187,9 +187,14 @@ export function NewsFeed() {
           url: item.source.url,
           hasImage: item.coverImageUrl ? "1" : "0",
         });
-        const data: { coverImageUrl?: string | null } = await (await fetch(`/api/enrich?${params.toString()}`)).json();
-        if (data.coverImageUrl) {
-          updateItem(item.id, { coverImageUrl: data.coverImageUrl });
+        const data: { coverImageUrl?: string | null; popularity?: number | null; prominence?: "mainstream" | "indie" | null } =
+          await (await fetch(`/api/enrich?${params.toString()}`)).json();
+        const patch: Partial<NewsItem> = {};
+        if (data.coverImageUrl) patch.coverImageUrl = data.coverImageUrl;
+        if (typeof data.popularity === "number") patch.popularity = data.popularity;
+        if (data.prominence) patch.prominence = data.prominence;
+        if (Object.keys(patch).length > 0) {
+          updateItem(item.id, patch);
           pendingItemsRef.current = pendingItemsRef.current.filter((p) => p.id !== item.id);
         }
       } catch {
@@ -455,7 +460,7 @@ export function NewsFeed() {
             >
               <span className={`h-1.5 w-1.5 rounded-full ${status === "live" ? "bg-ice" : "bg-muted"}`} />
               {status === "loading" && "Conectando…"}
-              {status === "live" && (refreshing ? "Actualizando…" : "En directo")}
+              {status === "live" && (refreshing ? "Actualizando…" : "Al día")}
               {status === "offline" && "Sin conexión"}
               {status === "down" && "Feed caído"}
             </span>
