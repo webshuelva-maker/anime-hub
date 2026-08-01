@@ -1,12 +1,18 @@
 import { UserPreferences } from "@/types/news";
 import { getNewsItems } from "./newsStore";
 import { getTopAffinities } from "./learning";
+import { getRenMemory } from "./renMemory";
 
 export function buildAssistantContext(prefs: UserPreferences): string {
   const newsItems = getNewsItems();
   const lines: string[] = [];
 
   lines.push(`Nombre del usuario: ${prefs.displayName || "no lo ha dicho todavía"}`);
+
+  const memories = getRenMemory();
+  if (memories.length > 0) {
+    lines.push(`Cosas que recuerdas de conversaciones anteriores con este usuario (úsalas con naturalidad, sin repetirlas todas de golpe ni decir explícitamente "recuerdo que dijiste"):\n${memories.map((m) => `- ${m}`).join("\n")}`);
+  }
 
   const topGenres = getTopAffinities(prefs.genreInteractionCounts, 4).map((g) => g.name);
   const topStudios = getTopAffinities(prefs.studioInteractionCounts, 3).map((s) => s.name);

@@ -7,11 +7,22 @@ import { AVATAR_OPTIONS } from "@/data/options";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
 import { TagInput } from "./TagInput";
 import { Toast } from "./Toast";
+import { clearRenMemory } from "@/lib/renMemory";
+import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
+
+interface AccountProfile {
+  email: string | null;
+  isPremium: boolean;
+}
 
 export function ProfileEditor() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [savedSnapshot, setSavedSnapshot] = useState<string>(JSON.stringify(DEFAULT_PREFERENCES));
   const [saved, setSaved] = useState(false);
+  const [account, setAccount] = useState<AccountProfile | null | "loading">(() =>
+    process.env.NEXT_PUBLIC_SUPABASE_URL ? "loading" : null
+  );
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,6 +31,31 @@ export function ProfileEditor() {
     setPrefs(loaded);
     setSavedSnapshot(JSON.stringify(loaded));
   }, []);
+
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) {
+        setAccount(null);
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_premium")
+        .eq("id", data.user.id)
+        .single();
+      setAccount({ email: data.user.email ?? null, isPremium: profile?.is_premium ?? false });
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setAccount(null);
+    setToast("Sesión cerrada.");
+    setTimeout(() => setToast(null), 2000);
+  };
 
   const isDirty = JSON.stringify(prefs) !== savedSnapshot;
 
@@ -34,6 +70,12 @@ export function ProfileEditor() {
   const handlePremiumClick = () => {
     setToast("Próximamente: implementaremos los pagos en cuanto conectemos un backend real. ¡Gracias por tu paciencia!");
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleClearRenMemory = () => {
+    clearRenMemory();
+    setToast("Memoria de Ren borrada.");
+    setTimeout(() => setToast(null), 2500);
   };
 
   const currentMeaning = AVATAR_OPTIONS.find((a) => a.id === prefs.avatarId)?.meaning;
@@ -156,6 +198,55 @@ export function ProfileEditor() {
             </svg>
           )}
           {saved ? "Guardado" : isDirty ? "Guardar cambios" : "Sin cambios"}
+        </button>
+      </div>
+
+      <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">
+        <h2 className="font-heading text-lg font-semibold">Cuenta</h2>
+        {account === "loading" && <p className="mt-2 text-sm text-muted">Comprobando…</p>}
+        {account === null && (
+          <>
+            <p className="mt-1 max-w-md text-sm text-muted">
+              Todavía no has iniciado sesión — tu perfil solo se guarda en este navegador. Crea una cuenta para
+              guardarlo en la nube y, más adelante, activar premium.
+            </p>
+            <Link
+              href="/login"
+              className="accent-gradient mt-4 inline-block rounded-full px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+            >
+              Iniciar sesión / Crear cuenta
+            </Link>
+          </>
+        )}
+        {account && account !== "loading" && (
+          <>
+            <p className="mt-1 text-sm text-muted">
+              Conectado como <span className="text-foreground">{account.email}</span> ·{" "}
+              {account.isPremium ? "Premium activo" : "Plan gratuito"}
+            </p>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-4 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+            >
+              Cerrar sesión
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">
+        <h2 className="font-heading text-lg font-semibold">Privacidad</h2>
+        <p className="mt-1 max-w-md text-sm text-muted">
+          Ren recuerda cosas de tus conversaciones (gustos, cómo prefieres que te trate) en este navegador. Puedes
+          borrar esa memoria cuando quieras, sin que afecte al resto de tu perfil.
+        </p>
+        <button
+          type="button"
+          onClick={handleClearRenMemory}
+          className="mt-4 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+        >
+          Borrar memoria de Ren
         </button>
       </div>
 

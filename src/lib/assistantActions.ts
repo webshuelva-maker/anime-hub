@@ -1,14 +1,15 @@
 import { getNewsItems } from "./newsStore";
 import { getPreferences, savePreferences } from "./storage";
 import { toggleLike } from "./learning";
+import { addRenMemory } from "./renMemory";
 
 export interface AssistantAction {
-  type: "add_favorite" | "like_news";
+  type: "add_favorite" | "like_news" | "remember";
   value: string;
   result: string; // texto corto de confirmación para mostrar en el chat
 }
 
-const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news):([^\]]+)\]\]/g;
+const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|remember):([^\]]+)\]\]/g;
 
 /**
  * Separa el texto visible de las etiquetas de acción que Ren puede incluir
@@ -52,6 +53,14 @@ function runAction(type: AssistantAction["type"], value: string): string | null 
     return nowLiked
       ? `Me gusta añadido a: ${item.title}`
       : `Me gusta quitado de: ${item.title}`;
+  }
+
+  if (type === "remember") {
+    addRenMemory(value);
+    // Sin confirmación visible en el chat — recordar algo no debería
+    // interrumpir la conversación con un mensaje de sistema cada vez,
+    // se nota solo en que Ren lo tiene en cuenta más adelante.
+    return null;
   }
 
   return null;
