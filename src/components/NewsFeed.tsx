@@ -50,6 +50,15 @@ export function NewsFeed() {
   // cualquier otro caso (visita normal, refresco silencioso cada 15 min)
   // no se muestra — eso ya lo cubre el aviso pequeño "Actualizando…".
   const [showInitialLoader, setShowInitialLoader] = useState(() => getNewsItems().length === 0);
+  // Estable (no cambia con el tiempo, a diferencia de showInitialLoader):
+  // si esta carga era de verdad la primera visita, para poder exigir un
+  // mínimo de permanencia SOLO en ese caso (ver más abajo) — en cargas
+  // normales o refrescos silenciosos no debe añadir ningún retraso.
+  const isFirstEverLoadRef = useRef(getNewsItems().length === 0);
+  const loaderShownAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    loaderShownAtRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
     if (!showInitialLoader) return;
@@ -262,9 +271,18 @@ export function NewsFeed() {
           await new Promise((r) => setTimeout(r, 2500));
         }
       }
-      // La pantalla de carga inicial (si estaba activa) ya puede cerrarse
-      // — no hace falta esperar a nada más, esto siempre es un no-op
-      // inofensivo si ya estaba cerrada.
+      // La pantalla de carga inicial (si estaba activa) ya puede
+      // cerrarse — pero con un mínimo de permanencia: si la traducción
+      // fue rapidísima (puede pasar, sobre todo ahora con el control de
+      // presupuesto), cerrarla al instante corta el círculo a mitad de
+      // vuelta y no da tiempo a ver ni una curiosidad — se percibe como
+      // "va rapidísimo" aunque la animación en sí esté bien puesta. 4s es
+      // más que una vuelta completa del círculo (dura 3s).
+      const MIN_LOADER_MS = 4000;
+      const elapsed = loaderShownAtRef.current !== null ? Date.now() - loaderShownAtRef.current : MIN_LOADER_MS;
+      if (isFirstEverLoadRef.current && elapsed < MIN_LOADER_MS) {
+        await new Promise((r) => setTimeout(r, MIN_LOADER_MS - elapsed));
+      }
       setShowInitialLoader(false);
     })();
   };

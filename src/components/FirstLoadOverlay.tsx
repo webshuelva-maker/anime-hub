@@ -7,6 +7,26 @@ import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQue
 
 const ROTATE_MS = 4500;
 const REFILL_THRESHOLD = 5;
+const SHOWN_KEY = "anime-hub:trivia-shown";
+const MAX_SHOWN_REMEMBERED = 150; // no hace falta guardar un historial infinito
+
+function loadShownFacts(): string[] {
+  try {
+    const raw = localStorage.getItem(SHOWN_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveShownFacts(facts: string[]) {
+  try {
+    localStorage.setItem(SHOWN_KEY, JSON.stringify(facts.slice(-MAX_SHOWN_REMEMBERED)));
+  } catch {
+    // localStorage lleno o no disponible — no pasa nada, solo se pierde la deduplicación entre sesiones
+  }
+}
 
 const FALLBACK_FACTS = [
   "El anime más largo en emisión continua lleva más de 900 episodios.",
@@ -65,6 +85,7 @@ export function FirstLoadOverlay() {
   };
 
   useEffect(() => {
+    shownRef.current = loadShownFacts();
     fetchBatch();
   }, []);
 
@@ -77,7 +98,10 @@ export function FirstLoadOverlay() {
 
   useEffect(() => {
     const current = facts[index];
-    if (current && !shownRef.current.includes(current)) shownRef.current.push(current);
+    if (current && !shownRef.current.includes(current)) {
+      shownRef.current.push(current);
+      saveShownFacts(shownRef.current);
+    }
     const remaining = facts.length - index;
     if (remaining <= REFILL_THRESHOLD) fetchBatch();
     // eslint-disable-next-line react-hooks/exhaustive-deps

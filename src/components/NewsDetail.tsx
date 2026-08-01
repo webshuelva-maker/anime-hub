@@ -75,15 +75,22 @@ export function NewsDetail({
         }
 
         // Cada invocación de /api/translate-detail hace como mucho UNA
-        // llamada a Groq. Si el
-        // primer intento no vuelve con traducción, este segundo intento
-        // usa el modelo de RESPALDO antes de rendirse.
+        // llamada a Groq. Hasta 3 intentos automáticos (modelo principal,
+        // luego respaldo, luego principal otra vez con más margen) antes
+        // de pedirle al usuario que reintente a mano — reduce cuántas
+        // veces hace falta tocar el botón "Reintentar".
         let translated = await callTranslateDetail(data.articleText, false);
         if (cancelled) return;
         if (!translated.body) {
           await new Promise((r) => setTimeout(r, 1500));
           if (cancelled) return;
           translated = await callTranslateDetail(data.articleText, true);
+          if (cancelled) return;
+        }
+        if (!translated.body) {
+          await new Promise((r) => setTimeout(r, 3000));
+          if (cancelled) return;
+          translated = await callTranslateDetail(data.articleText, false);
           if (cancelled) return;
         }
 
@@ -204,18 +211,6 @@ export function NewsDetail({
 
                 <p className="font-heading mt-3 text-sm text-muted">{item.relatedTitle}</p>
 
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={shownBody}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4 }}
-                    className="mt-6 whitespace-pre-line text-[15px] leading-relaxed text-foreground/90"
-                  >
-                    {shownBody}
-                  </motion.p>
-                </AnimatePresence>
-
                 {translatingBody && !body && (
                   <p className="mt-3 text-xs text-muted">Traduciendo el artículo…</p>
                 )}
@@ -235,6 +230,18 @@ export function NewsDetail({
                     </button>
                   </p>
                 )}
+
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={shownBody}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                    className="mt-6 whitespace-pre-line text-[15px] leading-relaxed text-foreground/90"
+                  >
+                    {shownBody}
+                  </motion.p>
+                </AnimatePresence>
 
                 <div className="rule-line my-6" />
 
