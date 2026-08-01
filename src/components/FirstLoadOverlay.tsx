@@ -112,7 +112,36 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 
-  const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  // Contador animado de verdad: sube entero a entero (0,1,2,3...) hacia
+  // el objetivo con requestAnimationFrame, en vez de depender solo de la
+  // transición CSS de framer-motion — así se ve avanzar dígito a dígito
+  // sin importar lo grande que sea el salto entre un dato real y el
+  // siguiente (por ejemplo, de 33% a 67% de golpe).
+  const target = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  const [displayPct, setDisplayPct] = useState(0);
+  const displayPctRef = useRef(0);
+
+  useEffect(() => {
+    if (target === displayPctRef.current) return;
+    const startVal = displayPctRef.current;
+    const startTime = performance.now();
+    // Cuanto más grande el salto, un pelín más de tiempo — pero siempre
+    // se ve contar, nunca saltar de golpe.
+    const duration = 900 + Math.abs(target - startVal) * 25;
+    let raf: number;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cúbico
+      const value = Math.round(startVal + (target - startVal) * eased);
+      displayPctRef.current = value;
+      setDisplayPct(value);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+
+  const pct = displayPct;
 
   return (
     <motion.div
@@ -157,10 +186,9 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
       </motion.p>
 
       {/* Barra de progreso real, crece desde el centro hacia los lados.
-          Transición larga (2.2s) a propósito: si se anima rápido y luego
-          se queda quieta esperando el siguiente dato, se percibe como
-          "salta y para" — con una transición larga, se la ve avanzando
-          poco a poco de forma continua durante todo ese hueco. */}
+          El ancho sigue a "pct" (el contador animado de arriba, no el
+          dato en crudo) — así avanza número a número de forma continua
+          en vez de saltar directamente al siguiente valor real. */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -170,9 +198,7 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
       >
         <motion.div
           className="absolute inset-y-0 left-1/2 rounded-full"
-          style={{ background: "linear-gradient(90deg, var(--accent-from), var(--ice))", x: "-50%" }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 2.2, ease: "easeOut" }}
+          style={{ background: "linear-gradient(90deg, var(--accent-from), var(--ice))", x: "-50%", width: `${pct}%` }}
         />
       </motion.div>
       <p className="mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
@@ -181,10 +207,10 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
         <AnimatePresence mode="wait">
           <motion.p
             key={index}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.4 }}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.02 }}
+            transition={{ duration: 0.6, ease: "easeInOut" }}
             className="text-[15px] leading-relaxed text-foreground/85"
           >
             {facts[index] ?? ""}

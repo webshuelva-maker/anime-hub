@@ -180,7 +180,7 @@ export function AssistantOrb() {
           }).then((r) => r.json());
           recordTokenUsage(estimatedTokens);
           return result;
-        }, "high") as Promise<{ reply?: string; error?: string }>;
+        }, "high") as Promise<{ reply?: string; error?: string; debug?: string }>;
 
       let data = await callAssistant(false);
       // Si el primer intento no trae respuesta útil (falló la llamada a
@@ -191,7 +191,10 @@ export function AssistantOrb() {
         data = await callAssistant(true);
       }
 
-      const rawReply: string = data.reply || data.error || "No he podido responder.";
+      // Temporal, para poder ver por fin el motivo real sin mirar los
+      // logs de Vercel — quitar esta línea cuando Ren vaya fino.
+      const debugSuffix = !data.reply && data.debug ? `\n\n(detalle técnico: ${data.debug})` : "";
+      const rawReply: string = (data.reply || data.error || "No he podido responder.") + debugSuffix;
       const { cleanText, actions } = parseAndRunActions(rawReply);
       const assistantMessage: Message = { role: "assistant", content: cleanText || rawReply, actions, ts: Date.now() };
       setMessages((prev) => [...prev, assistantMessage]);

@@ -18,7 +18,7 @@ async function callModel(
   model: string,
   systemPrompt: string,
   messages: ChatMessage[]
-): Promise<{ ok: true; reply: string } | { ok: false }> {
+): Promise<{ ok: true; reply: string } | { ok: false; debug: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
 
@@ -37,8 +37,9 @@ async function callModel(
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => "");
-      console.error(`[assistant] Groq respondió ${response.status}: ${errBody.slice(0, 200)}`);
-      return { ok: false };
+      const debug = `Groq respondió ${response.status}: ${errBody.slice(0, 300)}`;
+      console.error(`[assistant] ${debug}`);
+      return { ok: false, debug };
     }
 
     const data = await response.json();
@@ -46,8 +47,9 @@ async function callModel(
     return { ok: true, reply };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error(`[assistant] excepción: ${message}`);
-    return { ok: false };
+    const debug = `excepción: ${message}`;
+    console.error(`[assistant] ${debug}`);
+    return { ok: false, debug };
   } finally {
     clearTimeout(timeout);
   }
@@ -99,10 +101,13 @@ ${context}`;
   const attempt = await callModel(apiKey, model, systemPrompt, messages);
 
   if (!attempt.ok) {
-    // Nunca se enseña el error en crudo al usuario — solo un mensaje
-    // natural, como si el propio Ren estuviera avisando de la tardanza.
+    // Nunca se enseña el error en crudo al usuario en el mensaje
+    // principal — pero de momento SÍ va en "debug" para poder ver por
+    // fin el motivo real sin tener que mirar los logs de Vercel. Quitar
+    // este campo cuando Ren vaya fino de forma consistente.
     return NextResponse.json({
       reply: "Los servidores están más llenos de lo normal ahora mismo y no consigo responder. Prueba otra vez en un momento.",
+      debug: attempt.debug,
     });
   }
 
