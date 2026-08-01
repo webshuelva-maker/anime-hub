@@ -16,7 +16,7 @@ import { getNewsItems, setNewsItems } from "@/lib/newsStore";
 import { SearchBar } from "./SearchBar";
 import { AnimeSearchResult } from "@/lib/anilist";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
-import { runExclusive, waitWhileBackgroundPaused } from "@/lib/apiQueue";
+import { runExclusive, waitWhileBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -179,6 +179,11 @@ export function NewsFeed() {
       preferFallback: boolean
     ): Promise<Map<string, { title?: string; summary?: string }>> =>
       runExclusive(async () => {
+        // Estimación aproximada (prompt del sistema + contenido +
+        // respuesta) — no exacta, pero suficiente para no lanzar la
+        // petición a ciegas cuando el presupuesto ya está casi agotado.
+        const estimatedTokens = 300 + items.length * 200;
+        await waitForTokenBudget(estimatedTokens);
         try {
           const res = await fetch("/api/translate-batch", {
             method: "POST",
@@ -189,8 +194,10 @@ export function NewsFeed() {
             }),
           });
           const data: { results?: { id: string; title?: string; summary?: string }[] } = await res.json();
+          recordTokenUsage(estimatedTokens);
           return new Map((data.results ?? []).map((r) => [r.id, r]));
         } catch {
+          recordTokenUsage(estimatedTokens);
           return new Map();
         }
       }, "normal");
@@ -589,8 +596,8 @@ export function NewsFeed() {
                     <p className="font-heading truncate text-sm font-medium text-foreground">
                       {item.title}
                     </p>
-                    <p className="mt-1 text-xs text-muted">
-                      {item.relatedTitle} · {formatRelativeDate(item.publishedAt)}
+                    <p className="mt-1 line-clamp-1 text-xs text-muted">
+                      {item.summary || item.relatedTitle} · {formatRelativeDate(item.publishedAt)}
                     </p>
                   </div>
                 </motion.button>

@@ -8,7 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { runExclusive, setBackgroundPaused } from "@/lib/apiQueue";
+import { runExclusive, setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 interface Message {
   role: "user" | "assistant";
@@ -170,15 +170,17 @@ export function AssistantOrb() {
       // haya empezado — el usuario está esperando la respuesta ahora
       // mismo, no es una tarea de fondo.
       const callAssistant = (preferFallback: boolean) =>
-        runExclusive(
-          () =>
-            fetch("/api/assistant", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ messages: nextMessages, context: contextText, preferFallback }),
-            }).then((r) => r.json()),
-          "high"
-        ) as Promise<{ reply?: string; error?: string }>;
+        runExclusive(async () => {
+          const estimatedTokens = 500 + nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
+          await waitForTokenBudget(estimatedTokens);
+          const result = await fetch("/api/assistant", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: nextMessages, context: contextText, preferFallback }),
+          }).then((r) => r.json());
+          recordTokenUsage(estimatedTokens);
+          return result;
+        }, "high") as Promise<{ reply?: string; error?: string }>;
 
       let data = await callAssistant(false);
       // Si el primer intento no trae respuesta útil (falló la llamada a

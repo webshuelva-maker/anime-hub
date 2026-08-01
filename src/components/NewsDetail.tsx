@@ -9,7 +9,7 @@ import { PlatformBadge } from "./PlatformBadge";
 import { formatRelativeDate } from "@/lib/date";
 import { recordNewsInteraction } from "@/lib/learning";
 import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCache";
-import { runExclusive } from "@/lib/apiQueue";
+import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 export function NewsDetail({
   item,
@@ -52,15 +52,17 @@ export function NewsDetail({
     setTranslatingBody(true);
 
     const callTranslateDetail = (articleText: string | null | undefined, preferFallback: boolean) =>
-      runExclusive(
-        () =>
-          fetch("/api/translate-detail", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
-          }).then((res) => res.json()),
-        "high"
-      ) as Promise<{ title?: string | null; body?: string | null }>;
+      runExclusive(async () => {
+        const estimatedTokens = 400 + (articleText?.length ?? 0) / 3; // artículo completo, más caro que un lote de tarjetas
+        await waitForTokenBudget(estimatedTokens);
+        const result = await fetch("/api/translate-detail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: targetItem.title, summary: targetItem.summary, articleText, preferFallback }),
+        }).then((res) => res.json());
+        recordTokenUsage(estimatedTokens);
+        return result;
+      }, "high") as Promise<{ title?: string | null; body?: string | null }>;
 
     const params = new URLSearchParams({ url: targetItem.source.url });
     fetch(`/api/enrich-detail?${params.toString()}`)

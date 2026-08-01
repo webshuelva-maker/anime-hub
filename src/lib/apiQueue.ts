@@ -72,3 +72,33 @@ export function waitWhileBackgroundPaused(): Promise<void> {
     check();
   });
 }
+
+// Control de presupuesto de tokens/minuto: en vez de pausas fijas "a
+// ciegas" entre peticiones, se lleva un registro de cuánto se ha
+// consumido (estimado) en los últimos 60s, y antes de cada llamada se
+// espera lo justo para no pasarse de un límite prudente. El límite real
+// del plan gratuito de Groq no está documentado con precisión (varía
+// según fuentes entre 6.000 y 30.000 tokens/minuto) — 5.500 es un valor
+// conservador para no agotarlo aunque el real sea el más bajo.
+const SAFE_TPM_BUDGET = 5500;
+const tokenLog: { time: number; tokens: number }[] = [];
+
+function pruneOldUsage() {
+  const cutoff = Date.now() - 60_000;
+  while (tokenLog.length && tokenLog[0].time < cutoff) tokenLog.shift();
+}
+
+function currentUsage(): number {
+  pruneOldUsage();
+  return tokenLog.reduce((sum, e) => sum + e.tokens, 0);
+}
+
+export function recordTokenUsage(estimatedTokens: number) {
+  tokenLog.push({ time: Date.now(), tokens: estimatedTokens });
+}
+
+export async function waitForTokenBudget(estimatedTokens: number): Promise<void> {
+  while (currentUsage() + estimatedTokens > SAFE_TPM_BUDGET) {
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { getPreferences } from "@/lib/storage";
+import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 const ROTATE_MS = 4500;
 const REFILL_THRESHOLD = 5;
@@ -32,16 +33,22 @@ export function FirstLoadOverlay() {
     fetchingRef.current = true;
     try {
       const prefs = getPreferences();
-      const res = await fetch("/api/trivia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          exclude: shownRef.current,
-          genres: prefs.genres,
-          favoriteTitles: prefs.favoriteTitles,
-        }),
-      });
-      const data: { facts?: string[] } = await res.json();
+      const estimatedTokens = 1000;
+      const data: { facts?: string[] } = await runExclusive(async () => {
+        await waitForTokenBudget(estimatedTokens);
+        const res = await fetch("/api/trivia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            exclude: shownRef.current,
+            genres: prefs.genres,
+            favoriteTitles: prefs.favoriteTitles,
+          }),
+        });
+        const json = await res.json();
+        recordTokenUsage(estimatedTokens);
+        return json;
+      }, "normal");
       if (data.facts && data.facts.length > 0) {
         setFacts((prev) => {
           // La primera vez se descartan los fallback estáticos en cuanto
@@ -89,7 +96,7 @@ export function FirstLoadOverlay() {
         style={{
           border: "3px solid rgba(255,255,255,0.15)",
           borderTopColor: "rgba(255,255,255,0.8)",
-          animation: "spin 1.1s linear infinite",
+          animation: "spin 3s linear infinite",
         }}
       />
 
