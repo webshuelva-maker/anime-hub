@@ -190,6 +190,22 @@ export function FirstLoadOverlay({
 
   const pct = Math.round(displayPct);
 
+  // Foco de luz que sigue al ratón — se mueve directamente el estilo del
+  // div vía ref (sin pasar por estado de React) para que vaya fino a
+  // 60fps sin generar un render por cada movimiento del ratón.
+  const mouseLightRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (mouseLightRef.current) {
+        mouseLightRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px) translate(-50%, -50%)`;
+      }
+    };
+    window.addEventListener("mousemove", handleMove);
+    return () => window.removeEventListener("mousemove", handleMove);
+  }, []);
+
+  const [skipHovered, setSkipHovered] = useState(false);
+
   return (
     <motion.div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6 text-center"
@@ -213,6 +229,14 @@ export function FirstLoadOverlay({
         style={{ background: "radial-gradient(circle, var(--accent-from) 0%, transparent 70%)", filter: "blur(60px)" }}
         animate={{ opacity: [0.06, 0.18, 0.06], x: [0, -25, 15, 0], y: [0, 20, -15, 0] }}
         transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+      />
+      {/* Foco de luz que sigue al ratón — solo en pantallas con puntero
+          real (en móvil no hay ratón que seguir, así que no molesta). */}
+      <div
+        ref={mouseLightRef}
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 hidden h-96 w-96 rounded-full sm:block"
+        style={{ background: "radial-gradient(circle, var(--platinum) 0%, transparent 65%)", filter: "blur(80px)", opacity: 0.1 }}
       />
 
       <motion.p
@@ -268,25 +292,44 @@ export function FirstLoadOverlay({
       {/* Botón de omitir: aparece una vez hay avance real de sobra (35%)
           — para entonces lo esencial ya suele estar listo. Deja entrar
           ya, con lo que haya; seguir esperando trae más noticias
-          traducidas y personalizadas de una sentada. */}
+          traducidas y personalizadas de una sentada. La explicación solo
+          aparece al pasar el ratón, como una etiqueta flotante — así no
+          hay texto pequeño permanente compitiendo con el resto. */}
       <AnimatePresence>
         {pct >= 35 && (
-          <motion.button
-            type="button"
-            onClick={onComplete}
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="absolute bottom-6 right-6 flex flex-col items-end gap-1"
+            className="absolute bottom-6 right-6 flex flex-col items-end gap-2"
+            onMouseEnter={() => setSkipHovered(true)}
+            onMouseLeave={() => setSkipHovered(false)}
           >
-            <span className="rounded-full border border-panel-border bg-panel px-4 py-2 text-xs font-medium text-foreground/90 transition-colors hover:border-ice/40 hover:text-foreground">
+            <AnimatePresence>
+              {skipHovered && (
+                <motion.span
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.25 }}
+                  className="max-w-[190px] rounded-lg border border-panel-border bg-panel px-3 py-2 text-right text-[11px] leading-snug text-muted shadow-lg"
+                >
+                  Esperar un poco más trae más noticias ya traducidas y personalizadas
+                </motion.span>
+              )}
+            </AnimatePresence>
+            <motion.button
+              type="button"
+              onClick={onComplete}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="rounded-full border border-panel-border bg-panel px-4 py-2 text-xs font-medium text-foreground/90 hover:border-ice/40 hover:text-foreground"
+            >
               Omitir →
-            </span>
-            <span className="max-w-[180px] text-right text-[10px] leading-tight text-muted">
-              Esperar un poco más trae más noticias ya traducidas
-            </span>
-          </motion.button>
+            </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
