@@ -73,7 +73,7 @@ export function NewsDetail({
         }
 
         // Cada invocación de /api/translate-detail hace como mucho UNA
-        // llamada a NVIDIA. Si el
+        // llamada a Groq. Si el
         // primer intento no vuelve con traducción, este segundo intento
         // usa el modelo de RESPALDO antes de rendirse.
         let translated = await callTranslateDetail(data.articleText, false);

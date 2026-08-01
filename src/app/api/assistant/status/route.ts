@@ -2,37 +2,36 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = "llama-3.3-70b-versatile";
 
 export async function GET() {
   try {
-    const key = process.env.NVIDIA_API_KEY ?? "";
-    const model = process.env.NVIDIA_MODEL || "meta/llama-3.1-70b-instruct";
+    const key = process.env.GROQ_API_KEY ?? "";
 
     const base = {
       hasKey: key.length > 0,
       keyLength: key.length,
-      startsCorrectly: key.startsWith("nvapi-"),
+      startsCorrectly: key.startsWith("gsk_"),
       keyPreview: key ? `${key.slice(0, 6)}...${key.slice(-4)}` : null,
-      model,
-      modelSource: process.env.NVIDIA_MODEL ? "NVIDIA_MODEL configurada" : "por defecto (NVIDIA_MODEL no está puesta)",
+      model: MODEL,
     };
 
     if (!key) {
       return NextResponse.json({ ...base, liveTest: "sin clave, no se ha probado" });
     }
 
-    // Prueba real: una llamada mínima de verdad contra NVIDIA, no solo mirar
+    // Prueba real: una llamada mínima de verdad contra Groq, no solo mirar
     // si la clave tiene la forma correcta.
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
     try {
-      const res = await fetch(NVIDIA_URL, {
+      const res = await fetch(GROQ_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         signal: controller.signal,
         body: JSON.stringify({
-          model,
+          model: MODEL,
           messages: [{ role: "user", content: "hola" }],
           max_tokens: 5,
         }),
@@ -42,35 +41,32 @@ export async function GET() {
         const errBody = await res.text().catch(() => "");
         return NextResponse.json({
           ...base,
-          liveTest: `FALLA — NVIDIA respondió ${res.status}: ${errBody.slice(0, 300)}`,
+          liveTest: `FALLA — Groq respondió ${res.status}: ${errBody.slice(0, 300)}`,
         });
       }
 
       clearTimeout(timeout);
 
       // Segunda prueba, más realista: el mismo tipo de petición que hace
-      // /api/translate-batch de verdad (system prompt + pedir JSON), no
-      // solo un "hola" suelto — la petición mínima puede ir bien y la
-      // real seguir fallando (por ejemplo si el modelo no devuelve el
-      // JSON en el formato pedido, o si peticiones más grandes/caras se
-      // rechazan aunque las pequeñas pasen).
+      // /api/translate-batch de verdad (system prompt + pedir JSON).
       const batchController = new AbortController();
       const batchTimeout = setTimeout(() => batchController.abort(), 9000);
       try {
         const sampleItems = [{ id: "prueba-1", title: "Demon Slayer Season 5 Announced", summary: "The studio confirmed a new season is in production." }];
-        const batchRes = await fetch(NVIDIA_URL, {
+        const batchRes = await fetch(GROQ_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
           signal: batchController.signal,
           body: JSON.stringify({
-            model,
+            model: MODEL,
             temperature: 0.2,
             max_tokens: 2200,
+            response_format: { type: "json_object" },
             messages: [
               {
                 role: "system",
                 content:
-                  'Traduces titulares y resúmenes de noticias de anime del inglés al español de España. Los títulos de anime NUNCA se traducen. Te llega un array JSON con noticias (id, title, summary). Devuelve ÚNICAMENTE un array JSON con la misma estructura, con "title" y "summary" traducidos. Sin texto antes ni después.',
+                  'Traduces titulares y resúmenes de noticias de anime del inglés al español de España. Los títulos de anime NUNCA se traducen. Te llega un array JSON con noticias (id, title, summary). Devuelve {"items": [...]} con la misma estructura, con "title" y "summary" traducidos.',
               },
               { role: "user", content: JSON.stringify(sampleItems) },
             ],
@@ -82,16 +78,24 @@ export async function GET() {
           return NextResponse.json({
             ...base,
             liveTest: "ok — la clave funciona para peticiones pequeñas",
-            batchTest: `FALLA — NVIDIA respondió ${batchRes.status} en la prueba realista: ${errBody.slice(0, 400)}`,
+            batchTest: `FALLA — Groq respondió ${batchRes.status} en la prueba realista: ${errBody.slice(0, 400)}`,
           });
         }
 
         const batchData = await batchRes.json();
         const rawContent: string = batchData?.choices?.[0]?.message?.content ?? "";
         const cleaned = rawContent.replace(/```json/gi, "").replace(/```/g, "").trim();
-        const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
 
-        if (!jsonMatch) {
+        let items: unknown = null;
+        try {
+          const parsedObj = JSON.parse(cleaned);
+          items = Array.isArray(parsedObj) ? parsedObj : parsedObj?.items;
+        } catch {
+          const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+          if (jsonMatch) items = JSON.parse(jsonMatch[0]);
+        }
+
+        if (!Array.isArray(items)) {
           return NextResponse.json({
             ...base,
             liveTest: "ok — la clave funciona para peticiones pequeñas",
@@ -102,7 +106,7 @@ export async function GET() {
         return NextResponse.json({
           ...base,
           liveTest: "ok — la clave funciona para peticiones pequeñas",
-          batchTest: `ok — la traducción real también funciona. Ejemplo devuelto: ${jsonMatch[0].slice(0, 300)}`,
+          batchTest: `ok — la traducción real también funciona. Ejemplo devuelto: ${JSON.stringify(items).slice(0, 300)}`,
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);

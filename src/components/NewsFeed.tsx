@@ -39,7 +39,7 @@ export function NewsFeed() {
   // 15 min, y al volver a la pestaña) y podían solaparse: si dos
   // llamadas arrancaban casi a la vez, las dos lanzaban su propio
   // "primer lote" de 3 noticias en el mismo instante, duplicando
-  // peticiones a NVIDIA justo para esas primeras tarjetas — por eso eran
+  // peticiones a Groq justo para esas primeras tarjetas — por eso eran
   // las que peor iban. Este set evita que una noticia ya en traducción
   // se vuelva a encolar hasta que termine.
   const translatingLockRef = useRef<Set<string>>(new Set());
@@ -128,14 +128,14 @@ export function NewsFeed() {
     // Traducción por MINI-LOTES: en vez de un único lote grande (que hace
     // esperar a que TODO termine antes de ver nada), se divide en grupos
     // pequeños — así las primeras tarjetas se actualizan enseguida y el
-    // resto va llegando con progreso visible. Cada llamada a NVIDIA pasa
+    // resto va llegando con progreso visible. Cada llamada a Groq pasa
     // por runExclusive (ver apiQueue.ts) y los lotes se
     // procesan EN SERIE (uno espera a que el anterior termine de verdad,
     // nada de "esperar 1s y lanzar el siguiente igualmente"): lanzarlos
     // en paralelo con un simple retraso fijo es lo que hacía que solo el
     // primer lote (el único sin contienda) llegara a traducirse, y todos
     // los demás chocaran entre sí contra un límite de concurrencia de la
-    // clave de NVIDIA — de ahí la cola en serie (ver apiQueue.ts).
+    // clave de Groq — de ahí la cola en serie (ver apiQueue.ts).
     const CHUNK_SIZE = 3;
 
     const callTranslateBatch = (
@@ -172,7 +172,7 @@ export function NewsFeed() {
 
       let pending = stillNeeded;
       // Hasta 2 intentos por lote: cada invocación de /api/translate-batch
-      // hace como mucho UNA llamada a NVIDIA. Si el primer
+      // hace como mucho UNA llamada a Groq. Si el primer
       // intento falla, este segundo intento usa el modelo de RESPALDO
       // (preferFallback), no el mismo que ya falló — antes un solo fallo
       // dejaba esas noticias sin traducir para siempre en esa sesión.
@@ -204,7 +204,7 @@ export function NewsFeed() {
       for (let i = 0; i < needTranslation.length; i += CHUNK_SIZE) {
         const chunk = needTranslation.slice(i, i + CHUNK_SIZE);
         // Se espera a que termine cada lote (incluido su reintento) antes
-        // de pasar al siguiente — así solo hay una petición a NVIDIA en
+        // de pasar al siguiente — así solo hay una petición a Groq en
         // vuelo a la vez desde toda la app (esto también sirve de cola
         // compartida con la traducción del detalle, ver NewsDetail.tsx).
         await translateChunk(chunk);

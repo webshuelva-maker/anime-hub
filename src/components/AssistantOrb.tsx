@@ -175,7 +175,7 @@ export function AssistantOrb() {
 
       let data = await callAssistant(false);
       // Si el primer intento no trae respuesta útil (falló la llamada a
-      // NVIDIA), un segundo intento con el modelo de respaldo antes de
+      // Groq), un segundo intento con el modelo de respaldo antes de
       // rendirse — antes un solo fallo ya mostraba "se ha cortado".
       if (!data.reply) {
         data = await callAssistant(true);

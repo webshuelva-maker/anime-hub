@@ -1,11 +1,11 @@
-// Todo lo que llama a la API de NVIDIA (traducción de tarjetas,
+// Todo lo que llama a la API de Groq (traducción de tarjetas,
 // traducción de detalle, Y el asistente Ren) pasa por AQUÍ para que el
 // navegador nunca tenga más de UNA petición en vuelo a la vez.
 //
 // Motivo: el síntoma reportado (solo el primer lote de tarjetas se
 // traduce, el detalle se queda "traduciendo..." sin fin, y Ren se corta
 // con "los servidores están más llenos de lo normal") encaja con un
-// límite de CONCURRENCIA por clave de API en el tier gratuito de NVIDIA
+// límite de CONCURRENCIA por clave de API en el tier gratuito de Groq
 // — probablemente 1 sola petición en vuelo a la vez para toda la clave,
 // compartida por los tres consumidores (tarjetas, detalle y Ren).
 type Priority = "high" | "normal";

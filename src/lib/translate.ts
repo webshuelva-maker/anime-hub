@@ -1,13 +1,18 @@
-const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export interface TranslationOutcome {
   result: { title: string; summary: string; body: string } | null;
   debug: string;
 }
 
-// Si el modelo configurado está saturado, se prueba con este como plan B
-// — no siempre coinciden los picos de tráfico entre modelos distintos.
-const FALLBACK_MODEL = "meta/llama-3.1-70b-instruct";
+// Groq usa un formato de API compatible con OpenAI (igual que NVIDIA),
+// así que la forma de llamar es casi idéntica — solo cambia la URL, la
+// clave y los nombres de los modelos. Groq está construido con hardware
+// propio (LPU) pensado específicamente para respuestas rápidas, que es
+// justo lo que faltaba con el tier gratuito de NVIDIA.
+const PRIMARY_MODEL = "llama-3.3-70b-versatile";
+// Modelo más pequeño y rápido para el segundo intento si el principal falla.
+const FALLBACK_MODEL = "llama-3.1-8b-instant";
 
 async function callOnce(
   title: string,
@@ -18,15 +23,10 @@ async function callOnce(
   maxTokens: number
 ): Promise<{ ok: true; text: string } | { ok: false; debug: string }> {
   const controller = new AbortController();
-  // Confirmado: plan gratuito de Netlify → límite duro de 10s por
-  // función. Cada invocación hace como mucho UNA llamada a NVIDIA (8s de
-  // margen dentro de esos 10s) — el reintento con el modelo de respaldo
-  // lo dispara el propio cliente con una segunda petición HTTP aparte,
-  // pasando preferFallback=true (ver /api/translate-detail y NewsDetail.tsx).
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const res = await fetch(NVIDIA_URL, {
+    const res = await fetch(GROQ_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
@@ -47,7 +47,7 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      const debug = `NVIDIA respondió ${res.status}: ${errBody.slice(0, 200)}`;
+      const debug = `Groq respondió ${res.status}: ${errBody.slice(0, 200)}`;
       console.error(`[translate-detail] ${debug}`);
       return { ok: false, debug };
     }
@@ -65,12 +65,9 @@ async function callOnce(
 }
 
 /**
- * Traduce título + resumen + cuerpo de una noticia al español. Hace UNA
- * sola llamada a NVIDIA por invocación — usa el modelo principal salvo
- * que preferFallback sea true, en cuyo caso usa directamente el de
- * respaldo. Quien llama a esta función decide cuándo pasar
- * preferFallback=true (normalmente en un segundo intento, con una
- * petición HTTP nueva, después de que el primero fallara).
+ * Traduce título + resumen + cuerpo de una noticia al español con Groq.
+ * Usa el modelo principal salvo que preferFallback sea true, en cuyo
+ * caso usa directamente el de respaldo (más pequeño y rápido).
  */
 export async function translateNewsFields(
   title: string,
@@ -79,12 +76,10 @@ export async function translateNewsFields(
   maxTokens = 2000,
   preferFallback = false
 ): Promise<TranslationOutcome> {
-  const apiKey = process.env.NVIDIA_API_KEY;
-  if (!apiKey) return { result: null, debug: "sin NVIDIA_API_KEY configurada" };
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return { result: null, debug: "sin GROQ_API_KEY configurada" };
 
-  const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
-  const model = preferFallback && primaryModel !== FALLBACK_MODEL ? FALLBACK_MODEL : primaryModel;
-
+  const model = preferFallback ? FALLBACK_MODEL : PRIMARY_MODEL;
   const attempt = await callOnce(title, summary, body, apiKey, model, maxTokens);
 
   if (!attempt.ok) {

@@ -8,8 +8,9 @@ interface ChatMessage {
   content: string;
 }
 
-const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const FALLBACK_MODEL = "meta/llama-3.1-70b-instruct";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const PRIMARY_MODEL = "llama-3.3-70b-versatile";
+const FALLBACK_MODEL = "llama-3.1-8b-instant";
 
 async function callModel(
   apiKey: string,
@@ -18,12 +19,10 @@ async function callModel(
   messages: ChatMessage[]
 ): Promise<{ ok: true; reply: string } | { ok: false }> {
   const controller = new AbortController();
-  // Plan gratuito de Netlify → 10s duros por función. UNA sola llamada
-  // a NVIDIA por invocación, 8s de margen.
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const response = await fetch(NVIDIA_URL, {
+    const response = await fetch(GROQ_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
@@ -37,7 +36,7 @@ async function callModel(
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => "");
-      console.error(`[assistant] NVIDIA respondió ${response.status}: ${errBody.slice(0, 200)}`);
+      console.error(`[assistant] Groq respondió ${response.status}: ${errBody.slice(0, 200)}`);
       return { ok: false };
     }
 
@@ -54,13 +53,13 @@ async function callModel(
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.NVIDIA_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json(
       {
         error:
-          "Todavía no hay una clave de NVIDIA configurada. Añádela en .env.local como NVIDIA_API_KEY (gratis en build.nvidia.com) y reinicia el servidor.",
+          "Todavía no hay una clave de Groq configurada. Añádela en .env.local como GROQ_API_KEY (gratis en console.groq.com) y reinicia el servidor.",
       },
       { status: 503 }
     );
@@ -95,9 +94,7 @@ No puedes hacer nada más que estas dos acciones (no puedes cambiar el nombre de
 Contexto del usuario y de la app en este momento:
 ${context}`;
 
-  const primaryModel = process.env.NVIDIA_MODEL || FALLBACK_MODEL;
-  const model = body.preferFallback === true && primaryModel !== FALLBACK_MODEL ? FALLBACK_MODEL : primaryModel;
-
+  const model = body.preferFallback === true ? FALLBACK_MODEL : PRIMARY_MODEL;
   const attempt = await callModel(apiKey, model, systemPrompt, messages);
 
   if (!attempt.ok) {
