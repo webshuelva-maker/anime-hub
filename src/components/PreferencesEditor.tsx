@@ -75,8 +75,9 @@ export function PreferencesEditor() {
 
   const topGenres = getTopAffinities(prefs.genreInteractionCounts, 5);
   const topStudios = getTopAffinities(prefs.studioInteractionCounts, 5);
+  const topTitles = getTopAffinities(prefs.titleInterestCounts ?? {}, 6);
   const maxCount = Math.max(1, ...topGenres.map((g) => g.count), ...topStudios.map((s) => s.count));
-  const hasLearned = topGenres.length > 0 || topStudios.length > 0;
+  const hasLearned = topGenres.length > 0 || topStudios.length > 0 || topTitles.length > 0;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -142,6 +143,28 @@ export function PreferencesEditor() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {topTitles.length > 0 && (
+          <div className="mt-8 border-t border-panel-border/70 pt-6">
+            <h2 className="font-heading mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+              Series por las que has preguntado
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {topTitles.map((t) => (
+                <motion.span
+                  key={t.name}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="inline-flex items-center gap-2 rounded-full border border-ice/25 bg-ice/5 px-3 py-1.5 text-xs text-foreground"
+                >
+                  {t.name}
+                  {t.count > 1 && <span className="ice-text text-[10px]">×{t.count}</span>}
+                </motion.span>
+              ))}
+            </div>
           </div>
         )}
       </div>

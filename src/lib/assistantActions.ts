@@ -1,15 +1,15 @@
 import { getNewsItems } from "./newsStore";
 import { getPreferences, savePreferences } from "./storage";
-import { toggleLike } from "./learning";
+import { toggleLike, recordAnimeInterest } from "./learning";
 import { addRenMemory } from "./renMemory";
 
 export interface AssistantAction {
-  type: "add_favorite" | "like_news" | "remember";
+  type: "add_favorite" | "like_news" | "interes" | "remember";
   value: string;
   result: string; // texto corto de confirmación para mostrar en el chat
 }
 
-const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|remember):([^\]]+)\]\]/g;
+const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|interes|remember):([^\]]+)\]\]/g;
 
 /**
  * Separa el texto visible de las etiquetas de acción que Ren puede incluir
@@ -19,19 +19,24 @@ const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|remember):([^\]]+)\]\
 export function parseAndRunActions(rawText: string): {
   cleanText: string;
   actions: AssistantAction[];
+  /** Series que Ren ha detectado como "le interesa": el cliente las
+   *  completa después con géneros y estudio para reforzar la afinidad. */
+  interests: string[];
 } {
   const actions: AssistantAction[] = [];
+  const interests: string[] = [];
 
   const cleanText = rawText
     .replace(ACTION_PATTERN, (_match, type: string, rawValue: string) => {
       const value = rawValue.trim();
+      if (type === "interes" && value) interests.push(value);
       const result = runAction(type as AssistantAction["type"], value);
       if (result) actions.push({ type: type as AssistantAction["type"], value, result });
       return "";
     })
     .trim();
 
-  return { cleanText, actions };
+  return { cleanText, actions, interests };
 }
 
 function runAction(type: AssistantAction["type"], value: string): string | null {
@@ -53,6 +58,15 @@ function runAction(type: AssistantAction["type"], value: string): string | null 
     return nowLiked
       ? `Me gusta añadido a: ${item.title}`
       : `Me gusta quitado de: ${item.title}`;
+  }
+
+  if (type === "interes") {
+    // Se aplica ya la parte que no necesita red (título + historial); los
+    // géneros y el estudio los añade el cliente en cuanto AniList
+    // responde. Sin confirmación visible: que la app aprenda de ti no
+    // debería interrumpir la conversación con un aviso cada vez.
+    recordAnimeInterest(value);
+    return null;
   }
 
   if (type === "remember") {

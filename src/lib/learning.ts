@@ -66,6 +66,84 @@ export function recordSearch(term: string): void {
 }
 
 /**
+ * Refuerza solo géneros y estudios, sin tocar títulos ni historial. Se
+ * usa cuando el título ya se registró antes (al leer la etiqueta de Ren)
+ * y AniList responde después con la ficha — así no se cuenta dos veces
+ * el mismo título.
+ */
+export function boostCategories(genres: string[], studios: string[], weight = 2): void {
+  if (genres.length === 0 && studios.length === 0) return;
+  const prefs = getPreferences();
+
+  const genreCounts = { ...prefs.genreInteractionCounts };
+  genres.forEach((g) => {
+    genreCounts[g] = (genreCounts[g] ?? 0) + weight;
+  });
+
+  const studioCounts = { ...prefs.studioInteractionCounts };
+  studios.forEach((s) => {
+    studioCounts[s] = (studioCounts[s] ?? 0) + weight;
+  });
+
+  savePreferences({
+    ...prefs,
+    genreInteractionCounts: genreCounts,
+    studioInteractionCounts: studioCounts,
+  });
+}
+
+/**
+ * Señal que viene de hablar con Ren: preguntar por una serie ya es
+ * interés, aunque el usuario no diga en ningún momento que le gusta ni
+ * marque nada. Pesa más que un clic suelto (1) y menos que un "me gusta"
+ * explícito (4), porque preguntar no siempre es querer.
+ *
+ * Refuerza tres cosas a la vez, en una sola escritura para no pisarse a
+ * sí misma: los géneros y estudios de esa serie (que es lo que de verdad
+ * reordena el feed), el contador propio del título, y el historial de
+ * búsqueda (que ya suma puntos a las noticias de ese título).
+ */
+export function recordAnimeInterest(
+  title: string,
+  genres: string[] = [],
+  studios: string[] = []
+): void {
+  const clean = title.trim();
+  if (clean.length < 2) return;
+
+  const prefs = getPreferences();
+  const WEIGHT = 2;
+
+  const genreCounts = { ...prefs.genreInteractionCounts };
+  genres.forEach((g) => {
+    genreCounts[g] = (genreCounts[g] ?? 0) + WEIGHT;
+  });
+
+  const studioCounts = { ...prefs.studioInteractionCounts };
+  studios.forEach((s) => {
+    studioCounts[s] = (studioCounts[s] ?? 0) + WEIGHT;
+  });
+
+  const titleCounts = { ...prefs.titleInterestCounts };
+  const existingKey = Object.keys(titleCounts).find(
+    (k) => k.toLowerCase() === clean.toLowerCase()
+  );
+  const key = existingKey ?? clean;
+  titleCounts[key] = (titleCounts[key] ?? 0) + 1;
+
+  const withoutDupe = prefs.searchHistory.filter((t) => t.toLowerCase() !== clean.toLowerCase());
+  const searchHistory = [clean, ...withoutDupe].slice(0, 20);
+
+  savePreferences({
+    ...prefs,
+    genreInteractionCounts: genreCounts,
+    studioInteractionCounts: studioCounts,
+    titleInterestCounts: titleCounts,
+    searchHistory,
+  });
+}
+
+/**
  * Puntuación de afinidad de una noticia para el usuario. Ya no depende de
  * un cuestionario: se basa por completo en lo que ha dado "me gusta" o
  * clicado antes. Los animes favoritos escritos a mano (opcional, en el
@@ -91,6 +169,14 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
   ) {
     score += 3;
   }
+
+  // Series por las que ha preguntado a Ren: cuantas más veces vuelve a
+  // ellas, más arriba salen sus noticias.
+  Object.entries(prefs.titleInterestCounts ?? {}).forEach(([title, count]) => {
+    if (item.relatedTitle.toLowerCase().includes(title.toLowerCase())) {
+      score += count * 2;
+    }
+  });
 
   item.genres.forEach((g) => {
     score += prefs.genreInteractionCounts[g] ?? 0;
