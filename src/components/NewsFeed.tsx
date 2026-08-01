@@ -155,8 +155,8 @@ export function NewsFeed() {
 
     // Solo se traducen las que no estén YA traduciéndose por una llamada
     // anterior todavía en vuelo (ver comentario de translatingLockRef).
-    const needTranslation = targets.filter((i) => !translatingLockRef.current.has(i.id));
-    const needTranslationBackground = backgroundTargets.filter((i) => !translatingLockRef.current.has(i.id));
+    const needTranslation = targets.filter((i) => i.language !== "es" && !translatingLockRef.current.has(i.id));
+    const needTranslationBackground = backgroundTargets.filter((i) => i.language !== "es" && !translatingLockRef.current.has(i.id));
     [...needTranslation, ...needTranslationBackground].forEach((i) => translatingLockRef.current.add(i.id));
     setTranslatingIds((prev) => new Set([...prev, ...needTranslation.map((i) => i.id), ...needTranslationBackground.map((i) => i.id)]));
     if (isFirstEverLoadRef.current && initialBatchTotal === 0) {
@@ -414,6 +414,7 @@ export function NewsFeed() {
     setOpenItemId(itemId);
     window.sessionStorage.setItem("anime-hub:open-item", itemId);
     recordNewsInteraction(item);
+    playToggle();
   };
 
   return (
@@ -760,6 +761,7 @@ export function NewsFeed() {
         onClose={() => {
           setOpenItemId(null);
           window.sessionStorage.removeItem("anime-hub:open-item");
+          playToggle();
         }}
       />
     </div>

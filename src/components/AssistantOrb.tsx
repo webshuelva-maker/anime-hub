@@ -8,7 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { playToggle, playSend, playReceive } from "@/lib/sound";
+import { playToggle, playSend, playReceive, playHover } from "@/lib/sound";
 import { runExclusive, setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 interface Message {
@@ -260,7 +260,11 @@ export function AssistantOrb() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setConfirmingClear(true)}
+                  onClick={() => {
+                    setConfirmingClear(true);
+                    playToggle();
+                  }}
+                  onMouseEnter={playHover}
                   aria-label="Borrar conversación"
                   title="Borrar conversación"
                   className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
@@ -271,7 +275,11 @@ export function AssistantOrb() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false);
+                    playToggle();
+                  }}
+                  onMouseEnter={playHover}
                   aria-label="Cerrar"
                   className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
                 >
@@ -369,6 +377,7 @@ export function AssistantOrb() {
             setOpen((v) => !v);
             playToggle();
           }}
+          onMouseEnter={playHover}
           whileHover={{ scale: 1.06 }}
           whileTap={{ scale: 0.92 }}
           aria-label={`Abrir a ${siteConfig.assistantName}`}

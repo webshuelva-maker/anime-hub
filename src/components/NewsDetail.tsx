@@ -74,6 +74,19 @@ export function NewsDetail({
           saveCachedTranslation(targetItem.source.url, { articleText: data.articleText });
         }
 
+        // Fuentes que ya vienen en español (ver "language" en NewsItem):
+        // el artículo descargado se usa tal cual, sin pasar por Groq —
+        // no hace falta traducir lo que ya está en el idioma correcto.
+        if (targetItem.language === "es") {
+          if (data.articleText) {
+            setBody(data.articleText);
+            saveCachedTranslation(targetItem.source.url, { title: targetItem.title, body: data.articleText });
+          } else {
+            setLoadFailed(true);
+          }
+          return;
+        }
+
         // Cada invocación de /api/translate-detail hace como mucho UNA
         // llamada a Groq. Hasta 3 intentos automáticos (modelo principal,
         // luego respaldo, luego principal otra vez con más margen) antes

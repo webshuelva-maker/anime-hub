@@ -46,6 +46,7 @@ export interface NewsItem {
   crossConfirmedBy?: Platform[]; // si varias fuentes confirman lo mismo
   prominence: Prominence;
   popularity?: number; // de AniList — cuánta gente tiene el título en su lista, usado para priorizar animes conocidos con usuarios nuevos
+  language?: "en" | "es"; // "es" = ya viene en español (fuentes españolas), no hace falta traducirlo
 }
 
 export interface UserPreferences {

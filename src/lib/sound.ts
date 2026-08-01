@@ -76,14 +76,15 @@ export function playHover() {
   tone(1100, 0.035, 0.035);
 }
 
-/** Al mandarle un mensaje a Ren. */
+/** Al mandarle un mensaje a Ren — dos notas ascendentes, sensación de "se va". */
 export function playSend() {
-  tone(500, 0.06, 0.16);
-  tone(760, 0.09, 0.14, "sine", 0.04);
+  tone(440, 0.08, 0.17);
+  tone(660, 0.12, 0.15, "sine", 0.06);
 }
 
-/** Cuando Ren responde. */
+/** Cuando Ren responde — tres notas descendentes que se asientan, como una campanita. */
 export function playReceive() {
-  tone(820, 0.07, 0.15);
-  tone(620, 0.11, 0.13, "sine", 0.05);
+  tone(880, 0.08, 0.17);
+  tone(660, 0.09, 0.15, "sine", 0.06);
+  tone(550, 0.16, 0.13, "sine", 0.12);
 }

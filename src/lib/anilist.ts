@@ -58,8 +58,15 @@ export async function findCoverImage(searchText: string): Promise<{ coverImageUr
     searchAniList(searchText, "ANIME"),
     searchAniList(searchText, "MANGA"),
   ]);
-  const best = anime.cover ? anime : manga;
-  return { coverImageUrl: best.cover, popularity: best.popularity };
+  // Antes esto elegía carátula Y popularidad juntas del mismo resultado
+  // (anime si tenía carátula, si no manga entero) — así que si el anime
+  // encajaba pero por lo que fuera no tenía carátula, se perdía también
+  // su popularidad (se cogía la del manga, o ninguna). Ahora cada dato
+  // se elige por separado, prefiriendo siempre el anime si hay match.
+  return {
+    coverImageUrl: anime.cover || manga.cover,
+    popularity: anime.popularity ?? manga.popularity,
+  };
 }
 
 export interface AnimeSearchResult {

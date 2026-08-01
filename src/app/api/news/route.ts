@@ -5,12 +5,15 @@ export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
 // No dependemos de una sola fuente: si una falla o está caída, la otra
-// puede seguir dando noticias.
+// puede seguir dando noticias. "language" marca las fuentes que YA
+// vienen en español (no hace falta traducirlas, y no hay que dejar que
+// la IA las "retraduzca" sin necesidad).
 const FEEDS = [
-  { url: "https://www.animenewsnetwork.com/all/rss.xml", platform: "Anime News Network", label: "Ver en Anime News Network" },
-  { url: "https://www.crunchyroll.com/newsrss?lang=en", platform: "Crunchyroll News", label: "Ver en Crunchyroll News" },
-  { url: "https://myanimelist.net/rss/news.xml", platform: "MyAnimeList", label: "Ver en MyAnimeList" },
-  { url: "https://otakuusamagazine.com/anime/feed", platform: "Otaku USA", label: "Ver en Otaku USA" },
+  { url: "https://www.animenewsnetwork.com/all/rss.xml", platform: "Anime News Network", label: "Ver en Anime News Network", language: "en" as const },
+  { url: "https://www.crunchyroll.com/newsrss?lang=en", platform: "Crunchyroll News", label: "Ver en Crunchyroll News", language: "en" as const },
+  { url: "https://myanimelist.net/rss/news.xml", platform: "MyAnimeList", label: "Ver en MyAnimeList", language: "en" as const },
+  { url: "https://otakuusamagazine.com/anime/feed", platform: "Otaku USA", label: "Ver en Otaku USA", language: "en" as const },
+  { url: "https://ramenparados.com/feed/rss/", platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es" as const },
 ];
 
 function decodeEntities(raw: string): string {
@@ -84,7 +87,7 @@ function dedupeAgainstTitle(text: string, title: string): string {
   return text;
 }
 
-async function fetchFeed(feed: { url: string; platform: string; label: string }): Promise<NewsItem[]> {
+async function fetchFeed(feed: { url: string; platform: string; label: string; language: "en" | "es" }): Promise<NewsItem[]> {
   const res = await fetch(feed.url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0; +https://animehubbs.netlify.app)" },
     next: { revalidate: 900 },
@@ -121,6 +124,7 @@ async function fetchFeed(feed: { url: string; platform: string; label: string })
       source: { platform: feed.platform, url: link || feed.url, label: feed.label },
       relatedTitle: shortenTitle(title),
       prominence: "mainstream",
+      language: feed.language,
     };
     if (embeddedImage) item.coverImageUrl = embeddedImage;
     return item;
