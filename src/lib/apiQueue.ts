@@ -101,9 +101,22 @@ export function recordTokenUsage(estimatedTokens: number) {
   tokenLog.push({ time: Date.now(), tokens: estimatedTokens });
 }
 
-export async function waitForTokenBudget(estimatedTokens: number, priority: Priority = "normal"): Promise<void> {
+export async function waitForTokenBudget(
+  estimatedTokens: number,
+  priority: Priority = "normal",
+  maxWaitMs = Infinity
+): Promise<void> {
   const ceiling = priority === "high" ? SAFE_TPM_BUDGET : BACKGROUND_TPM_CEILING;
+  const deadline = Date.now() + maxWaitMs;
+
+  // Con tope de espera. Sin él, si el presupuesto estaba gastado por la
+  // traducción de fondo, Ren se quedaba esperando en bucles de un segundo
+  // ANTES de mandar nada — y desde fuera parecía simplemente que tardaba
+  // veinte segundos en contestar a un "hola". Para algo que el usuario
+  // está esperando en pantalla, es preferible arriesgarse a un 429 (que
+  // ya tiene reintento) que hacerle esperar en seco.
   while (currentUsage() + estimatedTokens > ceiling) {
-    await new Promise((r) => setTimeout(r, 1000));
+    if (Date.now() >= deadline) return;
+    await new Promise((r) => setTimeout(r, 250));
   }
 }

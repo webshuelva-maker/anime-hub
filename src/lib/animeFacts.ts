@@ -42,6 +42,7 @@ query ($search: String) {
           season
           seasonYear
           startDate { year month day }
+          nextAiringEpisode { episode airingAt }
           title { romaji english }
         }
       }
@@ -57,6 +58,8 @@ export interface AnimeRelation {
   season: string | null;
   seasonYear: number | null;
   startDate: string | null;
+  /** Fecha exacta del próximo episodio de esa entrada, si la hay. */
+  nextEpisodeDate: string | null;
 }
 
 export interface AnimeFacts {
@@ -120,6 +123,7 @@ interface RawRelationEdge {
     season?: string | null;
     seasonYear?: number | null;
     startDate?: RawDate | null;
+    nextAiringEpisode?: { episode?: number; airingAt?: number } | null;
     title?: { romaji?: string | null; english?: string | null };
   };
 }
@@ -159,6 +163,9 @@ export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | nu
         season: e.node?.season ?? null,
         seasonYear: e.node?.seasonYear ?? null,
         startDate: formatDate(e.node?.startDate),
+        nextEpisodeDate: e.node?.nextAiringEpisode?.airingAt
+          ? new Date(e.node.nextAiringEpisode.airingAt * 1000).toISOString().slice(0, 10)
+          : null,
       }))
       .filter((r: AnimeRelation) => r.title.length > 0);
 
@@ -236,22 +243,35 @@ export function factsToPromptText(facts: AnimeFacts): string {
   }
   if (facts.genres.length) lines.push(`- Géneros: ${facts.genres.join(", ")}`);
 
+  // Continuaciones, partes y temporadas que TODAVÍA no han terminado.
+  // Antes solo se miraban las relaciones marcadas como "SEQUEL", y así se
+  // perdía justo lo que más se pregunta: cuándo empieza la segunda parte
+  // de la temporada que se está emitiendo, que en la base de datos suele
+  // ser una entrada aparte con otro tipo de relación.
+  const upcoming = facts.relations.filter(
+    (r) => r.status === "NOT_YET_RELEASED" || r.status === "RELEASING"
+  );
   const sequels = facts.relations.filter((r) => r.relationType === "SEQUEL");
-  if (sequels.length) {
+  const pending = [...upcoming];
+  for (const s of sequels) if (!pending.some((p) => p.title === s.title)) pending.push(s);
+
+  if (pending.length) {
     lines.push(
-      `- Secuelas registradas en la base de datos: ${sequels
+      `- Continuaciones y partes registradas en la base de datos: ${pending
         .map((s) => {
           const bits = [s.title];
+          if (s.relationType) bits.push(`(${s.relationType.toLowerCase()})`);
           if (s.status) bits.push(STATUS_ES[s.status] ?? s.status);
-          if (s.season && s.seasonYear) bits.push(`${SEASON_ES[s.season] ?? s.season} ${s.seasonYear}`);
-          else if (s.startDate) bits.push(s.startDate);
+          if (s.nextEpisodeDate) bits.push(`próximo episodio el ${s.nextEpisodeDate}`);
+          else if (s.season && s.seasonYear) bits.push(`${SEASON_ES[s.season] ?? s.season} ${s.seasonYear}`);
+          else if (s.startDate) bits.push(`empieza ${s.startDate}`);
           return bits.join(" — ");
         })
         .join(" | ")}`
     );
   } else {
     lines.push(
-      "- No hay ninguna secuela registrada todavía en la base de datos (ojo: si la web dice que se ha anunciado una, puede ser un anuncio muy reciente que la base aún no recoge, o puede ser un rumor)."
+      "- No hay ninguna continuación ni parte pendiente registrada todavía en la base de datos (ojo: si la web dice que se ha anunciado una, puede ser un anuncio muy reciente que la base aún no recoge, o puede ser un rumor)."
     );
   }
 

@@ -6,13 +6,13 @@ import { siteConfig } from "@/config/site";
 import { getPreferences } from "@/lib/storage";
 import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
-import { ResearchSource, TIER_COLOR, TIER_LABEL } from "@/lib/sourceTiers";
-import { Confidence, CONFIDENCE_COLOR } from "@/lib/confidence";
+import { ResearchSource } from "@/lib/sourceTiers";
+import { Confidence } from "@/lib/confidence";
 import { recordAnimeInterest, boostCategories } from "@/lib/learning";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { playToggle, playSend, playReceive, playHover } from "@/lib/sound";
-import { runExclusive, setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
+import { setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 interface Message {
   role: "user" | "assistant";
@@ -183,221 +183,80 @@ function buildPriorTopicsSummary(archive: Message[]): string {
   return `Cosas de las que ya ha hablado contigo este usuario en sesiones anteriores (no continúes esa conversación, pero recuérdalas si te pregunta por ellas):\n${userLines.join("\n")}`;
 }
 
-function Orb({ active, size = 24 }: { active: boolean; size?: number }) {
-  return (
-    <div className="relative flex flex-shrink-0 items-center justify-center" style={{ height: size, width: size }}>
-      <motion.div
-        className="absolute inset-0 rounded-full blur-md"
-        style={{ background: "radial-gradient(circle, var(--ice), transparent 70%)" }}
-        animate={{ opacity: active ? [0.5, 0.85, 0.5] : [0.35, 0.55, 0.35], scale: active ? [1, 1.3, 1] : [1, 1.15, 1] }}
-        transition={{ duration: active ? 1.1 : 2.8, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="relative rounded-full"
-        style={{
-          height: size * 0.78,
-          width: size * 0.78,
-          background: "radial-gradient(circle at 35% 30%, var(--ice), var(--accent-via) 75%)",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.15) inset",
-        }}
-        animate={
-          active
-            ? { scale: [1, 1.12, 0.95, 1.08, 1], x: [0, 1, -1, 1, 0], y: [0, -1, 1, -1, 0] }
-            : { scale: [1, 1.05, 1] }
-        }
-        transition={{ duration: active ? 1.1 : 2.6, repeat: Infinity, ease: "easeInOut" }}
-      />
-    </div>
-  );
-}
-
-function TypingDots() {
-  return (
-    <div className="flex items-center gap-1 px-1 py-1">
-      {[0, 1, 2].map((i) => (
-        <motion.span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: "var(--ice)" }}
-          animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function StepIcon({ status }: { status: Step["status"] }) {
-  if (status === "running") {
-    return (
-      <motion.span
-        className="h-2.5 w-2.5 flex-shrink-0 rounded-full border border-ice"
-        style={{ borderTopColor: "transparent" }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-      />
-    );
-  }
-  if (status === "done") return <span className="ice-text w-2.5 flex-shrink-0 text-[11px] leading-none">✓</span>;
-  if (status === "failed")
-    return (
-      <span className="w-2.5 flex-shrink-0 text-[11px] leading-none" style={{ color: "#b7965f" }}>
-        ✕
-      </span>
-    );
-  return <span className="w-2.5 flex-shrink-0 text-[10px] leading-none text-muted">–</span>;
-}
-
-/** Los pasos reales que va dando Ren, tachándose según se completan. */
-function StepsList({ steps }: { steps: Step[] }) {
-  if (steps.length === 0) return null;
-  return (
-    <div className="panel-elevated flex flex-col gap-1.5 rounded-xl border border-panel-border px-3 py-2.5">
-      {steps.map((s) => (
-        <motion.div
-          key={s.id}
-          initial={{ opacity: 0, x: -4 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.22, ease: "easeOut" }}
-          className={`flex items-center gap-2 text-[12px] leading-snug ${s.sub ? "pl-4" : ""}`}
-        >
-          <StepIcon status={s.status} />
-          <span
-            className={
-              s.status === "done"
-                ? "text-foreground line-through decoration-panel-border"
-                : s.status === "failed"
-                  ? "text-foreground"
-                  : "text-foreground"
-            }
-            style={{ opacity: s.status === "done" ? 0.75 : 1 }}
-          >
-            {s.label}
-          </span>
-          {s.detail && (
-            <span
-              className="truncate text-[11px]"
-              style={{ color: s.status === "failed" ? "#b7965f" : "var(--muted)" }}
-            >
-              · {s.detail}
-            </span>
-          )}
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-/** Versión plegada, para no dejar el historial lleno de pasos ya cumplidos. */
-function StepsSummary({ steps }: { steps: Step[] }) {
-  // Abierto por defecto: los pasos son parte de la respuesta, no un
-  // extra escondido. Antes solo se veían de refilón mientras trabajaba y
-  // desaparecían justo cuando querías leerlos.
-  const [open, setOpen] = useState(true);
-  if (steps.length === 0) return null;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-fit text-[10px] uppercase tracking-wide text-muted transition-colors hover:text-foreground"
-      >
-        {open ? "▾" : "▸"} Cómo lo ha averiguado
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <StepsList steps={steps} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+const SPARKLE_PATH =
+  "M12 1.8C12.9 8.4 15.6 11.1 22.2 12C15.6 12.9 12.9 15.6 12 22.2C11.1 15.6 8.4 12.9 1.8 12C8.4 11.1 11.1 8.4 12 1.8Z";
 
 /**
- * Nivel de confianza. El número NO lo decide el modelo: sale de reglas
- * fijas sobre las fuentes, el contraste con AniList y la antigüedad de la
- * información (ver lib/confidence.ts). Por eso se puede desplegar el
- * porqué: cada punto tiene una razón concreta detrás.
+ * La marca de Ren: un destello de cuatro puntas, del tipo que se dibuja
+ * en el anime para señalar algo brillante. Sustituye al círculo anterior,
+ * que no decía nada y parecía un icono de sistema.
  */
-function ConfidenceCard({ confidence }: { confidence: Confidence }) {
-  const [expanded, setExpanded] = useState(false);
-  const color = CONFIDENCE_COLOR[confidence.level];
-
+function Sparkle({ active, size = 24 }: { active: boolean; size?: number }) {
   return (
-    <div className="rounded-xl border border-panel-border/70 bg-panel-soft/40 px-2.5 py-2">
-      <button type="button" onClick={() => setExpanded((v) => !v)} className="flex w-full items-center gap-2 text-left">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Confianza</span>
-        <span className="text-[11px] font-medium capitalize" style={{ color }}>
-          {confidence.level}
-        </span>
-        <span className="text-[10px] text-muted">{confidence.score}/100</span>
-        <span className="ml-auto block h-1 w-14 overflow-hidden rounded-full bg-panel-border">
-          <motion.span
-            className="block h-1 rounded-full"
-            style={{ background: color }}
-            initial={{ width: 0 }}
-            animate={{ width: `${confidence.score}%` }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          />
-        </span>
-        <span className="text-[10px] text-muted">{expanded ? "▾" : "▸"}</span>
-      </button>
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.ul
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="mt-2 flex flex-col gap-1 overflow-hidden"
-          >
-            {confidence.reasons.map((r, i) => (
-              <li key={i} className="flex gap-1.5 text-[10px] leading-snug text-muted">
-                <span style={{ color }}>·</span>
-                {r}
-              </li>
-            ))}
-          </motion.ul>
-        )}
-      </AnimatePresence>
+    <div
+      className="relative flex flex-shrink-0 items-center justify-center"
+      style={{ height: size, width: size }}
+    >
+      <motion.div
+        className="absolute inset-0 rounded-full blur-md"
+        style={{ background: "radial-gradient(circle, var(--ice), transparent 65%)" }}
+        animate={{
+          opacity: active ? [0.45, 0.85, 0.45] : [0.25, 0.45, 0.25],
+          scale: active ? [1, 1.28, 1] : [1, 1.1, 1],
+        }}
+        transition={{ duration: active ? 1.3 : 3.2, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className="relative"
+        animate={{
+          rotate: active ? [0, 10, -6, 0] : [0, 4, 0],
+          scale: active ? [1, 1.1, 0.97, 1] : [1, 1.04, 1],
+        }}
+        transition={{ duration: active ? 1.6 : 4, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <defs>
+          <linearGradient id="ren-sparkle" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="var(--ice)" />
+            <stop offset="100%" stopColor="var(--accent-via)" />
+          </linearGradient>
+        </defs>
+        <path d={SPARKLE_PATH} fill="url(#ren-sparkle)" />
+      </motion.svg>
+      {/* Destello pequeño de acompañamiento: el detalle que lo hace parecer
+          dibujado a mano y no un icono suelto. */}
+      <motion.svg
+        viewBox="0 0 24 24"
+        width={size * 0.36}
+        height={size * 0.36}
+        className="absolute"
+        style={{ top: size * 0.02, right: -size * 0.06 }}
+        animate={{ opacity: active ? [0.3, 1, 0.3] : [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
+        transition={{ duration: active ? 1.3 : 3.6, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+      >
+        <path d={SPARKLE_PATH} fill="var(--ice)" />
+      </motion.svg>
     </div>
   );
 }
 
-function SourcesList({ sources }: { sources: ResearchSource[] }) {
-  if (sources.length === 0) return null;
+/** Tres destellos que titilan por turnos mientras Ren piensa. */
+function ThinkingSparkles() {
   return (
-    <div className="flex flex-col gap-1.5 rounded-xl border border-panel-border/70 bg-panel-soft/40 px-2.5 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Fuentes consultadas</p>
-      {sources.map((src, si) => (
-        <a
-          key={si}
-          href={src.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-start gap-1.5 transition-opacity hover:opacity-80"
+    <div className="flex items-center gap-1.5 px-1.5 py-1">
+      {[0, 1, 2].map((i) => (
+        <motion.svg
+          key={i}
+          viewBox="0 0 24 24"
+          width={9 - i}
+          height={9 - i}
+          animate={{ opacity: [0.25, 1, 0.25], scale: [0.8, 1.15, 0.8], rotate: [0, 25, 0] }}
+          transition={{ duration: 1.25, repeat: Infinity, delay: i * 0.22, ease: "easeInOut" }}
         >
-          <span
-            className="mt-[5px] h-[5px] w-[5px] flex-shrink-0 rounded-full"
-            style={{ background: TIER_COLOR[src.tier] }}
-          />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] leading-snug text-foreground">{src.title}</span>
-            <span className="text-[10px]" style={{ color: TIER_COLOR[src.tier] }}>
-              {TIER_LABEL[src.tier]}
-            </span>
-            <span className="text-[10px] text-muted"> · {src.domain}</span>
-          </span>
-        </a>
+          <path d={SPARKLE_PATH} fill="var(--ice)" />
+        </motion.svg>
       ))}
     </div>
   );
@@ -411,6 +270,29 @@ function initialMessages(): Message[] {
   return [];
 }
 
+/**
+ * Convierte los pasos que llegan del servidor en UNA frase corta para la
+ * cabecera. Antes esto era un panel con pasos, fuentes y un medidor de
+ * confianza dentro de la conversación: demasiada cosa para algo que el
+ * usuario solo quiere saber de un vistazo mientras espera.
+ */
+function statusPhrases(steps: Step[], loading: boolean): string[] {
+  if (!loading) return ["en línea"];
+
+  const running = new Set(steps.filter((s) => s.status === "running").map((s) => s.id));
+
+  if (running.has("write")) return ["redactando la respuesta…"];
+
+  const phrases: string[] = [];
+  if (running.has("search")) phrases.push("consultando fuentes oficiales…");
+  if (running.has("rumors")) phrases.push("rastreando rumores…");
+  if (running.has("db")) phrases.push("contrastando fichas…");
+  if (phrases.length > 0) return phrases;
+
+  if (running.has("intent")) return ["entendiendo la pregunta…"];
+  return ["pensando…"];
+}
+
 export function AssistantOrb() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -420,7 +302,7 @@ export function AssistantOrb() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [steps, setSteps] = useState<Step[]>([]);
   const [streamText, setStreamText] = useState("");
-  const [liveSources, setLiveSources] = useState<ResearchSource[]>([]);
+  const [statusTick, setStatusTick] = useState(0);
   const [slowResponse, setSlowResponse] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -450,7 +332,7 @@ export function AssistantOrb() {
         const name = p.displayName ? `, ${p.displayName}` : "";
         const greeting: Message = {
           role: "assistant",
-          content: `Hola${name}. Soy ${siteConfig.assistantName}. Si me preguntas por fechas, temporadas o rumores de una serie, lo busco de verdad y te digo qué está confirmado y qué no. También puedo charlar de anime sin más. ¿Qué te apetece?`,
+          content: `Hola${name}. Soy ${siteConfig.assistantName}, tu asistente. ¿Qué quieres saber?`,
           ts: Date.now(),
         };
         setMessages([greeting]);
@@ -462,6 +344,15 @@ export function AssistantOrb() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  // Cuando hay varias cosas en marcha a la vez (buscar, rumores,
+  // contrastar), la cabecera las va rotando en vez de quedarse en una:
+  // así se ve que sigue trabajando y en qué.
+  useEffect(() => {
+    if (!loading) return;
+    const id = setInterval(() => setStatusTick((t) => t + 1), 1700);
+    return () => clearInterval(id);
+  }, [loading]);
 
   /**
    * Guarda el mensaje de Ren en la conversación y en el archivo, ejecuta
@@ -518,7 +409,6 @@ export function AssistantOrb() {
     setPhase("idle");
     setSteps([]);
     setStreamText("");
-    setLiveSources([]);
     const slowTimer = setTimeout(() => setSlowResponse(true), 4000);
 
     const boostedTitles = new Set<string>();
@@ -554,8 +444,14 @@ export function AssistantOrb() {
       // contrastar, redactar) y luego escribe la respuesta trozo a
       // trozo. Todo dentro de la misma cola de peticiones que el resto
       // de la app, con prioridad alta.
-      const streamed = await runExclusive(async () => {
-        await waitForTokenBudget(estimatedTokens, "high");
+      // Ren YA NO pasa por la cola de tareas de fondo. Esa cola existe
+      // para que las traducciones de la lista no se pisen entre ellas; si
+      // Ren entra en ella, se queda esperando a que termine lo que
+      // hubiera en marcha, y el usuario ve veinte segundos de nada
+      // aunque solo haya dicho "hola". La traducción de fondo ya se pausa
+      // aparte mientras Ren responde.
+      const streamed = await (async () => {
+        await waitForTokenBudget(estimatedTokens, "high", 2000);
         const result = await runStreamingTurn({
           apiMessages,
           contextText,
@@ -574,7 +470,6 @@ export function AssistantOrb() {
             });
           },
           onSources: (payload) => {
-            setLiveSources(payload.sources);
             setPhase("writing");
             if (payload.facts?.title) {
               recordAnimeInterest(
@@ -589,7 +484,7 @@ export function AssistantOrb() {
         });
         recordTokenUsage(estimatedTokens);
         return result;
-      }, "high");
+      })();
 
       if (streamed.ok) {
         commitAssistantReply(
@@ -616,8 +511,8 @@ export function AssistantOrb() {
       {
         setPhase("research");
         try {
-          const r = (await runExclusive(async () => {
-            await waitForTokenBudget(1600, "high");
+          const r = (await (async () => {
+            await waitForTokenBudget(1600, "high", 2000);
             const res = await fetch("/api/assistant/research", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -625,7 +520,7 @@ export function AssistantOrb() {
             }).then((res) => res.json());
             recordTokenUsage(1600);
             return res;
-          }, "high")) as ResearchResponse;
+          })()) as ResearchResponse;
 
           research = {
             dossier: r?.dossier ?? "",
@@ -635,7 +530,6 @@ export function AssistantOrb() {
           };
           researchSources = r?.sources ?? [];
           confidence = r?.confidence ?? null;
-          setLiveSources(researchSources);
 
           if (r?.facts?.title && !boostedTitles.has(r.facts.title.toLowerCase())) {
             recordAnimeInterest(r.facts.title, r.facts.genres ?? [], r.facts.studios ?? []);
@@ -650,8 +544,8 @@ export function AssistantOrb() {
       setPhase("writing");
 
       const callAssistant = (preferFallback: boolean) =>
-        runExclusive(async () => {
-          await waitForTokenBudget(estimatedTokens, "high");
+        (async () => {
+          await waitForTokenBudget(estimatedTokens, "high", 2000);
           const result = await fetch("/api/assistant", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -659,7 +553,7 @@ export function AssistantOrb() {
           }).then((r) => r.json());
           recordTokenUsage(estimatedTokens);
           return result;
-        }, "high") as Promise<{ reply?: string; error?: string; debug?: string }>;
+        })() as Promise<{ reply?: string; error?: string; debug?: string }>;
 
       let data = await callAssistant(false);
       if (!data.reply) {
@@ -685,8 +579,7 @@ export function AssistantOrb() {
       setPhase("idle");
       setSteps([]);
       setStreamText("");
-      setLiveSources([]);
-      setBackgroundPaused(false);
+        setBackgroundPaused(false);
     }
   };
 
@@ -713,11 +606,14 @@ export function AssistantOrb() {
                   className="pointer-events-none absolute inset-x-0 top-0 h-16 opacity-25"
                   style={{ background: "radial-gradient(120px 60px at 20% 0%, var(--ice), transparent 70%)" }}
                 />
-                <Orb active={false} size={32} />
+                <Sparkle active={false} size={32} />
                 <div className="relative">
                   <p className="font-heading text-sm font-semibold">{siteConfig.assistantName}</p>
                   <p className="text-[11px] text-muted">
-                    {phase === "research" ? "investigando…" : loading ? "escribiendo…" : "en línea"}
+                    {(() => {
+                      const phrases = statusPhrases(steps, loading || streamText.length > 0);
+                      return phrases[statusTick % phrases.length];
+                    })()}
                   </p>
                 </div>
                 <button
@@ -759,7 +655,7 @@ export function AssistantOrb() {
                       transition={{ duration: 0.2 }}
                       className={`flex items-end gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}
                     >
-                      {m.role === "assistant" && <Orb active={false} size={16} />}
+                      {m.role === "assistant" && <Sparkle active={false} size={16} />}
                       <div className="flex max-w-[78%] flex-col gap-1.5">
                         <div
                           className={`rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
@@ -778,31 +674,17 @@ export function AssistantOrb() {
                             ✓ {a.result}
                           </span>
                         ))}
-                        {m.confidence && <ConfidenceCard confidence={m.confidence} />}
-                        {m.sources && <SourcesList sources={m.sources} />}
-                        {m.steps && <StepsSummary steps={m.steps} />}
                       </div>
                     </motion.div>
                   ))}
                   {loading && (
                     <div className="flex w-full flex-col items-start gap-2">
-                      {/* Lo que está haciendo AHORA: pasos reales, fuentes y
-                          confianza aparecen en cuanto se saben, sin esperar
-                          a que termine de escribir. */}
-                      {steps.length > 0 && (
-                        <div className="w-full pl-6">
-                          <StepsList steps={steps} />
-                        </div>
-                      )}
-                      {liveSources.length > 0 && (
-                        <div className="w-full pl-6">
-                          <SourcesList sources={liveSources} />
-                        </div>
-                      )}
-
+                      {/* Sin paneles de pasos, fuentes ni confianza: lo que
+                          está haciendo se cuenta arriba, en una línea, y
+                          aquí solo se ve que está pensando. */}
                       {streamText ? (
                         <div className="flex items-end gap-2">
-                          <Orb active={false} size={16} />
+                          <Sparkle active={false} size={16} />
                           <div className="panel-elevated max-w-[78%] rounded-2xl border border-panel-border/70 px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
                             {streamText}
                             {/* Cursor de escritura: se ve que está redactando en vivo. */}
@@ -816,18 +698,13 @@ export function AssistantOrb() {
                         </div>
                       ) : (
                         <div className="flex items-end gap-2">
-                          <Orb active={false} size={16} />
+                          <Sparkle active size={16} />
                           <div className="panel-elevated flex items-center rounded-2xl border border-panel-border/70 px-2 py-1">
-                            <TypingDots />
+                            <ThinkingSparkles />
                           </div>
                         </div>
                       )}
 
-                      {!streamText && phase === "research" && steps.length === 0 && (
-                        <p className="ml-8 text-[11px] text-muted">
-                          Buscando en fuentes oficiales y contrastando rumores…
-                        </p>
-                      )}
                       {!streamText && phase !== "research" && slowResponse && (
                         <p className="ml-8 text-[11px] text-muted">
                           Los servidores están más llenos de lo normal, tardando un poco más…
@@ -884,7 +761,7 @@ export function AssistantOrb() {
           aria-label={`Abrir a ${siteConfig.assistantName}`}
           className="panel relative flex h-16 w-16 items-center justify-center rounded-full border border-ice/25 shadow-xl shadow-black/50"
         >
-          <Orb active={false} size={34} />
+          <Sparkle active={false} size={34} />
         </motion.button>
       </div>
 
