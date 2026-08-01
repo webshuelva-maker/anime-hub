@@ -38,16 +38,25 @@ const FALLBACK_FACTS = [
 
 /**
  * Pantalla de carga a pantalla completa — SOLO en la primera visita real
- * (sin nada en caché todavía). Iteración 2: fuera el círculo giratorio
- * (además de la manía de "se ve rapidísimo", cualquier animación con
- * "infinite" corre el riesgo de reventar con prefers-reduced-motion mal
- * gestionado, ver globals.css). En su lugar, una barra de progreso REAL
- * que crece desde el centro hacia los lados según cuántas noticias del
- * primer lote ya se han traducido — no es decorativa, informa de verdad
- * — más dos resplandores ambientales muy suaves a los lados para que se
- * sienta más cuidado, y las curiosidades de siempre.
+ * (sin nada en caché todavía). Iteración 3: la barra ya NO depende solo
+ * de datos reales a saltos (33%→67%) ni de una espera fija — calcula un
+ * tiempo estimado según cuánto trabajo hay (estimatedDurationMs, lo pasa
+ * NewsFeed) y avanza de forma continua y asintótica hacia el 99% durante
+ * ese tiempo; si la traducción real termina antes, salta a 100 y se
+ * cierra; si tarda más de lo estimado, sigue acercándose al 99% sin
+ * quedarse nunca clavada. El cierre (onComplete) lo decide ESTE
+ * componente, cuando su propio contador llega de verdad a 100 — así
+ * nunca desaparece la pantalla a mitad de cuenta.
  */
-export function FirstLoadOverlay({ progress }: { progress: number }) {
+export function FirstLoadOverlay({
+  progress,
+  estimatedDurationMs,
+  onComplete,
+}: {
+  progress: number;
+  estimatedDurationMs: number;
+  onComplete: () => void;
+}) {
   const [facts, setFacts] = useState<string[]>(FALLBACK_FACTS);
   const [index, setIndex] = useState(0);
   const shownRef = useRef<string[]>([]);
@@ -112,36 +121,52 @@ export function FirstLoadOverlay({ progress }: { progress: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 
-  // Contador animado de verdad: sube entero a entero (0,1,2,3...) hacia
-  // el objetivo con requestAnimationFrame, en vez de depender solo de la
-  // transición CSS de framer-motion — así se ve avanzar dígito a dígito
-  // sin importar lo grande que sea el salto entre un dato real y el
-  // siguiente (por ejemplo, de 33% a 67% de golpe).
-  const target = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  // Contador animado dirigido por TIEMPO ESTIMADO, no por los saltos
+  // discretos de "progress" (que solo cambia cuando un lote entero
+  // termina, ej. de 33% a 67% de golpe). Se acerca al 99% de forma
+  // asintótica durante estimatedDurationMs — nunca lo alcanza del todo
+  // por sí solo, así que si el trabajo real tarda más de lo estimado, la
+  // barra sigue viéndose avanzar (cada vez más despacio) en vez de
+  // quedarse clavada esperando. En cuanto progress llega a 1 (traducción
+  // real terminada), el objetivo pasa a ser 100 de verdad, y al
+  // alcanzarlo se avisa a NewsFeed (onComplete) para cerrar la pantalla
+  // — el cierre queda así atado al contador, nunca antes.
   const [displayPct, setDisplayPct] = useState(0);
-  const displayPctRef = useRef(0);
+  const progressRef = useRef(progress);
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
-    if (target === displayPctRef.current) return;
-    const startVal = displayPctRef.current;
-    const startTime = performance.now();
-    // Cuanto más grande el salto, un pelín más de tiempo — pero siempre
-    // se ve contar, nunca saltar de golpe.
-    const duration = 900 + Math.abs(target - startVal) * 25;
     let raf: number;
+    let finished = false;
+    const startTime = performance.now();
     const tick = (now: number) => {
-      const t = Math.min(1, (now - startTime) / duration);
-      const eased = 1 - Math.pow(1 - t, 3); // ease-out cúbico
-      const value = Math.round(startVal + (target - startVal) * eased);
-      displayPctRef.current = value;
-      setDisplayPct(value);
-      if (t < 1) raf = requestAnimationFrame(tick);
+      if (finished) return;
+      const elapsed = now - startTime;
+      const asymptotic = 99 * (1 - Math.exp(-elapsed / estimatedDurationMs));
+      const done = progressRef.current >= 1;
+      const value = done ? 100 : Math.min(99, asymptotic);
+      setDisplayPct((prev) => (value > prev ? value : prev));
+      if (value >= 100) {
+        finished = true;
+        onCompleteRef.current();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target]);
+    // Solo se reinicia si cambia la duración estimada (ej. porque llegó
+    // más trabajo a traducir) — nunca por progress, que se lee siempre
+    // fresco vía la ref de arriba.
+  }, [estimatedDurationMs]);
 
-  const pct = displayPct;
+  const pct = Math.round(displayPct);
 
   return (
     <motion.div

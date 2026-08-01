@@ -193,8 +193,12 @@ export function AssistantOrb() {
 
       // Temporal, para poder ver por fin el motivo real sin mirar los
       // logs de Vercel — quitar esta línea cuando Ren vaya fino.
-      const debugSuffix = !data.reply && data.debug ? `\n\n(detalle técnico: ${data.debug})` : "";
-      const rawReply: string = (data.reply || data.error || "No he podido responder.") + debugSuffix;
+      // Temporal, para poder ver por fin el motivo real sin mirar los
+      // logs de Vercel — quitar esta línea cuando Ren vaya fino.
+      const debugSuffix = data.debug ? `\n\n(detalle técnico: ${data.debug})` : "";
+      const rawReply: string = data.reply
+        ? data.reply
+        : `Los servidores están más llenos de lo normal ahora mismo y no consigo responder. Prueba otra vez en un momento.${debugSuffix}`;
       const { cleanText, actions } = parseAndRunActions(rawReply);
       const assistantMessage: Message = { role: "assistant", content: cleanText || rawReply, actions, ts: Date.now() };
       setMessages((prev) => [...prev, assistantMessage]);

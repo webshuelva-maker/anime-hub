@@ -101,14 +101,16 @@ ${context}`;
   const attempt = await callModel(apiKey, model, systemPrompt, messages);
 
   if (!attempt.ok) {
-    // Nunca se enseña el error en crudo al usuario en el mensaje
-    // principal — pero de momento SÍ va en "debug" para poder ver por
-    // fin el motivo real sin tener que mirar los logs de Vercel. Quitar
-    // este campo cuando Ren vaya fino de forma consistente.
-    return NextResponse.json({
-      reply: "Los servidores están más llenos de lo normal ahora mismo y no consigo responder. Prueba otra vez en un momento.",
-      debug: attempt.debug,
-    });
+    // FALLO DE LÓGICA ENCONTRADO: esto devolvía un "reply" con el
+    // mensaje enlatado incluso al fallar — pero el cliente decide si
+    // reintentar mirando "si no hay reply" (`if (!data.reply)`). Como
+    // aquí SIEMPRE había un reply (el mensaje de "servidores llenos"),
+    // esa condición nunca era cierta: el cliente nunca reintentaba con
+    // el modelo de respaldo, ni mostraba el motivo técnico, porque
+    // creía que la primera respuesta ya había ido bien. Ahora NO se
+    // manda "reply" en el fallo — solo "debug" — para que el cliente sí
+    // pueda distinguir un fallo real de una respuesta de verdad.
+    return NextResponse.json({ debug: attempt.debug });
   }
 
   return NextResponse.json({ reply: attempt.reply });

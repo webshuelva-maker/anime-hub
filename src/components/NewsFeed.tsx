@@ -55,7 +55,6 @@ export function NewsFeed() {
   // mínimo de permanencia SOLO en ese caso (ver más abajo) — en cargas
   // normales o refrescos silenciosos no debe añadir ningún retraso.
   const isFirstEverLoadRef = useRef(getNewsItems().length === 0);
-  const loaderShownAtRef = useRef<number | null>(null);
   // Cuántas noticias tenía el primer lote a traducir — junto con
   // translatingIds.size (cuántas quedan) da el progreso real de la
   // pantalla de carga, en vez de un giro indefinido sin información.
@@ -67,9 +66,11 @@ export function NewsFeed() {
   // exactamente cuáles de esos ids son "las que cuentan". Es estado (no
   // ref) porque se lee durante el render para calcular la barra.
   const [initialBatchIds, setInitialBatchIds] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    loaderShownAtRef.current = Date.now();
-  }, []);
+  // Duración estimada para que la barra de la pantalla de carga vaya de
+  // 0 a 100 — calculada según cuánto hay que traducir (ver donde se
+  // fija, más abajo). FirstLoadOverlay decide sola cuándo cerrarse en
+  // función de esto y del progreso real.
+  const [estimatedDurationMs, setEstimatedDurationMs] = useState(6000);
 
   useEffect(() => {
     if (!showInitialLoader) return;
@@ -158,6 +159,12 @@ export function NewsFeed() {
     if (isFirstEverLoadRef.current && initialBatchTotal === 0) {
       setInitialBatchTotal(needTranslation.length);
       setInitialBatchIds(new Set(needTranslation.map((i) => i.id)));
+      // ~3.8s por lote de 3 (pausa entre lotes + tiempo de respuesta de
+      // Groq), redondeando hacia arriba lotes parciales. Mínimo 3s para
+      // que la barra nunca se sienta instantánea incluso con pocas
+      // noticias.
+      const estimatedChunks = Math.max(1, Math.ceil(needTranslation.length / 3));
+      setEstimatedDurationMs(Math.max(3000, estimatedChunks * 3800));
     }
 
     const updateItem = (id: string, patch: Partial<NewsItem>) => {
@@ -294,19 +301,11 @@ export function NewsFeed() {
           await new Promise((r) => setTimeout(r, 2500));
         }
       }
-      // La pantalla de carga inicial (si estaba activa) ya puede
-      // cerrarse — pero con un mínimo de permanencia: si la traducción
-      // fue rapidísima (puede pasar, sobre todo ahora con el control de
-      // presupuesto), cerrarla al instante corta el círculo a mitad de
-      // vuelta y no da tiempo a ver ni una curiosidad — se percibe como
-      // "va rapidísimo" aunque la animación en sí esté bien puesta. 4s es
-      // más que una vuelta completa del círculo (dura 3s).
-      const MIN_LOADER_MS = 4000;
-      const elapsed = loaderShownAtRef.current !== null ? Date.now() - loaderShownAtRef.current : MIN_LOADER_MS;
-      if (isFirstEverLoadRef.current && elapsed < MIN_LOADER_MS) {
-        await new Promise((r) => setTimeout(r, MIN_LOADER_MS - elapsed));
-      }
-      setShowInitialLoader(false);
+      // El cierre de la pantalla de carga inicial ya NO se decide aquí
+      // con una espera fija — lo decide el propio FirstLoadOverlay,
+      // cuando su barra (calculada según el tiempo estimado del trabajo)
+      // llega de verdad al 100%, vía la prop onComplete. Así nunca
+      // desaparece a mitad de cuenta.
 
       // A partir de aquí, lo visible ya está — se sigue traduciendo el
       // resto EN SEGUNDO PLANO, más despacio (nadie lo está esperando),
@@ -409,6 +408,8 @@ export function NewsFeed() {
                   )
                 : 0
             }
+            estimatedDurationMs={estimatedDurationMs}
+            onComplete={() => setShowInitialLoader(false)}
           />
         )}
       </AnimatePresence>
