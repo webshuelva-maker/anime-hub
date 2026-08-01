@@ -460,16 +460,38 @@ export function NewsFeed() {
           </div>
 
           {isLoggedIn === false && (
-            <Link
-              href="/login"
-              className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-ice/25 bg-panel-soft px-4 py-3 text-sm transition-colors hover:border-ice/40"
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="mt-4 overflow-hidden rounded-xl border border-ice/25 bg-panel-soft p-4"
             >
-              <span>
-                <span className="font-heading font-semibold text-ice">Noticias personalizadas</span>{" "}
-                <span className="text-muted">— crea una cuenta gratis para que el feed se ordene según tus gustos</span>
-              </span>
-              <span className="whitespace-nowrap text-xs font-semibold text-ice">Crear cuenta →</span>
-            </Link>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-heading text-sm font-semibold text-ice">Saca más partido a Anime Hub</p>
+                  <ul className="mt-1.5 space-y-1">
+                    <li className="flex items-start gap-1.5 text-xs text-muted">
+                      <span className="mt-0.5 text-ice">✦</span>
+                      El feed se ordena solo según lo que lees y marcas — nadie más ve tu orden
+                    </li>
+                    <li className="flex items-start gap-1.5 text-xs text-muted">
+                      <span className="mt-0.5 text-ice">✦</span>
+                      Tu perfil te espera igual entres desde el móvil o el ordenador
+                    </li>
+                    <li className="flex items-start gap-1.5 text-xs text-muted">
+                      <span className="mt-0.5 text-ice">✦</span>
+                      El primer paso para desbloquear Ren premium más adelante
+                    </li>
+                  </ul>
+                </div>
+                <Link
+                  href="/login"
+                  className="accent-gradient whitespace-nowrap rounded-full px-5 py-2.5 text-center text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+                >
+                  Crear cuenta gratis
+                </Link>
+              </div>
+            </motion.div>
           )}
 
           <div className="mt-4">
