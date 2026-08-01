@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { NewsCategory, NewsItem, Reliability } from "@/types/news";
 
 export const runtime = "nodejs";
+export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
 // No dependemos de una sola fuente: si una falla o está caída, la otra
 // puede seguir dando noticias.

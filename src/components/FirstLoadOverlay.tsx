@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { getPreferences } from "@/lib/storage";
 import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
+import { siteConfig } from "@/config/site";
 
 const ROTATE_MS = 4500;
 const REFILL_THRESHOLD = 5;
@@ -37,12 +38,16 @@ const FALLBACK_FACTS = [
 
 /**
  * Pantalla de carga a pantalla completa — SOLO en la primera visita real
- * (sin nada en caché todavía). Mientras se cargan y traducen las
- * primeras noticias, se muestran curiosidades de anime generadas por IA,
- * en lotes, sin repetirse — cuando quedan pocas por mostrar, se pide un
- * lote nuevo evitando las ya vistas.
+ * (sin nada en caché todavía). Iteración 2: fuera el círculo giratorio
+ * (además de la manía de "se ve rapidísimo", cualquier animación con
+ * "infinite" corre el riesgo de reventar con prefers-reduced-motion mal
+ * gestionado, ver globals.css). En su lugar, una barra de progreso REAL
+ * que crece desde el centro hacia los lados según cuántas noticias del
+ * primer lote ya se han traducido — no es decorativa, informa de verdad
+ * — más dos resplandores ambientales muy suaves a los lados para que se
+ * sienta más cuidado, y las curiosidades de siempre.
  */
-export function FirstLoadOverlay() {
+export function FirstLoadOverlay({ progress }: { progress: number }) {
   const [facts, setFacts] = useState<string[]>(FALLBACK_FACTS);
   const [index, setIndex] = useState(0);
   const shownRef = useRef<string[]>([]);
@@ -107,26 +112,47 @@ export function FirstLoadOverlay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 
+  const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6 text-center"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6 text-center"
       style={{ background: "var(--background)" }}
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.4 }}
+      transition={{ duration: 0.5 }}
     >
-      <div
-        className="mb-8 h-9 w-9 rounded-full"
-        style={{
-          border: "3px solid rgba(255,255,255,0.15)",
-          borderTopColor: "rgba(255,255,255,0.8)",
-          animation: "spin 3s linear infinite",
-        }}
+      {/* Resplandores ambientales — muy lentos y suaves, decoración pura */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -left-32 top-1/3 h-72 w-72 rounded-full"
+        style={{ background: "radial-gradient(circle, var(--ice) 0%, transparent 70%)", filter: "blur(60px)" }}
+        animate={{ opacity: [0.08, 0.18, 0.08] }}
+        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -right-32 bottom-1/3 h-72 w-72 rounded-full"
+        style={{ background: "radial-gradient(circle, var(--accent-from) 0%, transparent 70%)", filter: "blur(60px)" }}
+        animate={{ opacity: [0.06, 0.16, 0.06] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1.2 }}
       />
 
-      <p className="font-heading text-sm uppercase tracking-[0.2em] text-muted">Preparando tu feed</p>
+      <p className="font-heading text-lg tracking-[0.15em] text-foreground/90">{siteConfig.name}</p>
+      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted">Preparando tu feed</p>
 
-      <div className="mt-6 h-20 w-full max-w-md">
+      {/* Barra de progreso real, crece desde el centro hacia los lados */}
+      <div className="relative mt-8 h-[3px] w-56 overflow-hidden rounded-full" style={{ background: "var(--panel-border)" }}>
+        <motion.div
+          className="absolute inset-y-0 left-1/2 rounded-full"
+          style={{ background: "linear-gradient(90deg, var(--accent-from), var(--ice))", x: "-50%" }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+      </div>
+      <p className="mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
+
+      <div className="mt-8 h-20 w-full max-w-md">
         <AnimatePresence mode="wait">
           <motion.p
             key={index}

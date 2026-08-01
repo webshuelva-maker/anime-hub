@@ -121,5 +121,14 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* Antes esto dejaba animation-duration a 0.01ms SIN tocar el número de
+     repeticiones — una animación "infinite" a esa velocidad no se
+     desactiva, se pone a parpadear sin parar (el navegador no llega a
+     pintar tantos ciclos por segundo). Es la explicación real de por qué
+     ningún cambio de duración del círculo de carga se notaba nunca: si
+     el dispositivo tiene activado "Reducir movimiento", esta regla
+     aplastaba cualquier valor que se pusiera. Con iteration-count a 1,
+     la animación hace un solo ciclo rápido y se queda quieta — que es lo
+     que "reducir movimiento" debería significar de verdad. */
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

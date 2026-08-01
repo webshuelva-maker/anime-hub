@@ -56,6 +56,11 @@ export function NewsFeed() {
   // normales o refrescos silenciosos no debe añadir ningún retraso.
   const isFirstEverLoadRef = useRef(getNewsItems().length === 0);
   const loaderShownAtRef = useRef<number | null>(null);
+  // Cuántas noticias tenía el primer lote a traducir — junto con
+  // translatingIds.size (cuántas quedan) da el progreso real de la
+  // pantalla de carga, en vez de un giro indefinido sin información.
+  // Es estado (no ref) porque se usa para renderizar la barra de progreso.
+  const [initialBatchTotal, setInitialBatchTotal] = useState(0);
   useEffect(() => {
     loaderShownAtRef.current = Date.now();
   }, []);
@@ -136,6 +141,9 @@ export function NewsFeed() {
     const needTranslation = targets.filter((i) => !translatingLockRef.current.has(i.id));
     needTranslation.forEach((i) => translatingLockRef.current.add(i.id));
     setTranslatingIds(new Set(needTranslation.map((i) => i.id)));
+    if (isFirstEverLoadRef.current && initialBatchTotal === 0) {
+      setInitialBatchTotal(needTranslation.length);
+    }
 
     const updateItem = (id: string, patch: Partial<NewsItem>) => {
       setItems((prev) => {
@@ -361,7 +369,16 @@ export function NewsFeed() {
 
   return (
     <div>
-      <AnimatePresence>{showInitialLoader && <FirstLoadOverlay key="first-load" />}</AnimatePresence>
+      <AnimatePresence>
+        {showInitialLoader && (
+          <FirstLoadOverlay
+            key="first-load"
+            progress={
+              initialBatchTotal > 0 ? Math.min(1, (initialBatchTotal - translatingIds.size) / initialBatchTotal) : 0
+            }
+          />
+        )}
+      </AnimatePresence>
 
       <div className="border-b border-panel-border/70">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">

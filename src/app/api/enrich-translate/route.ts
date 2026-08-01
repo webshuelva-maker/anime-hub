@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { translateNewsFields } from "@/lib/translate";
 
 export const runtime = "nodejs";
+export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
 export async function GET(req: NextRequest) {
   const title = req.nextUrl.searchParams.get("title") ?? "";

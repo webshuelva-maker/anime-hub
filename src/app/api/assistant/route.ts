@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { siteConfig } from "@/config/site";
 
 export const runtime = "nodejs";
+export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -19,7 +20,7 @@ async function callModel(
   messages: ChatMessage[]
 ): Promise<{ ok: true; reply: string } | { ok: false }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
     const response = await fetch(GROQ_URL, {

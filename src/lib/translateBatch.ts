@@ -26,7 +26,7 @@ async function callBatch(
   model: string
 ): Promise<{ ok: true; results: BatchTranslateResult[] } | { ok: false; debug: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
     const res = await fetch(GROQ_URL, {

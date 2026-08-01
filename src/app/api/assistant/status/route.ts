@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
@@ -24,7 +25,7 @@ export async function GET() {
     // Prueba real: una llamada mínima de verdad contra Groq, no solo mirar
     // si la clave tiene la forma correcta.
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await fetch(GROQ_URL, {
         method: "POST",
@@ -50,7 +51,7 @@ export async function GET() {
       // Segunda prueba, más realista: el mismo tipo de petición que hace
       // /api/translate-batch de verdad (system prompt + pedir JSON).
       const batchController = new AbortController();
-      const batchTimeout = setTimeout(() => batchController.abort(), 9000);
+      const batchTimeout = setTimeout(() => batchController.abort(), 25000);
       try {
         const sampleItems = [{ id: "prueba-1", title: "Demon Slayer Season 5 Announced", summary: "The studio confirmed a new season is in production." }];
         const batchRes = await fetch(GROQ_URL, {

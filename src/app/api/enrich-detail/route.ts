@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchArticlePage } from "@/lib/articleReader";
 
 export const runtime = "nodejs";
+export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
 /**
  * Solo descarga el artículo original (rápido) — la traducción se pide
