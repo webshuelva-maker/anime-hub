@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { playClick } from "@/lib/sound";
+import { playClick, playHover } from "@/lib/sound";
 
 export function SelectableChip({
   label,
@@ -19,6 +19,7 @@ export function SelectableChip({
         onClick();
         playClick();
       }}
+      onMouseEnter={() => playHover()}
       whileHover={{ scale: 1.04 }}
       whileTap={{ scale: 0.94 }}
       transition={{ type: "spring", stiffness: 400, damping: 22 }}

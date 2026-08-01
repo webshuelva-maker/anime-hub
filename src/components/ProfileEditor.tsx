@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { DEFAULT_PREFERENCES, getPreferences, savePreferences } from "@/lib/storage";
 import { UserPreferences } from "@/types/news";
 import { AVATAR_OPTIONS } from "@/data/options";
@@ -11,7 +11,7 @@ import { Toast } from "./Toast";
 import { clearRenMemory } from "@/lib/renMemory";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { playSuccess } from "@/lib/sound";
+import { playSuccess, playToggle } from "@/lib/sound";
 
 interface AccountProfile {
   email: string | null;
@@ -66,6 +66,8 @@ export function ProfileEditor() {
   // primero la contraseña ACTUAL, y se comprueba de verdad volviendo a
   // iniciar sesión con ella antes de aplicar el cambio.
   const [currentPassword, setCurrentPassword] = useState("");
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
 
   const verifyCurrentPassword = async (): Promise<boolean> => {
     if (!currentPassword) {
@@ -305,72 +307,120 @@ export function ProfileEditor() {
               {account.isPremium ? "Premium activo" : "Plan gratuito"}
             </p>
 
-            <div className="mt-5 rounded-xl border border-panel-border bg-panel-soft/40 p-4">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="5" y="11" width="14" height="9" rx="1.5" />
-                  <path d="M8 11V7a4 4 0 0 1 8 0v4" strokeLinecap="round" />
-                </svg>
-                Por seguridad, confirma tu contraseña actual para cambiar el email o la contraseña
-              </div>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Tu contraseña actual"
-                className="mt-2 w-full rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
-              />
+            <div className="mt-5 flex flex-wrap gap-2">
+              <motion.button
+                type="button"
+                onClick={() => {
+                  setShowEmailForm((v) => !v);
+                  setShowPasswordForm(false);
+                  playToggle();
+                }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                className="rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+              >
+                Cambiar email
+              </motion.button>
+              <motion.button
+                type="button"
+                onClick={() => {
+                  setShowPasswordForm((v) => !v);
+                  setShowEmailForm(false);
+                  playToggle();
+                }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                className="rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+              >
+                Cambiar contraseña
+              </motion.button>
             </div>
 
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Cambiar email</label>
-                <div className="flex gap-2">
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder={account.email ?? ""}
-                    className="flex-1 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
-                  />
-                  <motion.button
-                    type="button"
-                    onClick={handleChangeEmail}
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 22 }}
-                    className="whitespace-nowrap rounded-lg border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
-                  >
-                    Cambiar
-                  </motion.button>
-                </div>
-                {emailStatus && <p className="mt-1.5 text-xs text-muted">{emailStatus}</p>}
-              </div>
+            <AnimatePresence>
+              {showEmailForm && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-4 rounded-xl border border-panel-border bg-panel-soft/40 p-4">
+                    <label className="mb-1 block text-xs font-medium text-muted">Nuevo email</label>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder={account.email ?? ""}
+                      className="w-full rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+                    />
+                    <label className="mb-1 mt-3 block text-xs font-medium text-muted">Confirma tu contraseña actual</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Tu contraseña actual"
+                      className="w-full rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+                    />
+                    <motion.button
+                      type="button"
+                      onClick={handleChangeEmail}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                      className="accent-gradient mt-3 rounded-full px-5 py-2 text-sm font-semibold text-white"
+                    >
+                      Confirmar cambio
+                    </motion.button>
+                    {emailStatus && <p className="mt-2 text-xs text-muted">{emailStatus}</p>}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Cambiar contraseña</label>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Nueva contraseña"
-                    className="flex-1 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
-                  />
-                  <motion.button
-                    type="button"
-                    onClick={handleChangePassword}
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 22 }}
-                    className="whitespace-nowrap rounded-lg border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
-                  >
-                    Cambiar
-                  </motion.button>
-                </div>
-                {passwordStatus && <p className="mt-1.5 text-xs text-muted">{passwordStatus}</p>}
-              </div>
-            </div>
+            <AnimatePresence>
+              {showPasswordForm && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-4 rounded-xl border border-panel-border bg-panel-soft/40 p-4">
+                    <label className="mb-1 block text-xs font-medium text-muted">Nueva contraseña</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+                    />
+                    <label className="mb-1 mt-3 block text-xs font-medium text-muted">Confirma tu contraseña actual</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Tu contraseña actual"
+                      className="w-full rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+                    />
+                    <motion.button
+                      type="button"
+                      onClick={handleChangePassword}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                      className="accent-gradient mt-3 rounded-full px-5 py-2 text-sm font-semibold text-white"
+                    >
+                      Confirmar cambio
+                    </motion.button>
+                    {passwordStatus && <p className="mt-2 text-xs text-muted">{passwordStatus}</p>}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <motion.button
               type="button"

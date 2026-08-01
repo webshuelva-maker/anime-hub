@@ -50,23 +50,40 @@ function tone(freq: number, duration: number, volume: number, type: OscillatorTy
   osc.stop(start + duration + 0.02);
 }
 
-/** Clic suave — botones normales, cambiar de pestaña. */
+/** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
 export function playClick() {
-  tone(720, 0.07, 0.12);
+  tone(720, 0.08, 0.2);
 }
 
 /** Confirmación — guardar, dar a "me gusta", completar una acción. */
 export function playSuccess() {
-  tone(600, 0.1, 0.12);
-  tone(900, 0.14, 0.11, "sine", 0.05);
+  tone(600, 0.11, 0.2);
+  tone(900, 0.15, 0.18, "sine", 0.05);
 }
 
 /** Desplegar/plegar — acordeones, "ver más", abrir el chat de Ren. */
 export function playToggle() {
-  tone(500, 0.06, 0.1);
+  tone(500, 0.07, 0.17);
 }
 
 /** Aviso suave — errores de formulario, algo que no se ha podido hacer. */
 export function playError() {
-  tone(220, 0.13, 0.11, "triangle");
+  tone(220, 0.14, 0.18, "triangle");
+}
+
+/** Muy suave, casi subliminal — pasar el ratón por encima de algo interactivo. */
+export function playHover() {
+  tone(1100, 0.035, 0.035);
+}
+
+/** Al mandarle un mensaje a Ren. */
+export function playSend() {
+  tone(500, 0.06, 0.16);
+  tone(760, 0.09, 0.14, "sine", 0.04);
+}
+
+/** Cuando Ren responde. */
+export function playReceive() {
+  tone(820, 0.07, 0.15);
+  tone(620, 0.11, 0.13, "sine", 0.05);
 }

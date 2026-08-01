@@ -8,7 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { playToggle } from "@/lib/sound";
+import { playToggle, playSend, playReceive } from "@/lib/sound";
 import { runExclusive, setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 interface Message {
@@ -150,6 +150,7 @@ export function AssistantOrb() {
     setMessages(nextMessages);
     appendToArchive([userMessage]);
     setInput("");
+    playSend();
     setLoading(true);
     const slowTimer = setTimeout(() => setSlowResponse(true), 4000);
 
@@ -213,6 +214,7 @@ export function AssistantOrb() {
       const assistantMessage: Message = { role: "assistant", content: cleanText || rawReply, actions, ts: Date.now() };
       setMessages((prev) => [...prev, assistantMessage]);
       appendToArchive([assistantMessage]);
+      playReceive();
     } catch {
       setMessages((prev) => [
         ...prev,

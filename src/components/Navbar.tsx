@@ -8,7 +8,7 @@ import { getPreferences, PREFERENCES_CHANGED_EVENT } from "@/lib/storage";
 import { Avatar } from "./AvatarPicker";
 import { FullscreenButton } from "./FullscreenButton";
 import { BrandMark } from "./BrandMark";
-import { playToggle } from "@/lib/sound";
+import { playToggle, playHover, playClick } from "@/lib/sound";
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
@@ -34,7 +34,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-20 border-b border-panel-border/70 bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <Link href="/noticias" className="flex items-center gap-2.5">
+        <Link href="/noticias" onClick={playClick} onMouseEnter={playHover} className="flex items-center gap-2.5">
           <span className="font-heading flex h-8 w-8 items-center justify-center rounded-full border border-ice/30 ice-text">
             <BrandMark size={14} />
           </span>
@@ -51,6 +51,7 @@ export function Navbar() {
                 key={link.href}
                 href={link.href}
                 onClick={() => !active && playToggle()}
+                onMouseEnter={() => !active && playHover()}
                 className={`rounded-full px-3 py-1.5 text-sm font-medium ${
                   active ? "bg-panel-soft text-foreground" : "text-muted hover:text-foreground"
                 }`}
@@ -60,7 +61,12 @@ export function Navbar() {
             );
           })}
           <FullscreenButton />
-          <Link href="/perfil" className="transition-transform hover:scale-105">
+          <Link
+            href="/perfil"
+            onClick={playClick}
+            onMouseEnter={playHover}
+            className="transition-transform hover:scale-105"
+          >
             <Avatar avatarId={avatarId} photoDataUrl={photoDataUrl} size="sm" rounded="full" />
           </Link>
         </nav>
