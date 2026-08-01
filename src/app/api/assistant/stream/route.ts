@@ -59,8 +59,11 @@ function createTagFilter() {
     push(chunk: string): string {
       buffer += chunk;
 
-      // Quita las etiquetas ya completas que hayan quedado dentro.
-      const cleaned = buffer.replace(/\[\[ACTION:[^\]]*\]\]/g, "");
+      // Quita las etiquetas ya completas que hayan quedado dentro. Se
+      // borra CUALQUIER cosa entre dobles corchetes, no solo las acciones
+      // conocidas: si el modelo se inventa un nombre de acción o escribe
+      // mal la etiqueta, tampoco debe verse en pantalla.
+      const cleaned = buffer.replace(/\[\[[^\]]*\]\]/g, "");
 
       const open = cleaned.indexOf("[[");
       let emitUpTo: number;
@@ -79,7 +82,7 @@ function createTagFilter() {
       return out;
     },
     flush(): string {
-      const out = buffer.replace(/\[\[ACTION:[^\]]*\]\]/g, "");
+      const out = buffer.replace(/\[\[[^\]]*\]\]/g, "");
       buffer = "";
       return out;
     },

@@ -36,7 +36,17 @@ export function parseAndRunActions(rawText: string): {
     })
     .trim();
 
-  return { cleanText, actions, interests };
+  // Red de seguridad: si el modelo escribe una etiqueta con un nombre de
+  // acción que no conocemos, o se equivoca al escribirla, el patrón de
+  // arriba no la reconoce y el usuario acabaría LEYENDO "[[ACTION:...]]"
+  // en mitad de la respuesta. Aquí se borra cualquier cosa entre dobles
+  // corchetes que haya sobrevivido, sea lo que sea.
+  const safeText = cleanText
+    .replace(/\[\[[^\]]*\]\]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { cleanText: safeText, actions, interests };
 }
 
 function runAction(type: AssistantAction["type"], value: string): string | null {
