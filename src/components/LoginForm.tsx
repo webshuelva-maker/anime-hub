@@ -13,7 +13,7 @@ type Mode = "login" | "signup";
 const BENEFITS = [
   "El feed se ordena solo según lo que lees y marcas",
   "Tu perfil te espera igual entres desde el móvil o el ordenador",
-  "El primer paso para desbloquear Ren premium más adelante",
+  "El primer paso para desbloquear Iris premium más adelante",
 ];
 
 export function LoginForm() {

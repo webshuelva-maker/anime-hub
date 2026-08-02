@@ -208,7 +208,11 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
       item.relatedTitle.toLowerCase().includes(title.toLowerCase())
     )
   ) {
-    score += 6;
+    // Un favorito es una petición explícita ("quiero ver noticias de
+    // esto"), así que tiene que ganar a cualquier afinidad acumulada por
+    // el camino. Antes valía 6, lo mismo que tres visitas sueltas, y se
+    // quedaba enterrado.
+    score += 40;
   }
 
   if (
@@ -237,8 +241,11 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
   // Preferencias explícitas del cuestionario antiguo (si el usuario las
   // rellenó alguna vez en Preferencias) siguen contando, pero poco: son la
   // señal más débil frente a lo que de verdad haces en el feed.
-  score += item.genres.filter((g) => prefs.genres.includes(g)).length * 0.5;
-  score += item.studios.filter((s) => prefs.studios.includes(s)).length * 0.5;
+  // Géneros y estudios que ha pedido expresamente (en el cuestionario o
+  // diciéndoselo al asistente). Antes valían 0,5 — tan poco que decir "me
+  // encanta el romance" no cambiaba nada en el feed.
+  score += item.genres.filter((g) => prefs.genres.includes(g)).length * 3;
+  score += item.studios.filter((s) => prefs.studios.includes(s)).length * 3;
 
   // Popularidad (de AniList) como desempate para usuarios nuevos: si
   // todavía no sabemos casi nada de sus gustos, se prioriza lo conocido

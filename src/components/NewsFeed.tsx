@@ -494,7 +494,10 @@ export function NewsFeed() {
               </p>
             </div>
             <span
-              className={`ml-auto flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+              // whitespace-nowrap y shrink-0: en móvil "Al día" se partía
+              // en dos líneas ("Al" arriba y "día" abajo) porque el saludo
+              // de al lado le comía el ancho.
+              className={`ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium ${
                 status === "live" ? "border-ice/30 text-ice" : "border-panel-border text-muted"
               }`}
             >
@@ -527,7 +530,7 @@ export function NewsFeed() {
                     </li>
                     <li className="flex items-start gap-1.5 text-xs text-muted">
                       <span className="mt-0.5 text-ice">✦</span>
-                      El primer paso para desbloquear Ren premium más adelante
+                      El primer paso para desbloquear Iris premium más adelante
                     </li>
                   </ul>
                 </div>

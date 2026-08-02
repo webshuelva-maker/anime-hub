@@ -6,7 +6,7 @@ import { DEFAULT_PREFERENCES, getPreferences, savePreferences } from "@/lib/stor
 import { UserPreferences } from "@/types/news";
 import { AVATAR_OPTIONS } from "@/data/options";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
-import { TagInput } from "./TagInput";
+import { FavoriteAnimeInput } from "./FavoriteAnimeInput";
 import { Toast } from "./Toast";
 import { clearRenMemory } from "@/lib/renMemory";
 import { createClient } from "@/lib/supabase/client";
@@ -122,7 +122,11 @@ export function ProfileEditor() {
 
   const handleSave = () => {
     if (!isDirty) return;
-    savePreferences(prefs);
+
+    // Los favoritos se guardan solos desde su propio componente, así que
+    // se releen justo antes de guardar: si no, este guardado escribiría
+    // la lista vieja que tenía en memoria y desharía lo recién añadido.
+    savePreferences({ ...prefs, favoriteTitles: getPreferences().favoriteTitles });
     setSavedSnapshot(JSON.stringify(prefs));
     setSaved(true);
     playSuccess();
@@ -240,14 +244,10 @@ export function ProfileEditor() {
       <div className="panel mt-6 rounded-2xl p-6">
         <h2 className="font-heading text-lg font-semibold">Animes favoritos</h2>
         <p className="mt-1 text-sm text-muted">
-          Te priorizamos noticias sobre estos títulos en tu feed.
+          Sus noticias te salen las primeras. Se guarda solo, no hace falta confirmar nada.
         </p>
         <div className="mt-3">
-          <TagInput
-            values={prefs.favoriteTitles}
-            onChange={(favoriteTitles) => setPrefs((p) => ({ ...p, favoriteTitles }))}
-            placeholder="Ej: One Piece"
-          />
+          <FavoriteAnimeInput />
         </div>
       </div>
 

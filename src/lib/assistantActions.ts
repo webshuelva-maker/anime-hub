@@ -1,10 +1,11 @@
 import { getNewsItems } from "./newsStore";
 import { getPreferences, savePreferences } from "./storage";
 import { toggleLike } from "./learning";
+import { canonicalGenre, genreLabel } from "./genreNames";
 import { addRenMemory } from "./renMemory";
 
 export interface AssistantAction {
-  type: "add_favorite" | "like_news" | "interes" | "remember" | "ir_a";
+  type: "add_favorite" | "like_news" | "interes" | "remember" | "ir_a" | "seguir" | "genero";
   value: string;
   result: string; // texto corto de confirmación para mostrar en el chat
 }
@@ -32,7 +33,8 @@ const SECTIONS: Record<string, AssistantLink> = {
   normas: { label: "Leer las normas de convivencia", href: "/legal/normas" },
 };
 
-const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|interes|remember|ir_a):([^\]]+)\]\]/g;
+const ACTION_PATTERN =
+  /\[\[ACTION:(add_favorite|like_news|interes|remember|ir_a|seguir|genero):([^\]]+)\]\]/g;
 
 /**
  * Separa el texto visible de las etiquetas de acción que Ren puede incluir
@@ -45,17 +47,26 @@ export function parseAndRunActions(rawText: string): {
   /** Series que Ren ha detectado como "le interesa": el cliente las
    *  completa después con géneros y estudio para reforzar la afinidad. */
   interests: string[];
-  /** Botones para ir a una sección, si Ren ha ofrecido llevarte. */
+  /** Botones para ir a una sección, si el asistente ha ofrecido llevarte. */
   links: AssistantLink[];
+  /** Series que hay que añadir a favoritos, tras comprobar que existen. */
+  follows: string[];
 } {
   const actions: AssistantAction[] = [];
   const interests: string[] = [];
   const links: AssistantLink[] = [];
+  const follows: string[] = [];
 
   const cleanText = rawText
     .replace(ACTION_PATTERN, (_match, type: string, rawValue: string) => {
       const value = rawValue.trim();
       if (type === "interes" && value) interests.push(value);
+      // "seguir" no se aplica aquí: primero hay que comprobar contra
+      // AniList que esa serie existe de verdad. Lo hace el cliente.
+      if (type === "seguir" && value) {
+        follows.push(value);
+        return "";
+      }
 
       if (type === "ir_a") {
         const section = SECTIONS[value.toLowerCase().trim()];
@@ -78,7 +89,7 @@ export function parseAndRunActions(rawText: string): {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { cleanText: safeText, actions, interests, links };
+  return { cleanText: safeText, actions, interests, links, follows };
 }
 
 function runAction(type: AssistantAction["type"], value: string): string | null {
@@ -109,6 +120,33 @@ function runAction(type: AssistantAction["type"], value: string): string | null 
     // comprueba primero contra AniList que eso existe y es un anime, y
     // solo entonces lo apunta (ver AssistantOrb).
     return null;
+  }
+
+  if (type === "genero") {
+    /*
+     * Priorizar un género en el feed.
+     *
+     * Se traduce a su nombre canónico (el que traen las noticias) antes
+     * de guardarlo: si se guardara "romance" tal cual, no coincidiría con
+     * el "Romance" que llega de AniList y no serviría para nada. Si no se
+     * reconoce el género, no se guarda nada y no se enseña confirmación,
+     * que es mejor que decir que sí y no hacerlo.
+     */
+    const canonico = canonicalGenre(value);
+    if (!canonico) return null;
+
+    const prefs = getPreferences();
+    const yaEstaba = prefs.genres.includes(canonico);
+    const counts = { ...prefs.genreInteractionCounts };
+    counts[canonico] = (counts[canonico] ?? 0) + 4; // igual que un "me gusta": lo ha pedido él
+
+    savePreferences({
+      ...prefs,
+      genres: yaEstaba ? prefs.genres : [...prefs.genres, canonico],
+      genreInteractionCounts: counts,
+    });
+
+    return `Priorizo ${genreLabel(canonico)} en tu feed`;
   }
 
   if (type === "remember") {

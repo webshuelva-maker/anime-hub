@@ -8,5 +8,5 @@ export const siteConfig = {
   tagline: "Tu noticiero de anime, a tu manera",
   description:
     "Noticias de anime personalizadas, verificadas y siempre con la fuente original a un clic.",
-  assistantName: "Ren",
+  assistantName: "Iris",
 } as const;

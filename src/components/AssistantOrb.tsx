@@ -10,6 +10,7 @@ import { parseAndRunActions, AssistantAction, AssistantLink } from "@/lib/assist
 import { ResearchSource } from "@/lib/sourceTiers";
 import { Confidence } from "@/lib/confidence";
 import { recordAnimeInterest } from "@/lib/learning";
+import { savePreferences } from "@/lib/storage";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { playToggle, playSend, playReceive, playHover } from "@/lib/sound";
@@ -390,7 +391,8 @@ export function AssistantOrb() {
     extras: { sources?: ResearchSource[]; confidence?: Confidence | null; steps?: Step[] },
     boostedTitles: Set<string>
   ) => {
-    const { cleanText, actions, interests, links } = parseAndRunActions(rawReply);
+    const boostedTitlesGlobal = boostedTitles;
+    const { cleanText, actions, interests, links, follows } = parseAndRunActions(rawReply);
     const assistantMessage: Message = {
       role: "assistant",
       content: cleanText || rawReply,
@@ -404,6 +406,58 @@ export function AssistantOrb() {
     setMessages((prev) => [...prev, assistantMessage]);
     appendToArchive([assistantMessage]);
     playReceive();
+
+    /*
+     * Series que el asistente ha pedido añadir a favoritos.
+     *
+     * Se comprueba PRIMERO contra AniList que existan, y solo entonces se
+     * guardan — y la confirmación aparece después, cuando ya está hecho.
+     * Este orden es deliberado: la queja era justamente que decía "ya he
+     * actualizado tus preferencias" sin haber tocado nada. Si la serie no
+     * existe, no se guarda y se dice que no se ha encontrado.
+     */
+    follows.slice(0, 4).forEach(async (title) => {
+      let confirmacion = `No he encontrado ningún anime llamado "${title}"`;
+      try {
+        const res = await fetch(`/api/anime-facts?title=${encodeURIComponent(title)}`);
+        const data = (await res.json()) as {
+          facts?: { title?: string; genres?: string[]; studios?: string[] } | null;
+        };
+        if (data.facts?.title && titlesMatch(title, data.facts.title)) {
+          const canonico = data.facts.title;
+          const prefs = getPreferences();
+          const yaEstaba = prefs.favoriteTitles.some(
+            (t) => t.toLowerCase() === canonico.toLowerCase()
+          );
+          if (!yaEstaba) {
+            savePreferences({ ...prefs, favoriteTitles: [...prefs.favoriteTitles, canonico] });
+          }
+          recordAnimeInterest(canonico, data.facts.genres ?? [], data.facts.studios ?? []);
+          boostedTitlesGlobal.add(canonico.toLowerCase());
+          confirmacion = yaEstaba
+            ? `${canonico} ya estaba en tus favoritos`
+            : `${canonico} añadido a tus favoritos`;
+        }
+      } catch {
+        confirmacion = "No he podido comprobar ese título ahora mismo";
+      }
+
+      // La confirmación se añade al mensaje que ya está en pantalla, para
+      // que se vea junto a lo que dijo y no como un aviso suelto.
+      setMessages((prev) =>
+        prev.map((m) =>
+          m === assistantMessage
+            ? {
+                ...m,
+                actions: [
+                  ...(m.actions ?? []),
+                  { type: "seguir" as const, value: title, result: confirmacion },
+                ],
+              }
+            : m
+        )
+      );
+    });
 
     // Series que Ren ha marcado como interesantes durante la charla. El
     // título ya se ha guardado al leer la etiqueta; aquí solo se
