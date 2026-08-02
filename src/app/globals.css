@@ -38,6 +38,16 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+html,
+body {
+  /* Red de seguridad contra el arrastre lateral en móvil: si algún
+     elemento se sale por un lado, no debe convertir toda la página en
+     desplazable de lado.
+     "clip" y NO "hidden" a propósito: hidden crea un contenedor de
+     desplazamiento y eso rompe el position:sticky de la barra superior. */
+  overflow-x: clip;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

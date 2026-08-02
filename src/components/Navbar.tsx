@@ -34,17 +34,21 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-panel-border/70 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <Link href="/noticias" onClick={playClick} onMouseEnter={playHover} className="flex items-center gap-2.5">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-4 sm:px-6">
+        <Link href="/noticias" onClick={playClick} onMouseEnter={playHover} className="flex shrink-0 items-center gap-2.5">
           <span className="font-heading flex h-8 w-8 items-center justify-center rounded-full border border-ice/30 ice-text">
             <BrandMark size={14} />
           </span>
-          <span className="font-heading text-lg font-semibold tracking-wide">
+          {/* El nombre se esconde en pantallas estrechas: junto a los tres
+              enlaces, el icono y el avatar la barra medía ~600px y se
+              salía de un móvil de 390px, dejando arrastrar toda la web
+              de lado. El emblema ya identifica la app de sobra. */}
+          <span className="font-heading hidden text-lg font-semibold tracking-wide sm:inline">
             {siteConfig.name}
           </span>
         </Link>
 
-        <nav className="flex items-center gap-6">
+        <nav className="flex min-w-0 items-center gap-0.5 sm:gap-6">
           {LINKS.map((link) => {
             const active = pathname?.startsWith(link.href);
             return (
@@ -53,7 +57,7 @@ export function Navbar() {
                 href={link.href}
                 onClick={() => !active && playToggle()}
                 onMouseEnter={() => !active && playHover()}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                className={`whitespace-nowrap rounded-full px-2 py-1.5 text-[13px] font-medium sm:px-3 sm:text-sm ${
                   active ? "bg-panel-soft text-foreground" : "text-muted hover:text-foreground"
                 }`}
               >
@@ -61,12 +65,18 @@ export function Navbar() {
               </Link>
             );
           })}
-          <FullscreenButton />
+          {/* Oculto en móvil: ahí no cabe, y además iOS no admite la API
+              de pantalla completa, así que no haría nada. Para tenerla
+              sin barras en el móvil está la instalación en pantalla de
+              inicio. */}
+          <span className="hidden sm:inline">
+            <FullscreenButton />
+          </span>
           <Link
             href="/perfil"
             onClick={playClick}
             onMouseEnter={playHover}
-            className="transition-transform hover:scale-105"
+            className="ml-1 shrink-0 transition-transform hover:scale-105 sm:ml-0"
           >
             <Avatar avatarId={avatarId} photoDataUrl={photoDataUrl} size="sm" rounded="full" />
           </Link>
