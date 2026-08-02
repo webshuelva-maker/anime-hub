@@ -343,3 +343,46 @@ begin
   alter publication supabase_realtime add table public.support_tickets;
 exception when duplicate_object then null;
 end $$;
+
+-- ============================================================
+--  v103 — Avisos push (notificaciones al móvil)
+-- ============================================================
+-- Un dispositivo suscrito a notificaciones. Una persona puede tener
+-- varios (móvil, ordenador), de ahí que sea una fila por dispositivo y
+-- no una columna en profiles.
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  -- El endpoint es único por dispositivo/navegador: sirve de clave para
+  -- no duplicar la suscripción cada vez que se abre la app.
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz default now() not null
+);
+
+create index if not exists push_subscriptions_user_idx
+  on public.push_subscriptions (user_id);
+
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists "Ver suscripciones propias" on public.push_subscriptions;
+create policy "Ver suscripciones propias"
+  on public.push_subscriptions for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Registrar suscripcion propia" on public.push_subscriptions;
+create policy "Registrar suscripcion propia"
+  on public.push_subscriptions for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Borrar suscripcion propia" on public.push_subscriptions;
+create policy "Borrar suscripcion propia"
+  on public.push_subscriptions for delete
+  using (auth.uid() = user_id);
+
+-- OJO: quién puede LEER las suscripciones para enviar el aviso no está
+-- aquí. El envío lo hace el servidor con la clave de servicio, que se
+-- salta las políticas — nunca desde el navegador. Si esto se pudiera
+-- leer desde el cliente, cualquiera podría mandar notificaciones a los
+-- dispositivos de otro.

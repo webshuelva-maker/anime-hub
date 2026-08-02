@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { legalConfig } from "@/config/legal";
+import { createClient } from "@/lib/supabase/client";
+import { AvisosPushToggle } from "./AvisosPushToggle";
 import { playReceive, playSend } from "@/lib/sound";
 import {
   Ticket,
   MensajeSoporte,
+  anunciarAdminPresente,
   atenderTicket,
   cerrarTicket,
   enviarMensaje,
@@ -34,6 +37,7 @@ function haceCuanto(iso: string): string {
  */
 export function AdminSupportPanel() {
   const [esAdmin, setEsAdmin] = useState<boolean | null>(null);
+  const [adminId, setAdminId] = useState<string | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [activo, setActivo] = useState<Ticket | null>(null);
   const [mensajes, setMensajes] = useState<MensajeSoporte[]>([]);
@@ -44,7 +48,11 @@ export function AdminSupportPanel() {
     (async () => {
       const admin = await esAdministrador();
       setEsAdmin(admin);
-      if (admin) setTickets(await getTicketsPendientes());
+      if (admin) {
+        const { data } = await createClient().auth.getUser();
+        setAdminId(data.user?.id ?? null);
+        setTickets(await getTicketsPendientes());
+      }
     })();
   }, []);
 
@@ -64,6 +72,14 @@ export function AdminSupportPanel() {
     });
     return dejar;
   }, [activo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mientras este ticket esté abierto en pantalla, el usuario ve
+  // "Conectado". Al cerrarlo o cerrar la pestaña, la presencia se cae
+  // sola y al usuario le aparece "Desconectado".
+  useEffect(() => {
+    if (!activo || !adminId) return;
+    return anunciarAdminPresente(activo.id, adminId);
+  }, [activo?.id, adminId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -111,7 +127,9 @@ export function AdminSupportPanel() {
   }
 
   return (
-    <div className="mt-6 grid gap-4 lg:grid-cols-[280px_1fr]">
+    <>
+      <AvisosPushToggle />
+      <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
       {/* Lista de tickets */}
       <div className="panel h-fit rounded-2xl p-3">
         <p className="px-2 pb-2 text-xs font-medium uppercase tracking-wide text-muted">
@@ -211,5 +229,6 @@ export function AdminSupportPanel() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -211,3 +211,58 @@ export function escucharTicketsNuevos(alLlegar: (t: Ticket) => void): () => void
     void supabase.removeChannel(canal);
   };
 }
+
+/*
+ * Presencia: ¿hay un administrador mirando este ticket AHORA?
+ *
+ * El estado del ticket no sirve para esto. "atendido" solo dice que
+ * alguien lo cogió en algún momento, y se queda así para siempre — por
+ * eso antes ponía "Conectado" aunque el administrador hubiera cerrado la
+ * pestaña hace horas. Eso es peor que no decir nada: alguien que ha
+ * denunciado algo se queda escribiendo creyendo que le leen.
+ *
+ * Se usa la presencia de Supabase, que mantiene una lista de quién está
+ * suscrito al canal y la actualiza sola cuando alguien se va o pierde la
+ * conexión. Es información real del momento, no un estado guardado.
+ */
+const canalPresencia = (ticketId: string) => `presencia-ticket-${ticketId}`;
+
+/** El administrador se anuncia mientras tiene el ticket abierto. */
+export function anunciarAdminPresente(ticketId: string, adminId: string): () => void {
+  const supabase = createClient();
+  const canal = supabase.channel(canalPresencia(ticketId), {
+    config: { presence: { key: adminId } },
+  });
+
+  canal.subscribe((estado) => {
+    if (estado === "SUBSCRIBED") void canal.track({ rol: "admin" });
+  });
+
+  return () => {
+    void supabase.removeChannel(canal);
+  };
+}
+
+/** El usuario observa si hay algún administrador dentro en este momento. */
+export function observarAdminPresente(ticketId: string, alCambiar: (presente: boolean) => void): () => void {
+  const supabase = createClient();
+  const canal = supabase.channel(canalPresencia(ticketId));
+
+  const recalcular = () => {
+    const estado = canal.presenceState<{ rol?: string }>();
+    const hayAdmin = Object.values(estado).some((entradas) =>
+      entradas.some((e) => e.rol === "admin")
+    );
+    alCambiar(hayAdmin);
+  };
+
+  canal
+    .on("presence", { event: "sync" }, recalcular)
+    .on("presence", { event: "join" }, recalcular)
+    .on("presence", { event: "leave" }, recalcular)
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(canal);
+  };
+}

@@ -17,6 +17,7 @@ import {
   escucharTicket,
   getMensajes,
   getTicketActivo,
+  observarAdminPresente,
 } from "@/lib/support";
 
 /**
@@ -36,6 +37,7 @@ export function SupportChat() {
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [haySesion, setHaySesion] = useState<boolean | null>(null);
+  const [adminPresente, setAdminPresente] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,6 +78,13 @@ export function SupportChat() {
     };
   }, [ticket?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Presencia real del administrador: si cierra la pestaña o pierde
+  // conexión, esto pasa a false solo y la cabecera lo refleja.
+  useEffect(() => {
+    if (!ticket) return;
+    return observarAdminPresente(ticket.id, setAdminPresente);
+  }, [ticket?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensajes.length]);
@@ -89,6 +98,15 @@ export function SupportChat() {
       await enviarMensaje(t.id, motivo.trim(), "usuario");
       setMensajes(await getMensajes(t.id));
       playSend();
+      // Aviso al móvil del administrador. Si falla (no configurado, sin
+      // dispositivos, sin red) da igual: el ticket ya está creado y se
+      // verá igualmente en el panel. No se hace esperar al usuario por
+      // esto ni se le enseña ningún error.
+      void fetch("/api/push/notificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId: t.id, motivo: motivo.trim() }),
+      }).catch(() => {});
     }
     setEnviando(false);
   };
@@ -167,6 +185,10 @@ export function SupportChat() {
   }
 
   const atendido = ticket.estado === "atendido";
+  // "Conectado" solo si además está ahí ahora mismo. Antes bastaba con
+  // que hubiera cogido el ticket alguna vez, así que seguía poniendo
+  // conectado horas después de haberse ido.
+  const enLinea = atendido && adminPresente;
 
   return (
     <div className="panel mt-6 flex flex-col rounded-2xl">
@@ -188,10 +210,17 @@ export function SupportChat() {
                   {legalConfig.soporteRango}
                 </span>
               </p>
-              <p className="flex items-center gap-1.5 text-xs text-muted">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Conectado
-              </p>
+              {enLinea ? (
+                <p className="flex items-center gap-1.5 text-xs text-muted">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Conectado
+                </p>
+              ) : (
+                <p className="flex items-center gap-1.5 text-xs text-muted">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-panel-border" />
+                  Desconectado — ya ha visto tu consulta, te responderá aquí
+                </p>
+              )}
             </>
           ) : (
             <>
