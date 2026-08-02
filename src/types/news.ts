@@ -68,7 +68,9 @@ export interface UserPreferences {
   titleInterestCounts: Record<string, number>; // series por las que ha preguntado a Ren: preguntar ya cuenta como interés
   genreExamples: Record<string, string[]>; // de qué series le viene cada género, para poder explicárselo
   studioExamples: Record<string, string[]>;
-  updatedAt: string | null; // último cambio del usuario, para sincronizar entre dispositivos // de qué series le viene cada estudio ("no sabes quién es MAPPA, pero has visto esto")
+  updatedAt: string | null;
+  acceptedLegalAt: string | null; // cuándo aceptó los términos, normas y privacidad
+  acceptedLegalVersion: string | null; // qué versión aceptó — es lo que sirve de prueba // último cambio del usuario, para sincronizar entre dispositivos // de qué series le viene cada estudio ("no sabes quién es MAPPA, pero has visto esto")
   searchHistory: string[]; // términos buscados, para reforzar el feed sin que el usuario tenga que marcar nada
   soundEnabled: boolean; // sonidos de interfaz (clics, confirmaciones, etc.)
 }

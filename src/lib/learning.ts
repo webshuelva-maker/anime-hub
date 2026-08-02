@@ -179,6 +179,19 @@ export function recordAnimeInterest(
   });
 }
 
+/** Quita una serie de la lista de seguidas (con la ✕ en Tus gustos). */
+export function removeAnimeInterest(title: string): void {
+  const prefs = getPreferences();
+  const titleCounts = { ...prefs.titleInterestCounts };
+  delete titleCounts[title];
+
+  savePreferences({
+    ...prefs,
+    titleInterestCounts: titleCounts,
+    searchHistory: prefs.searchHistory.filter((t) => t.toLowerCase() !== title.toLowerCase()),
+  });
+}
+
 /**
  * Puntuación de afinidad de una noticia para el usuario. Ya no depende de
  * un cuestionario: se basa por completo en lo que ha dado "me gusta" o

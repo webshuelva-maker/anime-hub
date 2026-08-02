@@ -8,7 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
 import { ResearchSource } from "@/lib/sourceTiers";
 import { Confidence } from "@/lib/confidence";
-import { recordAnimeInterest, boostCategories } from "@/lib/learning";
+import { recordAnimeInterest } from "@/lib/learning";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { playToggle, playSend, playReceive, playHover } from "@/lib/sound";
@@ -38,6 +38,28 @@ interface ResearchResponse {
   webFailed?: boolean;
   canonicalTitle?: string | null;
   debug?: string;
+}
+
+/**
+ * ¿El resultado de AniList se corresponde de verdad con lo que se buscó?
+ * Se comparan las palabras significativas: basta con que compartan una.
+ * Es tosco a propósito — solo hace falta descartar los casos en los que
+ * la base devuelve una serie que no tiene nada que ver con lo preguntado.
+ */
+function titlesMatch(asked: string, found: string): boolean {
+  const norm = (t: string) =>
+    t
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 3);
+
+  const a = norm(asked);
+  const b = norm(found);
+  if (a.length === 0 || b.length === 0) return false;
+  return a.some((w) => b.includes(w)) || b.some((w) => a.includes(w));
 }
 
 /** En qué está Ren ahora mismo, para poder decirlo en la interfaz. */
@@ -380,15 +402,23 @@ export function AssistantOrb() {
 
     // Series que Ren ha marcado como interesantes durante la charla. El
     // título ya se ha guardado al leer la etiqueta; aquí solo se
-    // completan géneros y estudio, en segundo plano.
+    // se comprueba primero que existan de verdad como anime.
     interests
       .filter((title) => !boostedTitles.has(title.toLowerCase()))
       .slice(0, 2)
       .forEach(async (title) => {
         try {
           const res = await fetch(`/api/anime-facts?title=${encodeURIComponent(title)}`);
-          const data = (await res.json()) as { facts?: { genres?: string[]; studios?: string[] } | null };
-          if (data.facts) boostCategories(data.facts.genres ?? [], data.facts.studios ?? []);
+          const data = (await res.json()) as {
+            facts?: { title?: string; genres?: string[]; studios?: string[] } | null;
+          };
+          // AniList siempre devuelve ALGO parecido de nombre, aunque le
+          // preguntes por un videojuego. Si lo que vuelve no se parece a
+          // lo pedido, no era un anime y no se apunta nada: por eso
+          // acababa "Valorant" en la lista de series seguidas.
+          if (data.facts?.title && titlesMatch(title, data.facts.title)) {
+            recordAnimeInterest(data.facts.title, data.facts.genres ?? [], data.facts.studios ?? []);
+          }
         } catch {
           // La afinidad es una mejora, no algo crítico: si falla, se ignora.
         }

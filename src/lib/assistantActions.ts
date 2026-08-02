@@ -1,6 +1,6 @@
 import { getNewsItems } from "./newsStore";
 import { getPreferences, savePreferences } from "./storage";
-import { toggleLike, recordAnimeInterest } from "./learning";
+import { toggleLike } from "./learning";
 import { addRenMemory } from "./renMemory";
 
 export interface AssistantAction {
@@ -71,11 +71,11 @@ function runAction(type: AssistantAction["type"], value: string): string | null 
   }
 
   if (type === "interes") {
-    // Se aplica ya la parte que no necesita red (título + historial); los
-    // géneros y el estudio los añade el cliente en cuanto AniList
-    // responde. Sin confirmación visible: que la app aprenda de ti no
-    // debería interrumpir la conversación con un aviso cada vez.
-    recordAnimeInterest(value);
+    // NO se registra nada aquí. Antes se guardaba el título tal cual y
+    // bastaba con preguntar "¿qué es Valorant?" para que un videojuego
+    // acabara en la lista de series que sigues. Ahora el cliente
+    // comprueba primero contra AniList que eso existe y es un anime, y
+    // solo entonces lo apunta (ver AssistantOrb).
     return null;
   }
 

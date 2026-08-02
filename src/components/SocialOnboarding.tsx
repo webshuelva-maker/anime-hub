@@ -254,8 +254,12 @@ export function SocialOnboarding() {
 
       <div className="panel mt-6 rounded-2xl border border-ice/20 p-5">
         <p className="text-sm leading-relaxed text-foreground/90">
-          <strong>Solo para mayores de {legalConfig.edadMinimaSocial} años.</strong> El resto de la
-          app no tiene esa restricción, pero para hablar con desconocidos sí.
+          <strong>Este apartado es solo para mayores de {legalConfig.edadMinimaSocial} años.</strong>
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          El resto de la app se puede usar desde los {legalConfig.edadMinimaApp}. Aquí la edad es
+          mayor porque no son noticias: es hablar en privado con personas desconocidas, y no queremos
+          menores y adultos mezclados.
         </p>
       </div>
 

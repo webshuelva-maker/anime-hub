@@ -1,5 +1,5 @@
 import { LegalPage } from "@/components/LegalPage";
-import { legalConfig } from "@/config/legal";
+import { legalConfig, identificacionResponsable, emailModeracion } from "@/config/legal";
 import { siteConfig } from "@/config/site";
 
 export const metadata = { title: "Términos de uso" };
@@ -10,9 +10,15 @@ export default function TerminosPage() {
       <LegalPage title="Términos de uso" version={legalConfig.versionTerminos}>
         <h2>1. Quién presta este servicio</h2>
         <p>
-          {siteConfig.name} (en adelante, «la aplicación») es un servicio prestado por{" "}
-          <strong>{legalConfig.responsable}</strong>, con NIF {legalConfig.nif} y domicilio en{" "}
-          {legalConfig.domicilio}. Puedes contactar en {legalConfig.emailContacto}.
+          {siteConfig.name} (en adelante, «la aplicación») es un proyecto personal desarrollado y
+          mantenido por <strong>{identificacionResponsable()}</strong>. Puedes contactar en{" "}
+          {legalConfig.emailContacto}.
+        </p>
+        <p>
+          Es un proyecto <strong>gratuito, sin publicidad y sin fines comerciales</strong>. No se
+          cobra por ninguna función, no se venden datos y no hay ingresos de ningún tipo. Se ofrece
+          por afición y sin garantía de continuidad: puede cambiar, interrumpirse o cerrarse en
+          cualquier momento.
         </p>
 
         <h2>2. Qué es la aplicación</h2>
@@ -83,7 +89,7 @@ export default function TerminosPage() {
           Puedes denunciar a cualquier persona usuaria y bloquearla desde la propia conversación. Las
           denuncias se revisan y pueden derivar en advertencia, suspensión o expulsión. Las
           conductas que puedan ser constitutivas de delito se pondrán en conocimiento de las
-          autoridades competentes. Para asuntos urgentes: {legalConfig.emailModeracion}.
+          autoridades competentes. Para asuntos urgentes: {emailModeracion}.
         </p>
 
         <h2>9. Servicio «tal cual» y responsabilidad</h2>
@@ -108,11 +114,10 @@ export default function TerminosPage() {
           bancarios ni de localización.
         </p>
 
-        <h2>11. Suscripción de pago</h2>
+        <h2>11. Gratuidad</h2>
         <p>
-          Si en el futuro se ofrecen funciones de pago, el precio, la duración, la renovación y el
-          derecho de desistimiento se informarán antes de la contratación, conforme a la normativa de
-          consumo aplicable.
+          La aplicación es gratuita en su totalidad. Si algún día se ofreciera alguna función de
+          pago, se informaría con antelación y estos términos se actualizarían antes.
         </p>
 
         <h2>12. Cambios</h2>

@@ -1,5 +1,5 @@
 import { LegalPage } from "@/components/LegalPage";
-import { legalConfig } from "@/config/legal";
+import { legalConfig, identificacionResponsable, emailPrivacidad, emailModeracion } from "@/config/legal";
 import { siteConfig } from "@/config/site";
 
 export const metadata = { title: "Política de privacidad" };
@@ -10,9 +10,13 @@ export default function PrivacidadPage() {
       <LegalPage title="Política de privacidad" version={legalConfig.versionPrivacidad}>
         <h2>1. Responsable del tratamiento</h2>
         <p>
-          <strong>{legalConfig.responsable}</strong>, NIF {legalConfig.nif}, domicilio en{" "}
-          {legalConfig.domicilio}. Correo para asuntos de protección de datos:{" "}
-          {legalConfig.emailPrivacidad}.
+          <strong>{identificacionResponsable()}</strong>, como persona física responsable de este
+          proyecto personal y sin ánimo de lucro. Correo para asuntos de protección de datos:{" "}
+          {emailPrivacidad}.
+        </p>
+        <p>
+          No se cobra por la aplicación, no hay publicidad y{" "}
+          <strong>no se venden ni ceden datos a terceros con fines comerciales</strong>.
         </p>
 
         <h2>2. Qué datos tratamos y para qué</h2>
@@ -104,7 +108,7 @@ export default function PrivacidadPage() {
           artículo 7 de la LOPDGDD, por debajo de esa edad hace falta el consentimiento de quien
           ostente la patria potestad o tutela. El apartado social está reservado a mayores de{" "}
           {legalConfig.edadMinimaSocial}. Si tienes conocimiento de una cuenta que incumpla esto,
-          avísanos en {legalConfig.emailModeracion} y actuaremos de inmediato.
+          avísanos en {emailModeracion} y actuaremos de inmediato.
         </p>
 
         <h2>4. Quién más trata tus datos</h2>
@@ -142,7 +146,7 @@ export default function PrivacidadPage() {
         <p>
           Puedes ejercer los derechos de acceso, rectificación, supresión, limitación, oposición y
           portabilidad, así como retirar tu consentimiento, escribiendo a{" "}
-          {legalConfig.emailPrivacidad}. Buena parte puedes ejercerlos tú mismo desde la aplicación
+          {emailPrivacidad}. Buena parte puedes ejercerlos tú mismo desde la aplicación
           (ver y borrar lo aprendido, borrar la memoria del asistente, eliminar la cuenta).
         </p>
         <p>

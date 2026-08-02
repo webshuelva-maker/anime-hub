@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { UserPreferences } from "@/types/news";
 import { DEFAULT_PREFERENCES, getPreferences } from "@/lib/storage";
-import { getTopAffinities } from "@/lib/learning";
+import { getTopAffinities, removeAnimeInterest } from "@/lib/learning";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { playToggle } from "@/lib/sound";
 import { getRenMemory, removeRenMemory } from "@/lib/renMemory";
+import { genreLabel } from "@/lib/genreNames";
 import { siteConfig } from "@/config/site";
 
 /**
@@ -38,11 +39,13 @@ function AffinityRow({
   count,
   max,
   examples,
+  delay = 0,
 }: {
   name: string;
   count: number;
   max: number;
   examples: string[];
+  delay?: number;
 }) {
   const pct = Math.max(8, Math.round((count / max) * 100));
 
@@ -57,7 +60,7 @@ function AffinityRow({
           className="accent-gradient h-full rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
         />
       </div>
       {examples.length > 0 && (
@@ -72,12 +75,25 @@ function AffinityRow({
 export function PreferencesEditor() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [memories, setMemories] = useState<string[]>([]);
+  const [ready, setReady] = useState(false);
 
+  // Los datos viven en localStorage, así que no existen hasta que el
+  // componente ya está montado. Antes se pintaba la página vacía y las
+  // barras aparecían después, de golpe y sin animación, que es lo que se
+  // veía tan mal. Ahora no se pinta nada hasta tenerlo todo, y entonces
+  // entra junto y animado.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(getPreferences());
     setMemories(getRenMemory());
+    setReady(true);
   }, []);
+
+  const handleForgetSeries = (title: string) => {
+    removeAnimeInterest(title);
+    setPrefs(getPreferences());
+    playToggle();
+  };
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(() =>
     process.env.NEXT_PUBLIC_SUPABASE_URL ? null : false
@@ -110,7 +126,19 @@ export function PreferencesEditor() {
       </p>
 
       <div className="panel mt-8 rounded-2xl p-6">
-        {isLoggedIn === false ? (
+        {!ready ? (
+          // Marcador de posición mientras se leen los datos del navegador.
+          // Ocupa el mismo sitio que el contenido real, así que al llegar
+          // no da el salto que quedaba tan feo.
+          <div className="flex flex-col gap-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="animate-pulse">
+                <div className="mb-2 h-3 w-32 rounded bg-panel-border/50" />
+                <div className="h-1.5 w-full rounded-full bg-panel-border/40" />
+              </div>
+            ))}
+          </div>
+        ) : isLoggedIn === false ? (
           <div className="text-center">
             <p className="text-sm text-muted">
               Los gustos aprendidos son una función de cuenta — créate una gratis para que el feed
@@ -132,25 +160,23 @@ export function PreferencesEditor() {
           <div className="grid gap-8 sm:grid-cols-2">
             {topGenres.length > 0 && (
               <div>
-                <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-                  Qué tipo de historias buscas
+                <h2 className="font-heading mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
+                  Géneros
                 </h2>
-                <p className="mb-4 mt-1 text-[11px] leading-snug text-muted">
-                  Los géneros que más se repiten en lo que lees.
-                </p>
                 <div className="flex flex-col gap-4">
-                  {topGenres.map((g) => (
+                  {topGenres.map((g, i) => (
                     <motion.div
                       key={g.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
                     >
                       <AffinityRow
-                        name={g.name}
+                        name={genreLabel(g.name)}
                         count={g.count}
                         max={maxCount}
                         examples={prefs.genreExamples?.[g.name] ?? []}
+                        delay={i * 0.06}
                       />
                     </motion.div>
                   ))}
@@ -160,26 +186,23 @@ export function PreferencesEditor() {
 
             {topStudios.length > 0 && (
               <div>
-                <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-                  Quién lo hace
+                <h2 className="font-heading mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
+                  Estudios
                 </h2>
-                <p className="mb-4 mt-1 text-[11px] leading-snug text-muted">
-                  Los estudios de animación detrás de lo que te gusta. No hace falta que los
-                  conozcas: debajo de cada uno pone de qué series te viene.
-                </p>
                 <div className="flex flex-col gap-4">
-                  {topStudios.map((s) => (
+                  {topStudios.map((s, i) => (
                     <motion.div
                       key={s.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={s.name}
                         count={s.count}
                         max={maxCount}
                         examples={prefs.studioExamples?.[s.name] ?? []}
+                        delay={i * 0.06}
                       />
                     </motion.div>
                   ))}
@@ -195,18 +218,27 @@ export function PreferencesEditor() {
               Series que sigues de cerca
             </h2>
             <p className="mb-4 mt-1 text-[11px] leading-snug text-muted">
-              Sus noticias te salen antes en el feed.
+              Sus noticias te salen antes. Quita las que no te interesen.
             </p>
             <div className="flex flex-wrap gap-2">
-              {topTitles.map((t) => (
+              {topTitles.map((t, i) => (
                 <motion.span
                   key={t.name}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="inline-flex items-center rounded-full border border-ice/25 bg-ice/5 px-3 py-1.5 text-xs text-foreground"
+                  transition={{ duration: 0.22, delay: i * 0.03, ease: "easeOut" }}
+                  className="inline-flex items-center gap-2 rounded-full border border-ice/25 bg-ice/5 py-1.5 pl-3 pr-2 text-xs text-foreground"
                 >
                   {t.name}
+                  <button
+                    type="button"
+                    onClick={() => handleForgetSeries(t.name)}
+                    aria-label={`Dejar de seguir ${t.name}`}
+                    title="Quitar de la lista"
+                    className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] text-muted transition-colors hover:bg-panel-soft hover:text-foreground"
+                  >
+                    ✕
+                  </button>
                 </motion.span>
               ))}
             </div>

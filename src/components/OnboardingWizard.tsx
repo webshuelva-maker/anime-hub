@@ -7,12 +7,18 @@ import { getPreferences, savePreferences } from "@/lib/storage";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
 import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
+import { legalConfig } from "@/config/legal";
+import Link from "next/link";
 
 export function OnboardingWizard() {
   const router = useRouter();
   const [displayName, setDisplayName] = useState("");
   const [avatarId, setAvatarId] = useState("a1");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  // Aceptación obligatoria: sin esto no se entra. Queda guardada con la
+  // fecha y la versión aceptada, que es lo que sirve como prueba de qué
+  // aceptó cada persona y cuándo.
+  const [accepted, setAccepted] = useState(false);
 
   const handleStart = () => {
     const current = getPreferences();
@@ -22,6 +28,8 @@ export function OnboardingWizard() {
       avatarId,
       avatarPhotoDataUrl: photoDataUrl,
       onboardingCompleted: true,
+      acceptedLegalAt: new Date().toISOString(),
+      acceptedLegalVersion: `t${legalConfig.versionTerminos}/p${legalConfig.versionPrivacidad}/n${legalConfig.versionNormas}`,
     });
     router.push("/noticias");
   };
@@ -70,12 +78,36 @@ export function OnboardingWizard() {
           </div>
         )}
 
+        <label className="mt-6 flex cursor-pointer items-start gap-3 text-left">
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--ice)]"
+          />
+          <span className="text-[11px] leading-relaxed text-muted">
+            Tengo al menos {legalConfig.edadMinimaApp} años y acepto los{" "}
+            <Link href="/legal/terminos" target="_blank" className="ice-text hover:underline">
+              términos de uso
+            </Link>
+            , las{" "}
+            <Link href="/legal/normas" target="_blank" className="ice-text hover:underline">
+              normas de convivencia
+            </Link>{" "}
+            y la{" "}
+            <Link href="/legal/privacidad" target="_blank" className="ice-text hover:underline">
+              política de privacidad
+            </Link>
+            .
+          </span>
+        </label>
+
         <motion.button
           type="button"
           onClick={handleStart}
-          disabled={displayName.trim().length === 0}
-          whileHover={displayName.trim() ? { scale: 1.03 } : {}}
-          whileTap={displayName.trim() ? { scale: 0.96 } : {}}
+          disabled={displayName.trim().length === 0 || !accepted}
+          whileHover={displayName.trim() && accepted ? { scale: 1.03 } : {}}
+          whileTap={displayName.trim() && accepted ? { scale: 0.96 } : {}}
           className="accent-gradient mt-7 w-full rounded-full px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/30 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Entrar

@@ -1,5 +1,5 @@
 import { LegalPage } from "@/components/LegalPage";
-import { legalConfig } from "@/config/legal";
+import { legalConfig, emailModeracion } from "@/config/legal";
 
 export const metadata = { title: "Normas de convivencia" };
 
@@ -58,7 +58,7 @@ export default function NormasPage() {
           Puedes bloquear a cualquier persona en cualquier momento: dejaréis de cruzaros y no podrá
           escribirte. Denunciar es distinto de bloquear: la denuncia la revisamos nosotros. Úsala sin
           reparo, no hace falta estar seguro de nada. Para casos graves o urgentes:{" "}
-          {legalConfig.emailModeracion}.
+          {emailModeracion}.
         </p>
         <p>
           Si crees que puede haber un delito en curso o hay un menor en peligro, no te quedes solo

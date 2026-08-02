@@ -24,6 +24,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchHistory: [],
   soundEnabled: true,
   updatedAt: null,
+  acceptedLegalAt: null,
+  acceptedLegalVersion: null,
 };
 
 export function getPreferences(): UserPreferences {
