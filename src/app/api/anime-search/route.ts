@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchAnimeDatabase } from "@/lib/anilist";
 import { searchJikanList } from "@/lib/jikan";
+import { searchKitsu } from "@/lib/kitsu";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
@@ -20,27 +21,38 @@ export async function GET(req: NextRequest) {
    * encajan mejor con el resto de la app; MyAnimeList añade lo que
    * falte, sin repetir.
    */
-  const [anilist, mal] = await Promise.all([
+  const [anilist, mal, kitsu] = await Promise.all([
     searchAnimeDatabase(term),
     searchJikanList(term).catch(() => []),
+    searchKitsu(term).catch(() => []),
   ]);
 
   const normalizar = (t: string) =>
     t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 
-  const vistos = new Set(anilist.results.map((r) => normalizar(r.title)));
-  const extra = mal.filter((r) => !vistos.has(normalizar(r.title)));
+  const vistos = new Set<string>();
+  const juntos: typeof anilist.results = [];
+  for (const lista of [anilist.results, mal, kitsu]) {
+    for (const r of lista) {
+      const clave = normalizar(r.title);
+      if (!clave || vistos.has(clave)) continue;
+      vistos.add(clave);
+      juntos.push(r);
+    }
+  }
+
+  const fuentes = [
+    anilist.results.length > 0 ? "anilist" : null,
+    mal.length > 0 ? "myanimelist" : null,
+    kitsu.length > 0 ? "kitsu" : null,
+  ].filter(Boolean);
 
   return NextResponse.json({
-    results: [...anilist.results, ...extra].slice(0, 10),
-    fuente:
-      anilist.results.length > 0
-        ? extra.length > 0
-          ? "ambas"
-          : "anilist"
-        : extra.length > 0
-          ? "myanimelist"
-          : "ninguna",
-    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} resultado(s)`,
+    results: juntos.slice(0, 10),
+    fuente: fuentes.length > 0 ? fuentes.join("+") : "ninguna",
+    // El diagnóstico va SIEMPRE en la respuesta. Llevamos varias vueltas
+    // adivinando por qué una búsqueda vuelve vacía; con esto, la app
+    // puede enseñar exactamente qué contestó cada base de datos.
+    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} resultado(s) | kitsu: ${kitsu.length} resultado(s)`,
   });
 }

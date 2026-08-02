@@ -10,6 +10,7 @@ import { SelectableChip } from "./SelectableChip";
 import { TagInput } from "./TagInput";
 import { TimePicker } from "./TimePicker";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DiagnosticoPanel } from "./DiagnosticoPanel";
 import { playError, playToggle } from "@/lib/sound";
 
 /**
@@ -190,6 +191,15 @@ export function SettingsEditor() {
           {saved ? "Guardado" : isDirty ? "Guardar cambios" : "Sin cambios"}
         </motion.button>
       </div>
+
+      <div className="rule-line my-8" />
+
+      <h2 className="font-heading text-lg font-semibold">Diagnóstico</h2>
+      <p className="mt-1 text-sm text-muted">
+        Qué está viendo tu navegador ahora mismo. Útil si algo no se comporta igual en tu ordenador
+        que en tu móvil.
+      </p>
+      <DiagnosticoPanel />
 
       <ConfirmDialog
         open={confirmingReset}

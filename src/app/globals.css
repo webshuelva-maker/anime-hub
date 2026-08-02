@@ -148,7 +148,33 @@ body {
      aplastaba cualquier valor que se pusiera. Con iteration-count a 1,
      la animación hace un solo ciclo rápido y se queda quieta — que es lo
      que "reducir movimiento" debería significar de verdad. */
-  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  /*
+   * ACTUALIZACIÓN IMPORTANTE (v114).
+   *
+   * Esta regla, con su asterisco y sus !important, aplastaba TODAS las
+   * animaciones del sitio a 0,01ms. Y ahí estaba la explicación de algo
+   * que llevaba varias versiones sin cuadrar: en el ordenador no se veía
+   * la animación de entrada, ni la de las barras de "Tus gustos", y en
+   * el móvil sí. No era el ordenador: era que en ese equipo está
+   * activado "Reducir movimiento" en el sistema, y esta regla lo llevaba
+   * al extremo de dejarlo todo en cero.
+   *
+   * "Reducir movimiento" no significa "quitar toda animación": significa
+   * evitar desplazamientos grandes, giros, escalados y parpadeos, que son
+   * los que provocan mareo. Un fundido suave no molesta a nadie y sigue
+   * comunicando que algo está pasando.
+   *
+   * Así que ahora: se cortan las repeticiones infinitas y se acortan las
+   * transiciones, pero las animaciones con nombre propio (las que la app
+   * usa a conciencia) conservan una duración real, y más abajo se
+   * sustituyen por fundidos sin movimiento.
+   */
+  *,
+  *::before,
+  *::after {
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.08s !important;
+  }
 }
 
 /* El autocompletado de Chrome/Safari pinta los campos con un fondo casi
@@ -327,14 +353,38 @@ html.arrancando [data-chrome-app] {
 
 /* Con "reducir movimiento" activado: sin escalados ni desplazamientos,
    solo un fundido rápido. */
+/*
+ * Con "reducir movimiento": misma secuencia y mismos tiempos, pero solo
+ * con fundidos — sin escalar la marca, sin girarla y sin abrir el
+ * interletraje. Se sigue viendo una entrada, que es lo que se quiere;
+ * lo que desaparece es el movimiento, que es lo que molesta.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .boot-mark,
-  .boot-in,
-  .boot-in-delay-1,
+  .boot-mark {
+    animation: boot-solo-fundido 0.7s ease-out both !important;
+    transform: none !important;
+  }
+  .boot-in {
+    animation: boot-solo-fundido 0.7s ease-out 0.25s both !important;
+    letter-spacing: 0.15em !important;
+    text-indent: 0.15em !important;
+  }
+  .boot-in-delay-1 {
+    animation: boot-solo-fundido 0.7s ease-out 1.15s both !important;
+  }
   .boot-in-delay-2,
   .boot-pct {
-    animation: boot-fade-up 0.4s linear both;
-    transform: none;
+    animation: boot-solo-fundido 0.7s ease-out 1.95s both !important;
+    transform: none !important;
+  }
+}
+
+@keyframes boot-solo-fundido {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

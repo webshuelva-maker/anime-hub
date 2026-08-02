@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v114",
+    fecha: "2026-08-02",
+    titulo: "Tercera base de datos y diagnóstico",
+    puntos: [
+      "El buscador consulta ahora tres bases de datos a la vez: AniList, MyAnimeList y Kitsu.",
+      "Si una búsqueda vuelve vacía, la app dice qué contestó cada una en vez de callárselo.",
+      "Nueva sección de Diagnóstico en Ajustes.",
+      "Las animaciones ya no se anulan del todo cuando el sistema pide reducir movimiento: se sustituyen por fundidos suaves.",
+    ],
+  },
+  {
     version: "v113",
     fecha: "2026-08-02",
     titulo: "Una sola pantalla de entrada",

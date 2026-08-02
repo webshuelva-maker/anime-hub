@@ -38,6 +38,8 @@ export function FavoriteAnimeInput() {
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  /** Qué contestó cada base de datos. Se enseña solo cuando no hay nada. */
+  const [diagnostico, setDiagnostico] = useState<string | null>(null);
   const cajaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,9 +69,14 @@ export function FavoriteAnimeInput() {
       setBuscando(true);
       try {
         const res = await fetch(`/api/anime-search?q=${encodeURIComponent(termino)}`);
-        const data = (await res.json()) as { results?: Resultado[]; fuente?: string };
+        const data = (await res.json()) as {
+          results?: Resultado[];
+          fuente?: string;
+          debug?: string;
+        };
         const encontrados = data.results ?? [];
         setResultados(encontrados.slice(0, 6));
+        setDiagnostico(encontrados.length === 0 ? (data.debug ?? null) : null);
         // Se distingue "no existe" de "no he podido buscar". Antes se
         // decía siempre lo primero, y con las dos bases caídas eso es un
         // diagnóstico falso: el anime existe, lo que falla es la consulta.
@@ -149,7 +156,17 @@ export function FavoriteAnimeInput() {
             )}
 
             {!buscando && aviso && resultados.length === 0 && (
-              <p className="px-3 py-3 text-xs text-muted">{aviso}</p>
+              <div className="px-3 py-3">
+                <p className="text-xs text-muted">{aviso}</p>
+                {/* Detalle técnico a la vista cuando no hay resultados:
+                    dice qué respondió cada base de datos, para no tener
+                    que adivinar por qué una búsqueda vuelve vacía. */}
+                {diagnostico && (
+                  <p className="mt-1.5 break-words text-[10px] leading-snug text-muted/70">
+                    {diagnostico}
+                  </p>
+                )}
+              </div>
             )}
 
             {resultados.map((r) => (
