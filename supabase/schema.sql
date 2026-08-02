@@ -173,3 +173,33 @@ create policy "Users can file reports"
 -- vez podrían colarse igual.
 create unique index if not exists social_profiles_alias_unique
   on public.social_profiles (lower(alias));
+
+-- ============================================================
+--  v95 — La fecha de nacimiento no se puede cambiar
+-- ============================================================
+-- Nadie puede verificar de verdad una edad autodeclarada sin pedir un
+-- documento, y eso no se va a hacer aquí. Pero sí se puede evitar lo
+-- fácil: que alguien ponga una fecha, la app le diga "eres menor de 18",
+-- y entonces la cambie sabiendo ya qué fecha hace falta. La declaración
+-- vale de algo solo si se hace UNA vez y queda fija.
+--
+-- Va como disparador en la base de datos, no como comprobación en la
+-- app, por lo mismo de siempre: no puede depender de que el navegador se
+-- porte bien. Si alguien necesita corregirla de verdad (se equivocó al
+-- teclear), tiene que borrar el perfil social y volver a crearlo, y eso
+-- queda registrado.
+create or replace function public.social_profiles_birthdate_inmutable()
+returns trigger as $$
+begin
+  if new.birthdate is distinct from old.birthdate then
+    raise exception 'La fecha de nacimiento no se puede cambiar'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists social_profiles_birthdate_lock on public.social_profiles;
+create trigger social_profiles_birthdate_lock
+  before update on public.social_profiles
+  for each row execute procedure public.social_profiles_birthdate_inmutable();

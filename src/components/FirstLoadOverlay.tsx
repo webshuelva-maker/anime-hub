@@ -2,39 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { getPreferences } from "@/lib/storage";
-import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
+import { ANIME_TRIVIA, nextTriviaIndex } from "@/lib/trivia";
 import { siteConfig } from "@/config/site";
+import { BrandMark } from "./BrandMark";
 
 const ROTATE_MS = 4500;
-const REFILL_THRESHOLD = 5;
-const SHOWN_KEY = "anime-hub:trivia-shown";
-const MAX_SHOWN_REMEMBERED = 150; // no hace falta guardar un historial infinito
 
-function loadShownFacts(): string[] {
-  try {
-    const raw = localStorage.getItem(SHOWN_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveShownFacts(facts: string[]) {
-  try {
-    localStorage.setItem(SHOWN_KEY, JSON.stringify(facts.slice(-MAX_SHOWN_REMEMBERED)));
-  } catch {
-    // localStorage lleno o no disponible — no pasa nada, solo se pierde la deduplicación entre sesiones
-  }
-}
-
-const FALLBACK_FACTS = [
-  "El anime más largo en emisión continua lleva más de 900 episodios.",
-  "La palabra \"anime\" en Japón se usa para cualquier animación, no solo la japonesa.",
-  "Studio Ghibli nunca ha usado guiones completos tradicionales para algunas películas — Miyazaki dibuja escenas sin saber cómo termina la historia.",
-  "El primer anime de televisión japonés fue Otogi Manga Calendar, en 1961.",
-];
+/*
+ * Las curiosidades salen de una lista escrita a mano y comprobada
+ * (src/lib/trivia.ts), NO de la IA.
+ *
+ * Antes se generaban con Groq sobre la marcha y se colaban datos falsos
+ * dichos con total seguridad ("el anime más largo en emisión lleva más de
+ * 900 episodios" — Sazae-san pasa de 8.000 y One Piece de 1.100). Un
+ * modelo generando "datos curiosos" sin ninguna fuente detrás va a
+ * inventar tarde o temprano, igual que le pasaba a Ren antes de darle
+ * búsqueda real. Aquí no compensa: es texto decorativo para una espera,
+ * no merece la pena arriesgarse a soltar mentiras al usuario en la
+ * primera pantalla que ve de la app.
+ *
+ * Además, la lista curada trae cola anti-repetición propia
+ * (nextTriviaIndex): baraja las 100 y no repite ninguna hasta haberlas
+ * mostrado todas, y lo recuerda entre sesiones. Con la IA se repetían
+ * porque cada lote era pequeño y la rotación daba vueltas en bucle.
+ */
 
 /**
  * Pantalla de carga a pantalla completa — SOLO en la primera visita real
@@ -58,69 +49,23 @@ export function FirstLoadOverlay({
   estimatedDurationMs: number;
   onComplete: () => void;
 }) {
-  const [facts, setFacts] = useState<string[]>(FALLBACK_FACTS);
+  // "index" es solo la clave de la animación de entrada/salida; el texto
+  // real va en "fact", que lo decide la cola barajada.
   const [index, setIndex] = useState(0);
-  const shownRef = useRef<string[]>([]);
-  const fetchingRef = useRef(false);
-
-  const fetchBatch = async () => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-    try {
-      const prefs = getPreferences();
-      const estimatedTokens = 1000;
-      const data: { facts?: string[] } = await runExclusive(async () => {
-        await waitForTokenBudget(estimatedTokens, "normal");
-        const res = await fetch("/api/trivia", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            exclude: shownRef.current,
-            genres: prefs.genres,
-            favoriteTitles: prefs.favoriteTitles,
-          }),
-        });
-        const json = await res.json();
-        recordTokenUsage(estimatedTokens);
-        return json;
-      }, "normal");
-      if (data.facts && data.facts.length > 0) {
-        setFacts((prev) => {
-          // La primera vez se descartan los fallback estáticos en cuanto
-          // llega contenido real de verdad.
-          const base = prev === FALLBACK_FACTS ? [] : prev;
-          return [...base, ...data.facts!];
-        });
-      }
-    } catch {
-      // Si falla, se sigue con lo que ya haya (fallback o lote anterior) — nunca se bloquea la pantalla por esto.
-    } finally {
-      fetchingRef.current = false;
-    }
-  };
+  const [fact, setFact] = useState<string>("");
 
   useEffect(() => {
-    shownRef.current = loadShownFacts();
-    fetchBatch();
-  }, []);
-
-  useEffect(() => {
+    // La cola anti-repetición vive en localStorage, así que no puede
+    // resolverse durante el render (en servidor no existe) — tiene que
+    // ser al montar.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFact(ANIME_TRIVIA[nextTriviaIndex()]);
     const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % Math.max(facts.length, 1));
+      setFact(ANIME_TRIVIA[nextTriviaIndex()]);
+      setIndex((i) => i + 1);
     }, ROTATE_MS);
     return () => clearInterval(timer);
-  }, [facts.length]);
-
-  useEffect(() => {
-    const current = facts[index];
-    if (current && !shownRef.current.includes(current)) {
-      shownRef.current.push(current);
-      saveShownFacts(shownRef.current);
-    }
-    const remaining = facts.length - index;
-    if (remaining <= REFILL_THRESHOLD) fetchBatch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index]);
+  }, []);
 
   // Contador animado dirigido por TIEMPO ESTIMADO, no por los saltos
   // discretos de "progress" (que solo cambia cuando un lote entero
@@ -249,6 +194,18 @@ export function FirstLoadOverlay({
         />
       </div>
 
+      <motion.span
+        initial={{ opacity: 0, scale: 0.85 }}
+        animate={{ opacity: [0.55, 1, 0.55], scale: 1 }}
+        transition={{
+          opacity: { duration: 2.8, repeat: Infinity, ease: "easeInOut" },
+          scale: { duration: 0.6, ease: "easeOut" },
+        }}
+        className="mb-4 ice-text"
+      >
+        <BrandMark size={26} />
+      </motion.span>
+
       <motion.p
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -278,9 +235,19 @@ export function FirstLoadOverlay({
         style={{ background: "var(--panel-border)" }}
       >
         <motion.div
-          className="absolute inset-y-0 left-1/2 rounded-full"
+          className="absolute inset-y-0 left-1/2 overflow-hidden rounded-full"
           style={{ background: "linear-gradient(90deg, var(--accent-from), var(--ice))", x: "-50%", width: `${pct}%` }}
-        />
+        >
+          {/* Destello que recorre lo ya rellenado: da sensación de que
+              sigue trabajando aunque el porcentaje tarde en subir. */}
+          <motion.div
+            aria-hidden
+            className="absolute inset-y-0 w-16"
+            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.65), transparent)" }}
+            animate={{ x: ["-4rem", "16rem"] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.4 }}
+          />
+        </motion.div>
       </motion.div>
       <p className="mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
 
@@ -294,7 +261,7 @@ export function FirstLoadOverlay({
             transition={{ duration: 0.7, ease: "easeInOut" }}
             className="text-[15px] leading-relaxed text-foreground/85"
           >
-            {facts[index] ?? ""}
+            {fact}
           </motion.p>
         </AnimatePresence>
       </div>

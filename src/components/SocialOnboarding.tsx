@@ -49,8 +49,43 @@ function yearsOld(birthdate: string): number | null {
   return age;
 }
 
+/*
+ * Una edad autodeclarada no se puede verificar sin pedir un documento, y
+ * aquí no se va a hacer. Pero sí se puede evitar lo fácil: que alguien
+ * ponga su fecha real, la app le conteste "eres menor de 18", y entonces
+ * la cambie sabiendo ya exactamente qué hace falta poner. Eso convierte
+ * el aviso en un tutorial.
+ *
+ * Así que la primera vez que alguien declara ser menor, queda anotado y
+ * el formulario se cierra: no basta con corregir la fecha. Se puede
+ * saltar borrando datos del navegador — todo lo que vive en el cliente se
+ * puede — pero deja de ser el camino evidente, y la declaración queda
+ * hecha. El bloqueo de verdad está en la base de datos (restricción de
+ * edad + fecha de nacimiento inmutable, ver supabase/schema.sql).
+ */
+const MENOR_KEY = "anime-hub:social-menor-declarado";
+
+function yaDeclaroSerMenor(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(MENOR_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function anotarDeclaracionDeMenor() {
+  try {
+    window.localStorage.setItem(MENOR_KEY, "1");
+  } catch {
+    // Sin localStorage el bloqueo se pierde, pero la restricción de la
+    // base de datos sigue en pie.
+  }
+}
+
 export function SocialOnboarding() {
   const [loading, setLoading] = useState(true);
+  const [bloqueadoPorEdad, setBloqueadoPorEdad] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<SocialProfile | null>(null);
 
@@ -65,8 +100,10 @@ export function SocialOnboarding() {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   useEffect(() => {
+    // Depende de localStorage, así que no puede resolverse en el render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (yaDeclaroSerMenor()) setBloqueadoPorEdad(true);
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }
@@ -98,9 +135,9 @@ export function SocialOnboarding() {
     if (age === null) return setError("Necesito tu fecha de nacimiento completa.");
     if (!isAdult) {
       playError();
-      return setError(
-        `Este apartado es solo para mayores de ${legalConfig.edadMinimaSocial} años. El resto de la app sigue disponible para ti.`
-      );
+      anotarDeclaracionDeMenor();
+      setBloqueadoPorEdad(true);
+      return;
     }
     if (age > 120) return setError("Esa fecha no parece correcta.");
     if (!gender) return setError("Elige una opción en «cómo te identificas».");
@@ -132,10 +169,21 @@ export function SocialOnboarding() {
         // está libre: se intenta guardar y es la base de datos la que lo
         // dice. Es además la única forma sin condiciones de carrera.
         const yaExiste = dbError.code === "23505" || /duplicate|unique/i.test(dbError.message ?? "");
+        // La tabla puede no existir todavía si el SQL del apartado social
+        // no se ha ejecutado en Supabase. Merece un mensaje propio porque
+        // no se arregla cambiando nada del formulario.
+        const faltaTabla =
+          dbError.code === "42P01" ||
+          dbError.code === "PGRST205" ||
+          /does not exist|schema cache/i.test(dbError.message ?? "");
         setError(
           yaExiste
             ? "Ese alias ya está cogido. Prueba con otro."
-            : "No se ha podido guardar. Revisa los datos e inténtalo de nuevo."
+            : faltaTabla
+            ? "El apartado social todavía no está creado en la base de datos. Hay que ejecutar el SQL de supabase/schema.sql."
+            : // Temporal, para poder ver el motivo real sin mirar los logs.
+              // Quitar el detalle técnico cuando esto vaya fino.
+              `No se ha podido guardar. (detalle técnico: ${dbError.code ?? "sin código"} — ${dbError.message ?? "sin mensaje"})`
         );
         setSaving(false);
         return;
@@ -186,6 +234,36 @@ export function SocialOnboarding() {
           className="accent-gradient mt-6 inline-block rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
         >
           Iniciar sesión / Crear cuenta
+        </Link>
+      </div>
+    );
+  }
+
+  // --- Declaró ser menor de edad -----------------------------------------
+  // A propósito NO se vuelve a enseñar el formulario ni se repite cuál es
+  // la edad que haría falta: sería explicarle qué fecha poner para entrar.
+  if (bloqueadoPorEdad && !profile) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+        <h1 className="font-heading text-2xl font-bold">Conectar</h1>
+        <div className="panel mt-6 rounded-2xl border border-rumor/25 p-6">
+          <p className="text-sm leading-relaxed text-foreground/90">
+            Según la fecha que has indicado, este apartado no está disponible para ti.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            El resto de {siteConfig.name} sigue funcionando con normalidad: las noticias, tus
+            gustos y {siteConfig.assistantName} están disponibles igual.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            Si te has equivocado al escribir la fecha, escríbenos a{" "}
+            <span className="text-foreground">{legalConfig.emailContacto}</span>.
+          </p>
+        </div>
+        <Link
+          href="/noticias"
+          className="accent-gradient mt-6 inline-block rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+        >
+          Volver a las noticias
         </Link>
       </div>
     );
