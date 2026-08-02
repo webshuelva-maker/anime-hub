@@ -308,7 +308,7 @@ html.arrancando body::before {
   display: none;
 }
 
-html.arrancando .boot-intro {
+html.presentacion .boot-intro {
   position: fixed;
   inset: 0;
   z-index: 60;
@@ -450,7 +450,7 @@ html.arrancando .boot-intro {
   .boot-intro__line {
     animation: none;
   }
-  html.arrancando .boot-intro {
+  html.presentacion .boot-intro {
     animation: boot-curtain 1.2s linear forwards;
   }
 }

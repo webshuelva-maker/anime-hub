@@ -37,7 +37,7 @@ export function FavoriteAnimeInput() {
   const [draft, setDraft] = useState("");
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [buscando, setBuscando] = useState(false);
-  const [sinResultados, setSinResultados] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const cajaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export function FavoriteAnimeInput() {
     const id = setTimeout(async () => {
       if (termino.length < 2) {
         setResultados([]);
-        setSinResultados(false);
+        setAviso(null);
         return;
       }
       // El "Buscando…" se enciende dentro del temporizador, no al
@@ -67,13 +67,22 @@ export function FavoriteAnimeInput() {
       setBuscando(true);
       try {
         const res = await fetch(`/api/anime-search?q=${encodeURIComponent(termino)}`);
-        const data = (await res.json()) as { results?: Resultado[] };
+        const data = (await res.json()) as { results?: Resultado[]; fuente?: string };
         const encontrados = data.results ?? [];
         setResultados(encontrados.slice(0, 6));
-        setSinResultados(encontrados.length === 0);
+        // Se distingue "no existe" de "no he podido buscar". Antes se
+        // decía siempre lo primero, y con las dos bases caídas eso es un
+        // diagnóstico falso: el anime existe, lo que falla es la consulta.
+        setAviso(
+          encontrados.length > 0
+            ? null
+            : data.fuente === "ninguna"
+              ? "No he podido consultar la base de datos ahora mismo. Inténtalo en unos segundos."
+              : "No hay ningún anime con ese nombre. Prueba con menos palabras."
+        );
       } catch {
         setResultados([]);
-        setSinResultados(true);
+        setAviso("No he podido consultar la base de datos ahora mismo. Inténtalo en unos segundos.");
       } finally {
         setBuscando(false);
       }
@@ -127,7 +136,7 @@ export function FavoriteAnimeInput() {
       />
 
       <AnimatePresence>
-        {draft.trim().length >= 2 && (resultados.length > 0 || buscando || sinResultados) && (
+        {draft.trim().length >= 2 && (resultados.length > 0 || buscando || aviso) && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -139,10 +148,8 @@ export function FavoriteAnimeInput() {
               <p className="px-3 py-3 text-xs text-muted">Buscando…</p>
             )}
 
-            {!buscando && sinResultados && (
-              <p className="px-3 py-3 text-xs text-muted">
-                No hay ningún anime con ese nombre. Prueba con menos palabras.
-              </p>
+            {!buscando && aviso && resultados.length === 0 && (
+              <p className="px-3 py-3 text-xs text-muted">{aviso}</p>
             )}
 
             {resultados.map((r) => (

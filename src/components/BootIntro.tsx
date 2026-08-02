@@ -18,9 +18,13 @@ import { siteConfig } from "@/config/site";
  *    que React hidrataba, que es cuando llegaba tarde.
  * 2. Se anima y se va sola con CSS. Tampoco depende de nadie para
  *    desaparecer.
- * 3. Solo aparece en el arranque de verdad (marca "arrancando", que el
+ * 3. Solo aparece en el arranque de verdad (marca "presentacion", que el
  *    script de la cabecera pone únicamente si no hay noticias en caché y
  *    vas a las noticias). Al navegar entre secciones no sale.
+ * 4. Esa marca tiene su propio temporizador, aparte del de la pantalla de
+ *    carga. Antes compartían marca y, en un ordenador rápido, la carga
+ *    terminaba antes que la animación y esta se cortaba a mitad — por eso
+ *    en móvil se veía y en PC no.
  */
 export function BootIntro() {
   return (

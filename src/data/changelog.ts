@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v112",
+    fecha: "2026-08-02",
+    titulo: "Buscador de animes más fiable",
+    puntos: [
+      "Si una base de datos no responde, se consulta la otra: ya no dice que un anime no existe cuando sí existe.",
+      "La animación de entrada también se ve en ordenador, no solo en el móvil.",
+      "Las barras de Tus gustos entran igual de bien en ordenador que en el móvil.",
+    ],
+  },
+  {
     version: "v111",
     fecha: "2026-08-02",
     titulo: "Buscar tus favoritos y una entrada más fluida",

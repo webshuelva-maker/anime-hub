@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { UserPreferences } from "@/types/news";
 import { DEFAULT_PREFERENCES, getPreferences } from "@/lib/storage";
@@ -64,7 +64,7 @@ function AffinityRow({
           // el 0.3 de base) y tarda casi un segundo en llenarse. Antes salía
           // a la vez que el resto y de un tirón, y por eso se veía como un
           // pegote al final de la animación de la página.
-          transition={{ duration: 0.9, delay: 0.3 + delay, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.65, delay: 0.12 + delay, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
       {examples.length > 0 && (
@@ -86,8 +86,19 @@ export function PreferencesEditor() {
   // barras aparecían después, de golpe y sin animación, que es lo que se
   // veía tan mal. Ahora no se pinta nada hasta tenerlo todo, y entonces
   // entra junto y animado.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  /*
+   * useLayoutEffect y no useEffect: los datos están en localStorage, o
+   * sea que se leen al instante, y esto ocurre ANTES de que el navegador
+   * pinte. Así no se llega a ver el marcador de posición y las barras
+   * empiezan su animación desde el primer fotograma.
+   *
+   * Con useEffect el navegador pintaba primero el esqueleto y después
+   * cambiaba: en el ordenador, que va sobrado, eso se traducía en barras
+   * que aparecían de golpe o a destiempo. En el móvil no se notaba
+   * porque todo iba más lento y coincidía.
+   */
+  const usarEfectoDePintado = typeof window === "undefined" ? useEffect : useLayoutEffect;
+  usarEfectoDePintado(() => {
     setPrefs(getPreferences());
     setMemories(getRenMemory());
     setReady(true);
@@ -183,14 +194,14 @@ export function PreferencesEditor() {
                       key={g.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.32, delay: i * 0.09, ease: "easeOut" }}
+                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={genreLabel(g.name)}
                         count={g.count}
                         max={maxCount}
                         examples={prefs.genreExamples?.[g.name] ?? []}
-                        delay={i * 0.09}
+                        delay={i * 0.06}
                       />
                     </motion.div>
                   ))}
@@ -209,14 +220,14 @@ export function PreferencesEditor() {
                       key={s.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.32, delay: i * 0.09, ease: "easeOut" }}
+                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={s.name}
                         count={s.count}
                         max={maxCount}
                         examples={prefs.studioExamples?.[s.name] ?? []}
-                        delay={i * 0.09}
+                        delay={i * 0.06}
                       />
                     </motion.div>
                   ))}
@@ -240,7 +251,7 @@ export function PreferencesEditor() {
                   key={t.name}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, delay: 0.5 + i * 0.04, ease: "easeOut" }}
+                  transition={{ duration: 0.28, delay: 0.35 + i * 0.03, ease: "easeOut" }}
                   className="inline-flex items-center gap-2 rounded-full border border-ice/25 bg-ice/5 py-1.5 pl-3 pr-2 text-xs text-foreground"
                 >
                   {t.name}

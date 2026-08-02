@@ -54,6 +54,7 @@ async function getJson(path: string, timeoutMs = 6000): Promise<unknown | null> 
 
 interface RawJikanAnime {
   mal_id?: number;
+  type?: string;
   title?: string;
   title_english?: string;
   status?: string;
@@ -65,6 +66,54 @@ interface RawJikanAnime {
   studios?: { name: string }[];
   genres?: { name: string }[];
   url?: string;
+}
+
+/**
+ * Búsqueda de varios resultados en MyAnimeList, con el mismo formato que
+ * devuelve el buscador de AniList.
+ *
+ * Es el plan B del buscador de animes de la app. AniList limita las
+ * peticiones por minuto y la carga del feed hace unas cuantas, así que
+ * justo después de abrir la app puede rechazar una búsqueda — y entonces
+ * el usuario veía "no hay ningún anime con ese nombre" para títulos que
+ * existen de sobra. Con dos bases distintas, que fallen las dos a la vez
+ * es muy improbable.
+ */
+export async function searchJikanList(term: string): Promise<
+  {
+    id: number;
+    title: string;
+    coverImage: string | null;
+    description: string | null;
+    format: string | null;
+    status: string | null;
+    startYear: number | null;
+    endYear: number | null;
+    genres: string[];
+    type: "ANIME";
+  }[]
+> {
+  const clean = term.trim();
+  if (clean.length < 2) return [];
+
+  const data = (await getJson(`/anime?q=${encodeURIComponent(clean)}&limit=8&sfw=true`)) as
+    | { data?: (RawJikanAnime & { images?: { jpg?: { image_url?: string } }; synopsis?: string })[] }
+    | null;
+
+  return (data?.data ?? [])
+    .filter((m) => m.mal_id && (m.title || m.title_english))
+    .map((m) => ({
+      id: m.mal_id as number,
+      title: m.title_english || m.title || clean,
+      coverImage: m.images?.jpg?.image_url ?? null,
+      description: m.synopsis ? m.synopsis.replace(/\s+/g, " ").trim().slice(0, 300) : null,
+      format: m.type ?? null,
+      status: m.status ?? null,
+      startYear: m.year ?? (m.aired?.from ? Number(m.aired.from.slice(0, 4)) : null),
+      endYear: m.aired?.to ? Number(m.aired.to.slice(0, 4)) : null,
+      genres: (m.genres ?? []).map((g) => g.name),
+      type: "ANIME" as const,
+    }));
 }
 
 export async function searchJikanAnime(name: string): Promise<JikanFacts | null> {
