@@ -9,6 +9,7 @@ import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
 import { legalConfig } from "@/config/legal";
 import Link from "next/link";
+import { CheckBox } from "./CheckBox";
 
 export function OnboardingWizard() {
   const router = useRouter();
@@ -78,14 +79,8 @@ export function OnboardingWizard() {
           </div>
         )}
 
-        <label className="mt-6 flex cursor-pointer items-start gap-3 text-left">
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={(e) => setAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--ice)]"
-          />
-          <span className="text-[11px] leading-relaxed text-muted">
+        <div className="mt-6">
+          <CheckBox checked={accepted} onChange={setAccepted}>
             Tengo al menos {legalConfig.edadMinimaApp} años y acepto los{" "}
             <Link href="/legal/terminos" target="_blank" className="ice-text hover:underline">
               términos de uso
@@ -99,8 +94,8 @@ export function OnboardingWizard() {
               política de privacidad
             </Link>
             .
-          </span>
-        </label>
+          </CheckBox>
+        </div>
 
         <motion.button
           type="button"

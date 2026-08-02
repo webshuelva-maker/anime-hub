@@ -4,12 +4,34 @@ import { toggleLike } from "./learning";
 import { addRenMemory } from "./renMemory";
 
 export interface AssistantAction {
-  type: "add_favorite" | "like_news" | "interes" | "remember";
+  type: "add_favorite" | "like_news" | "interes" | "remember" | "ir_a";
   value: string;
   result: string; // texto corto de confirmación para mostrar en el chat
 }
 
-const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|interes|remember):([^\]]+)\]\]/g;
+/** Un sitio de la app al que Ren puede ofrecer llevarte. */
+export interface AssistantLink {
+  label: string;
+  href: string;
+}
+
+/**
+ * Secciones a las que Ren puede mandar. La lista es cerrada a propósito:
+ * si el modelo se inventa una ruta, el enlace no se crea y no pasa nada,
+ * en vez de llevar al usuario a una página que no existe.
+ */
+const SECTIONS: Record<string, AssistantLink> = {
+  noticias: { label: "Ir a Noticias", href: "/noticias" },
+  conectar: { label: "Abrir Conectar", href: "/conectar" },
+  gustos: { label: "Ver tus gustos", href: "/preferencias" },
+  ajustes: { label: "Abrir Ajustes", href: "/ajustes" },
+  perfil: { label: "Abrir tu perfil", href: "/perfil" },
+  terminos: { label: "Leer los términos de uso", href: "/legal/terminos" },
+  privacidad: { label: "Leer la política de privacidad", href: "/legal/privacidad" },
+  normas: { label: "Leer las normas de convivencia", href: "/legal/normas" },
+};
+
+const ACTION_PATTERN = /\[\[ACTION:(add_favorite|like_news|interes|remember|ir_a):([^\]]+)\]\]/g;
 
 /**
  * Separa el texto visible de las etiquetas de acción que Ren puede incluir
@@ -22,14 +44,23 @@ export function parseAndRunActions(rawText: string): {
   /** Series que Ren ha detectado como "le interesa": el cliente las
    *  completa después con géneros y estudio para reforzar la afinidad. */
   interests: string[];
+  /** Botones para ir a una sección, si Ren ha ofrecido llevarte. */
+  links: AssistantLink[];
 } {
   const actions: AssistantAction[] = [];
   const interests: string[] = [];
+  const links: AssistantLink[] = [];
 
   const cleanText = rawText
     .replace(ACTION_PATTERN, (_match, type: string, rawValue: string) => {
       const value = rawValue.trim();
       if (type === "interes" && value) interests.push(value);
+
+      if (type === "ir_a") {
+        const section = SECTIONS[value.toLowerCase().trim()];
+        if (section && !links.some((l) => l.href === section.href)) links.push(section);
+        return "";
+      }
       const result = runAction(type as AssistantAction["type"], value);
       if (result) actions.push({ type: type as AssistantAction["type"], value, result });
       return "";
@@ -46,7 +77,7 @@ export function parseAndRunActions(rawText: string): {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { cleanText: safeText, actions, interests };
+  return { cleanText: safeText, actions, interests, links };
 }
 
 function runAction(type: AssistantAction["type"], value: string): string | null {

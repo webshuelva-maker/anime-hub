@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { legalConfig } from "@/config/legal";
 import { siteConfig } from "@/config/site";
 import { SelectableChip } from "./SelectableChip";
+import { DateOfBirthPicker } from "./DateOfBirthPicker";
+import { CheckBox } from "./CheckBox";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { playError, playSuccess } from "@/lib/sound";
 
@@ -125,7 +127,16 @@ export function SocialOnboarding() {
 
       if (dbError) {
         playError();
-        setError("No se ha podido guardar. Revisa los datos e inténtalo de nuevo.");
+        // 23505 = violación de índice único. Como cada persona solo puede
+        // leer su propia fila, no se puede comprobar antes si el alias
+        // está libre: se intenta guardar y es la base de datos la que lo
+        // dice. Es además la única forma sin condiciones de carrera.
+        const yaExiste = dbError.code === "23505" || /duplicate|unique/i.test(dbError.message ?? "");
+        setError(
+          yaExiste
+            ? "Ese alias ya está cogido. Prueba con otro."
+            : "No se ha podido guardar. Revisa los datos e inténtalo de nuevo."
+        );
         setSaving(false);
         return;
       }
@@ -279,12 +290,9 @@ export function SocialOnboarding() {
         <p className="mt-1 text-xs text-muted">
           Solo se usa para calcular tu edad. No se enseña a nadie.
         </p>
-        <input
-          type="date"
-          value={birthdate}
-          onChange={(e) => setBirthdate(e.target.value)}
-          className="mt-2 w-full rounded-xl border border-panel-border bg-panel-soft/50 px-3 py-2 text-sm outline-none focus:border-ice/50"
-        />
+        <div className="mt-2">
+          <DateOfBirthPicker value={birthdate} onChange={setBirthdate} />
+        </div>
         {age !== null && !isAdult && (
           <p className="mt-2 text-xs text-rumor">
             Con {age} años no puedes usar este apartado. El resto de la app sí.
@@ -329,29 +337,23 @@ export function SocialOnboarding() {
           className="mt-2 w-full resize-none rounded-xl border border-panel-border bg-panel-soft/50 px-3 py-2 text-sm outline-none focus:border-ice/50"
         />
 
-        <label className="mt-6 flex cursor-pointer items-start gap-3">
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={(e) => setAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--ice)]"
-          />
-          <span className="text-xs leading-relaxed text-muted">
+        <div className="mt-6">
+          <CheckBox checked={accepted} onChange={setAccepted}>
             Declaro que tengo al menos {legalConfig.edadMinimaSocial} años y acepto las{" "}
-            <Link href="/legal/normas" className="ice-text hover:underline">
+            <Link href="/legal/normas" target="_blank" className="ice-text hover:underline">
               normas de convivencia
             </Link>
             , los{" "}
-            <Link href="/legal/terminos" className="ice-text hover:underline">
+            <Link href="/legal/terminos" target="_blank" className="ice-text hover:underline">
               términos de uso
             </Link>{" "}
             y el tratamiento de estos datos según la{" "}
-            <Link href="/legal/privacidad" className="ice-text hover:underline">
+            <Link href="/legal/privacidad" target="_blank" className="ice-text hover:underline">
               política de privacidad
             </Link>
             .
-          </span>
-        </label>
+          </CheckBox>
+        </div>
 
         {error && <p className="mt-4 text-sm text-rumor">{error}</p>}
 

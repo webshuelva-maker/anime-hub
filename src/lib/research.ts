@@ -65,6 +65,8 @@ Necesita búsqueda si pregunta por algo que cambia con el tiempo: si existe o se
 
 NO necesita búsqueda si es un saludo, charla, una opinión, una recomendación general, o una pregunta sobre la trama, los personajes o el pasado lejano de una obra.
 
+TAMPOCO necesita búsqueda si la pregunta va sobre la PROPIA APP y sus secciones: "qué es Conectar", "para qué sirve Tus gustos", "cómo borro lo que sabes de mí", "qué es esto". En ese caso needsResearch es false, isAnime es false y topic va vacío.
+
 Si el último mensaje no nombra la serie pero se entiende por lo anterior, resuélvela tú.
 
 Marca también si el tema ES de anime o manga. Si preguntan por un videojuego, una película occidental, una serie de imagen real, o cualquier otra cosa, isAnime es false (aunque siga necesitando búsqueda).

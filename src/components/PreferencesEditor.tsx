@@ -60,7 +60,11 @@ function AffinityRow({
           className="accent-gradient h-full rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
+          // Arranca DESPUÉS de que la fila haya terminado de entrar (de ahí
+          // el 0.3 de base) y tarda casi un segundo en llenarse. Antes salía
+          // a la vez que el resto y de un tirón, y por eso se veía como un
+          // pegote al final de la animación de la página.
+          transition={{ duration: 0.9, delay: 0.3 + delay, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
       {examples.length > 0 && (
@@ -125,7 +129,12 @@ export function PreferencesEditor() {
         esto ordena tu feed.
       </p>
 
-      <div className="panel mt-8 rounded-2xl p-6">
+      <motion.div
+        className="panel mt-8 rounded-2xl p-6"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+      >
         {!ready ? (
           // Marcador de posición mientras se leen los datos del navegador.
           // Ocupa el mismo sitio que el contenido real, así que al llegar
@@ -169,14 +178,14 @@ export function PreferencesEditor() {
                       key={g.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
+                      transition={{ duration: 0.32, delay: i * 0.09, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={genreLabel(g.name)}
                         count={g.count}
                         max={maxCount}
                         examples={prefs.genreExamples?.[g.name] ?? []}
-                        delay={i * 0.06}
+                        delay={i * 0.09}
                       />
                     </motion.div>
                   ))}
@@ -195,14 +204,14 @@ export function PreferencesEditor() {
                       key={s.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
+                      transition={{ duration: 0.32, delay: i * 0.09, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={s.name}
                         count={s.count}
                         max={maxCount}
                         examples={prefs.studioExamples?.[s.name] ?? []}
-                        delay={i * 0.06}
+                        delay={i * 0.09}
                       />
                     </motion.div>
                   ))}
@@ -226,7 +235,7 @@ export function PreferencesEditor() {
                   key={t.name}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.22, delay: i * 0.03, ease: "easeOut" }}
+                  transition={{ duration: 0.28, delay: 0.5 + i * 0.04, ease: "easeOut" }}
                   className="inline-flex items-center gap-2 rounded-full border border-ice/25 bg-ice/5 py-1.5 pl-3 pr-2 text-xs text-foreground"
                 >
                   {t.name}
@@ -244,7 +253,7 @@ export function PreferencesEditor() {
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
 
       <div className="rule-line my-8" />
 

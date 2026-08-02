@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { siteConfig } from "@/config/site";
 import { getPreferences } from "@/lib/storage";
 import { buildAssistantContext } from "@/lib/assistantContext";
-import { parseAndRunActions, AssistantAction } from "@/lib/assistantActions";
+import { useRouter } from "next/navigation";
+import { parseAndRunActions, AssistantAction, AssistantLink } from "@/lib/assistantActions";
 import { ResearchSource } from "@/lib/sourceTiers";
 import { Confidence } from "@/lib/confidence";
 import { recordAnimeInterest } from "@/lib/learning";
@@ -24,6 +25,8 @@ interface Message {
   confidence?: Confidence;
   /** Pasos que dio Ren, guardados para poder repasarlos después. */
   steps?: Step[];
+  /** Botones para ir a una sección de la app. */
+  links?: AssistantLink[];
   ts?: number;
 }
 
@@ -328,6 +331,7 @@ export function AssistantOrb() {
   const [slowResponse, setSlowResponse] = useState(false);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const appendToArchive = (msgs: Message[]) => {
@@ -386,7 +390,7 @@ export function AssistantOrb() {
     extras: { sources?: ResearchSource[]; confidence?: Confidence | null; steps?: Step[] },
     boostedTitles: Set<string>
   ) => {
-    const { cleanText, actions, interests } = parseAndRunActions(rawReply);
+    const { cleanText, actions, interests, links } = parseAndRunActions(rawReply);
     const assistantMessage: Message = {
       role: "assistant",
       content: cleanText || rawReply,
@@ -394,6 +398,7 @@ export function AssistantOrb() {
       sources: extras.sources && extras.sources.length > 0 ? extras.sources : undefined,
       confidence: extras.confidence ?? undefined,
       steps: extras.steps && extras.steps.length > 0 ? extras.steps : undefined,
+      links: links.length > 0 ? links : undefined,
       ts: Date.now(),
     };
     setMessages((prev) => [...prev, assistantMessage]);
@@ -710,6 +715,37 @@ export function AssistantOrb() {
                           >
                             ✓ {a.result}
                           </span>
+                        ))}
+                        {/* Botones para ir a donde te acaba de explicar. Al
+                            pulsarlos se cierra el chat: lo que quieres ver
+                            está detrás del panel. */}
+                        {m.links?.map((l) => (
+                          <motion.button
+                            key={l.href}
+                            type="button"
+                            onClick={() => {
+                              playToggle();
+                              setOpen(false);
+                              router.push(l.href);
+                            }}
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                            className="inline-flex w-fit items-center gap-1.5 rounded-full border border-ice/40 bg-ice/10 px-3 py-1.5 text-[11px] font-semibold text-ice transition-colors hover:bg-ice/20"
+                          >
+                            {l.label}
+                            <svg
+                              width="11"
+                              height="11"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            >
+                              <path d="M5 12h14M13 6l6 6-6 6" />
+                            </svg>
+                          </motion.button>
                         ))}
                       </div>
                     </motion.div>

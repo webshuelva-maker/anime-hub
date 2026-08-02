@@ -158,3 +158,18 @@ alter table public.social_reports enable row level security;
 create policy "Users can file reports"
   on public.social_reports for insert
   with check (auth.uid() = reporter_id);
+
+-- ============================================================
+--  v93 — Alias únicos en el apartado social
+-- ============================================================
+-- Dos personas no pueden llamarse igual: en un sitio donde hablas con
+-- desconocidos, poder repetir alias es una vía directa para hacerse
+-- pasar por otro. Se compara en minúsculas para que "Shirokuma" y
+-- "shirokuma" cuenten como el mismo.
+--
+-- Va como índice en la base de datos y no como comprobación en la app a
+-- propósito: cada persona solo puede leer su propia fila, así que la app
+-- no PUEDE saber si un alias está libre. Y aunque pudiera, dos altas a la
+-- vez podrían colarse igual.
+create unique index if not exists social_profiles_alias_unique
+  on public.social_profiles (lower(alias));
