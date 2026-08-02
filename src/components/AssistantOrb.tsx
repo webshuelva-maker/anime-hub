@@ -816,6 +816,7 @@ export function AssistantOrb() {
       </AnimatePresence>
 
       <div
+        data-chrome-app
         style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
         className="fixed right-4 z-40 sm:right-6"
       >

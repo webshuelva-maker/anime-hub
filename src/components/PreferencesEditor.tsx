@@ -135,7 +135,12 @@ export function PreferencesEditor() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
       >
-        {!ready ? (
+        {/* Se espera a las DOS cosas: a haber leído los datos del
+            navegador (ready) y a saber si hay sesión (isLoggedIn deja de
+            ser null). Antes bastaba con la primera, así que se dibujaba
+            el contenido con las barras animándose y, al resolverse la
+            segunda, se volvía a montar todo de golpe y sin animación. */}
+        {!ready || isLoggedIn === null ? (
           // Marcador de posición mientras se leen los datos del navegador.
           // Ocupa el mismo sitio que el contenido real, así que al llegar
           // no da el salto que quedaba tan feo.

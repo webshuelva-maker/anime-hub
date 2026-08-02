@@ -33,7 +33,7 @@ export function Navbar() {
   }, [pathname]);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-panel-border/70 bg-background/85 backdrop-blur-md">
+    <header data-chrome-app className="sticky top-0 z-20 border-b border-panel-border/70 bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-4 sm:px-6">
         <Link href="/noticias" onClick={playClick} onMouseEnter={playHover} className="flex shrink-0 items-center gap-2.5">
           <span className="font-heading flex h-8 w-8 items-center justify-center rounded-full border border-ice/30 ice-text">

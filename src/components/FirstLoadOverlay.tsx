@@ -144,6 +144,9 @@ export function FirstLoadOverlay({
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = anterior;
+      // Devuelve la barra superior y el orbe, que el script del layout
+      // había escondido antes del primer pintado.
+      document.documentElement.classList.remove("arrancando");
     };
   }, []);
 

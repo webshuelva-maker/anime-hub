@@ -215,3 +215,131 @@ drop trigger if exists social_profiles_birthdate_lock on public.social_profiles;
 create trigger social_profiles_birthdate_lock
   before update on public.social_profiles
   for each row execute procedure public.social_profiles_birthdate_inmutable();
+
+-- ============================================================
+--  v101 — Tickets de soporte / moderación
+-- ============================================================
+-- Vía de contacto de la app: en vez de un correo que nadie mira, el
+-- usuario abre un ticket desde dentro y habla con un humano.
+--
+-- Quién es administrador se marca aquí, no en el código: una columna en
+-- profiles. Así se puede dar y quitar sin desplegar nada, y sobre todo
+-- las políticas de abajo pueden apoyarse en ella (si viviera en el
+-- cliente, cualquiera podría decir que es administrador).
+alter table public.profiles
+  add column if not exists is_admin boolean default false not null;
+
+-- Función auxiliar: ¿quien hace la petición es administrador?
+-- "security definer" para que pueda mirar profiles sin chocar con las
+-- políticas de la propia tabla profiles (si no, se muerde la cola).
+create or replace function public.es_admin()
+returns boolean as $$
+  select coalesce(
+    (select is_admin from public.profiles where id = auth.uid()),
+    false
+  );
+$$ language sql stable security definer set search_path = public;
+
+create table if not exists public.support_tickets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  -- abierto: esperando a que lo coja alguien
+  -- atendido: un administrador ya está dentro
+  -- cerrado: resuelto
+  estado text not null default 'abierto' check (estado in ('abierto', 'atendido', 'cerrado')),
+  asunto text,
+  -- Lo que contó el usuario o lo que Ren detectó, para no tener que leer
+  -- todo el hilo antes de saber de qué va.
+  motivo text,
+  admin_id uuid references auth.users on delete set null,
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
+create index if not exists support_tickets_estado_idx
+  on public.support_tickets (estado, created_at desc);
+create index if not exists support_tickets_user_idx
+  on public.support_tickets (user_id, created_at desc);
+
+create table if not exists public.support_messages (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id uuid references public.support_tickets on delete cascade not null,
+  autor_id uuid references auth.users on delete set null,
+  -- Se guarda aparte de autor_id a propósito: si algún día se borra la
+  -- cuenta del administrador, el hilo tiene que seguir leyéndose y
+  -- entendiéndose quién dijo qué.
+  autor_rol text not null check (autor_rol in ('usuario', 'admin')),
+  contenido text not null check (char_length(contenido) between 1 and 4000),
+  created_at timestamptz default now() not null
+);
+
+create index if not exists support_messages_ticket_idx
+  on public.support_messages (ticket_id, created_at);
+
+alter table public.support_tickets enable row level security;
+alter table public.support_messages enable row level security;
+
+-- Tickets: cada uno ve los suyos; los administradores, todos.
+drop policy if exists "Ver tickets propios o todos si admin" on public.support_tickets;
+create policy "Ver tickets propios o todos si admin"
+  on public.support_tickets for select
+  using (auth.uid() = user_id or public.es_admin());
+
+drop policy if exists "Abrir ticket propio" on public.support_tickets;
+create policy "Abrir ticket propio"
+  on public.support_tickets for insert
+  with check (auth.uid() = user_id);
+
+-- El usuario puede cerrar el suyo; el administrador puede además
+-- cogerlo y cambiarle el estado.
+drop policy if exists "Actualizar ticket propio o si admin" on public.support_tickets;
+create policy "Actualizar ticket propio o si admin"
+  on public.support_tickets for update
+  using (auth.uid() = user_id or public.es_admin());
+
+-- Mensajes: se ven si se puede ver el ticket al que pertenecen.
+drop policy if exists "Ver mensajes de tickets visibles" on public.support_messages;
+create policy "Ver mensajes de tickets visibles"
+  on public.support_messages for select
+  using (
+    exists (
+      select 1 from public.support_tickets t
+      where t.id = ticket_id
+        and (t.user_id = auth.uid() or public.es_admin())
+    )
+  );
+
+-- Al escribir se comprueba que el rol declarado cuadra con quién eres de
+-- verdad: nadie puede mandar un mensaje haciéndose pasar por admin.
+drop policy if exists "Escribir en tickets visibles" on public.support_messages;
+create policy "Escribir en tickets visibles"
+  on public.support_messages for insert
+  with check (
+    autor_id = auth.uid()
+    and (
+      (autor_rol = 'admin' and public.es_admin())
+      or (
+        autor_rol = 'usuario'
+        and exists (
+          select 1 from public.support_tickets t
+          where t.id = ticket_id and t.user_id = auth.uid()
+        )
+      )
+    )
+  );
+
+-- Los mensajes no se editan ni se borran a propósito: un hilo de
+-- moderación que se puede reescribir no sirve como registro de nada.
+
+-- Realtime: para que el chat aparezca solo, sin recargar.
+do $$
+begin
+  alter publication supabase_realtime add table public.support_messages;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.support_tickets;
+exception when duplicate_object then null;
+end $$;

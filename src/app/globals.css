@@ -186,3 +186,13 @@ input:-webkit-autofill:focus {
 .legal-body strong {
   color: var(--foreground);
 }
+
+/* Arranque con pantalla de carga: la barra superior y el orbe de Ren se
+   mantienen invisibles desde el primer fotograma, para que no asomen
+   antes de que la pantalla de carga llegue a montarse. La marca la pone
+   un script del layout (antes de pintar) y la quita FirstLoadOverlay
+   cuando termina. Se usa visibility y no display para no recolocar nada
+   al reaparecer. */
+html.arrancando [data-chrome-app] {
+  visibility: hidden;
+}

@@ -59,6 +59,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="h-full antialiased">
+      <head>
+        {/*
+          Se ejecuta ANTES del primer pintado, a propósito.
+
+          La barra superior y el orbe de Ren viven aquí, en el layout, y
+          se pintan de inmediato; la pantalla de carga vive dentro de la
+          página y tarda un pelín más en montarse. Ese desfase de una o
+          dos décimas es lo que dejaba asomar la home al abrir la app.
+
+          Como React no llega a tiempo de decidirlo, se decide aquí: si no
+          hay noticias en caché, esta va a ser una carga con pantalla de
+          espera, así que se marca el documento y el CSS esconde la barra
+          y el orbe desde el primer fotograma. FirstLoadOverlay quita la
+          marca cuando termina.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000)}}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <CloudSyncGate />
         <AmbientGlow />

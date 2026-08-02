@@ -1,0 +1,268 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+import { legalConfig } from "@/config/legal";
+import { siteConfig } from "@/config/site";
+import { playSend, playReceive, playToggle } from "@/lib/sound";
+import {
+  Ticket,
+  MensajeSoporte,
+  abrirTicket,
+  cerrarTicket,
+  enviarMensaje,
+  escucharMensajes,
+  escucharTicket,
+  getMensajes,
+  getTicketActivo,
+} from "@/lib/support";
+
+/**
+ * Conversación de soporte del usuario con un administrador.
+ *
+ * Los dos estados que se enseñan salen del estado real del ticket en la
+ * base de datos, no de un temporizador decorativo: "abierto" significa
+ * que todavía no lo ha cogido nadie, y "atendido" que un administrador ya
+ * está dentro. Si se falseara con una animación bonita, la gente se
+ * quedaría esperando creyendo que hay alguien al otro lado.
+ */
+export function SupportChat() {
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [mensajes, setMensajes] = useState<MensajeSoporte[]>([]);
+  const [texto, setTexto] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [haySesion, setHaySesion] = useState<boolean | null>(null);
+  const finRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        setHaySesion(false);
+        setCargando(false);
+        return;
+      }
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      setHaySesion(!!data.user);
+      if (data.user) {
+        const t = await getTicketActivo();
+        setTicket(t);
+        if (t) setMensajes(await getMensajes(t.id));
+      }
+      setCargando(false);
+    })();
+  }, []);
+
+  // Suscripciones en vivo: mensajes nuevos y cambios de estado del ticket.
+  useEffect(() => {
+    if (!ticket) return;
+    const dejarMensajes = escucharMensajes(ticket.id, (m) => {
+      setMensajes((prev) => {
+        // El propio mensaje ya se añadió al enviarlo; evita duplicarlo
+        // cuando vuelve por el canal en tiempo real.
+        if (prev.some((x) => x.id === m.id)) return prev;
+        if (m.autor_rol === "admin") playReceive();
+        return [...prev, m];
+      });
+    });
+    const dejarTicket = escucharTicket(ticket.id, (t) => setTicket(t));
+    return () => {
+      dejarMensajes();
+      dejarTicket();
+    };
+  }, [ticket?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    finRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [mensajes.length]);
+
+  const handleAbrir = async () => {
+    if (!motivo.trim() || enviando) return;
+    setEnviando(true);
+    const t = await abrirTicket(motivo.trim());
+    if (t) {
+      setTicket(t);
+      await enviarMensaje(t.id, motivo.trim(), "usuario");
+      setMensajes(await getMensajes(t.id));
+      playSend();
+    }
+    setEnviando(false);
+  };
+
+  const handleEnviar = async () => {
+    const contenido = texto.trim();
+    if (!contenido || !ticket || enviando) return;
+    setEnviando(true);
+    setTexto("");
+    const ok = await enviarMensaje(ticket.id, contenido, "usuario");
+    if (ok) {
+      playSend();
+      setMensajes(await getMensajes(ticket.id));
+    }
+    setEnviando(false);
+  };
+
+  const handleCerrar = async () => {
+    if (!ticket) return;
+    await cerrarTicket(ticket.id);
+    playToggle();
+    setTicket(null);
+    setMensajes([]);
+    setMotivo("");
+  };
+
+  if (cargando) {
+    return <p className="mt-6 text-sm text-muted">Un momento…</p>;
+  }
+
+  if (!haySesion) {
+    return (
+      <div className="panel mt-6 rounded-2xl p-6">
+        <p className="text-sm text-muted">
+          Para abrir una consulta necesitas tener cuenta: es lo que permite que la conversación te
+          espere aquí aunque cierres la app.
+        </p>
+        <Link
+          href="/login"
+          className="accent-gradient mt-4 inline-block rounded-full px-5 py-2 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95"
+        >
+          Iniciar sesión / Crear cuenta
+        </Link>
+      </div>
+    );
+  }
+
+  // --- Todavía no hay ticket: formulario para abrirlo -------------------
+  if (!ticket) {
+    return (
+      <div className="panel mt-6 rounded-2xl p-6">
+        <p className="text-sm leading-relaxed text-muted">
+          Cuéntanos qué ha pasado. Lo lee una persona, no {siteConfig.assistantName}: puede tardar un
+          rato en contestar, pero la conversación se queda aquí esperándote.
+        </p>
+        <textarea
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          rows={4}
+          maxLength={1000}
+          placeholder="Describe el problema con el detalle que puedas"
+          className="mt-4 w-full resize-none rounded-xl border border-panel-border bg-panel-soft px-3 py-2 text-sm outline-none focus:border-ice/50"
+        />
+        <motion.button
+          type="button"
+          onClick={handleAbrir}
+          disabled={!motivo.trim() || enviando}
+          whileHover={motivo.trim() ? { scale: 1.03 } : {}}
+          whileTap={motivo.trim() ? { scale: 0.96 } : {}}
+          className="accent-gradient mt-3 rounded-full px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {enviando ? "Abriendo…" : "Abrir consulta"}
+        </motion.button>
+      </div>
+    );
+  }
+
+  const atendido = ticket.estado === "atendido";
+
+  return (
+    <div className="panel mt-6 flex flex-col rounded-2xl">
+      {/* Cabecera: quién hay al otro lado, según el estado real */}
+      <div className="flex items-center gap-3 border-b border-panel-border px-5 py-4">
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+            atendido ? "border-ice/40 ice-text" : "border-panel-border text-muted"
+          }`}
+        >
+          {atendido ? legalConfig.soporteNombre.slice(0, 1) : "·"}
+        </span>
+        <div className="min-w-0">
+          {atendido ? (
+            <>
+              <p className="text-sm font-semibold text-foreground">
+                {legalConfig.soporteNombre}{" "}
+                <span className="ml-1 rounded-full border border-ice/30 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ice-text">
+                  {legalConfig.soporteRango}
+                </span>
+              </p>
+              <p className="flex items-center gap-1.5 text-xs text-muted">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Conectado
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-foreground">Contactando con el administrador</p>
+              <p className="text-xs text-muted">
+                Aún no ha entrado nadie. Puedes cerrar la app: lo verás aquí al volver.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mensajes */}
+      <div className="flex max-h-[55vh] flex-col gap-3 overflow-y-auto px-5 py-4">
+        <AnimatePresence initial={false}>
+          {mensajes.map((m) => (
+            <motion.div
+              key={m.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                m.autor_rol === "usuario"
+                  ? "accent-gradient self-end text-white"
+                  : "self-start border border-panel-border bg-panel-soft text-foreground"
+              }`}
+            >
+              {m.autor_rol === "admin" && (
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide ice-text">
+                  {legalConfig.soporteNombre} · {legalConfig.soporteRango}
+                </p>
+              )}
+              {m.contenido}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        <div ref={finRef} />
+      </div>
+
+      {/* Escribir */}
+      <div className="flex items-center gap-2 border-t border-panel-border px-5 py-4">
+        <input
+          type="text"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleEnviar()}
+          maxLength={4000}
+          placeholder="Escribe tu mensaje…"
+          className="flex-1 rounded-full border border-panel-border bg-panel-soft px-4 py-2 text-sm outline-none focus:border-ice/50"
+        />
+        <motion.button
+          type="button"
+          onClick={handleEnviar}
+          disabled={!texto.trim() || enviando}
+          whileHover={texto.trim() ? { scale: 1.05 } : {}}
+          whileTap={texto.trim() ? { scale: 0.94 } : {}}
+          className="accent-gradient shrink-0 rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          Enviar
+        </motion.button>
+      </div>
+
+      <div className="border-t border-panel-border px-5 py-3">
+        <button
+          type="button"
+          onClick={handleCerrar}
+          className="text-xs text-muted underline transition-colors hover:text-foreground"
+        >
+          Dar por resuelta esta consulta
+        </button>
+      </div>
+    </div>
+  );
+}

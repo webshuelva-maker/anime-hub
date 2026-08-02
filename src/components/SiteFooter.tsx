@@ -23,6 +23,9 @@ export function SiteFooter() {
           <Link href="/legal/normas" className="text-[11px] text-muted transition-colors hover:text-foreground">
             Normas de convivencia
           </Link>
+          <Link href="/soporte" className="text-[11px] text-muted transition-colors hover:text-foreground">
+            Contacto y denuncias
+          </Link>
         </nav>
       </div>
     </footer>

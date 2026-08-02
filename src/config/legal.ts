@@ -40,6 +40,10 @@ export const legalConfig = {
 
   edadMinimaApp: 14, // edad de consentimiento digital propio en España (LOPDGDD art. 7)
   edadMinimaSocial: 18, // el apartado social es solo para adultos
+
+  /** Cómo se presenta quien atiende los tickets de soporte. */
+  soporteNombre: "Víctor",
+  soporteRango: "Administrador",
 } as const;
 
 /** Correo para ejercer derechos; cae al de contacto si no se ha puesto otro. */
