@@ -11,7 +11,7 @@ import { Toast } from "./Toast";
 import { clearRenMemory } from "@/lib/renMemory";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { playSuccess, playToggle } from "@/lib/sound";
+import { playToggle } from "@/lib/sound";
 
 interface AccountProfile {
   email: string | null;

@@ -589,12 +589,6 @@ export function NewsFeed() {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-        {prefs.customPlatforms.length > 0 && (
-          <p className="mb-6 rounded-xl border border-panel-border bg-panel/50 px-4 py-3 text-xs text-muted">
-            Guardamos tus plataformas personalizadas ({prefs.customPlatforms.join(", ")}) — muy pronto buscaremos noticias también ahí.
-          </p>
-        )}
-
         {status === "loading" && (
           <div className="panel flex flex-col items-center gap-3 rounded-2xl px-6 py-16 text-center">
             <motion.span

@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v115",
+    fecha: "2026-08-02",
+    titulo: "Ajustes que se guardan solos",
+    puntos: [
+      "Las plataformas y el resto de ajustes se guardan al tocarlos: ya no hay botón de guardar.",
+      "La lista de plataformas es fija: las que hay cubren lo que se ve en España.",
+    ],
+  },
+  {
     version: "v114",
     fecha: "2026-08-02",
     titulo: "Tercera base de datos y diagnóstico",
