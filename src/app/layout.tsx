@@ -35,6 +35,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // OJO: al declarar este objeto se sustituye el viewport por defecto de
+  // Next.js, así que width e initialScale hay que ponerlos a mano. Sin
+  // "width: device-width" el móvil renderiza a ancho de escritorio y deja
+  // hacer zoom y arrastrar la página — y con eso se podía mover la
+  // pantalla de carga a un lado y ver el feed por debajo.
+  width: "device-width",
+  initialScale: 1,
+  // Sin zoom manual: la app está pensada como pantalla completa y al
+  // ampliar se descoloca todo lo anclado (barra superior, orbe de Ren).
+  maximumScale: 1,
+  userScalable: false,
   themeColor: "#06070a",
   // La app ya usa 100dvh y safe-area-inset por dentro, así que puede
   // dibujar bajo la muesca y la barra inferior sin que se corte nada.

@@ -138,6 +138,16 @@ export function FirstLoadOverlay({
   };
 
   useEffect(() => {
+    // Mientras la pantalla de carga está puesta, el fondo no se mueve.
+    // Si no, se podía desplazar el feed por detrás y verlo asomar.
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = anterior;
+    };
+  }, []);
+
+  useEffect(() => {
     vistasRef.current = loadShown();
     // Las verificadas que esta persona todavía no ha visto van primero.
     pendientesRef.current = barajar(ANIME_TRIVIA.filter((f) => !vistasRef.current.includes(f)));
