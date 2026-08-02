@@ -295,3 +295,118 @@ html.arrancando body::before {
   background: var(--background);
   pointer-events: none;
 }
+
+/*
+ * Presentación de arranque (ver BootIntro.tsx).
+ *
+ * Todo en CSS a propósito: se pinta y se va sin que intervenga
+ * JavaScript, así que ocupa exactamente el hueco en el que antes se veía
+ * el destello. Oculta salvo que el documento venga marcado como
+ * "arrancando".
+ */
+.boot-intro {
+  display: none;
+}
+
+html.arrancando .boot-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: var(--background);
+  pointer-events: none;
+  /* La cortina se mantiene opaca 0,75s y luego se disuelve. Al irse deja
+     ver la pantalla de carga, que ya llevaba ahí pintada todo el rato. */
+  animation: boot-curtain 1.15s ease-in-out forwards;
+}
+
+@keyframes boot-curtain {
+  0%,
+  62% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.boot-intro__mark {
+  color: var(--ice);
+  transform-origin: center;
+  animation: boot-mark-in 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--ice) 45%, transparent));
+}
+
+@keyframes boot-mark-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-35deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12) rotate(4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.boot-intro__name {
+  font-family: var(--font-heading), serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em; /* compensa el espacio que el interletraje deja a la derecha */
+  color: color-mix(in srgb, var(--foreground) 88%, transparent);
+  animation: boot-name-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+}
+
+@keyframes boot-name-in {
+  from {
+    opacity: 0;
+    letter-spacing: 0.9em;
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.42em;
+  }
+}
+
+/* Filo de luz que se abre bajo el nombre: da la sensación de que algo se
+   ha terminado de cargar, en vez de que la pantalla se apaga sin más. */
+.boot-intro__line {
+  height: 1px;
+  width: 0;
+  background: linear-gradient(90deg, transparent, var(--ice), transparent);
+  animation: boot-line 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+@keyframes boot-line {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+  to {
+    width: 8rem;
+    opacity: 0.9;
+  }
+}
+
+/* Quien tenga activado "reducir movimiento" en el sistema ve la marca
+   quieta y un fundido corto, sin escalados ni giros. */
+@media (prefers-reduced-motion: reduce) {
+  .boot-intro__mark,
+  .boot-intro__name,
+  .boot-intro__line {
+    animation: none;
+  }
+  html.arrancando .boot-intro {
+    animation: boot-curtain 0.5s linear forwards;
+  }
+}

@@ -14,6 +14,11 @@ function extractOgImage(html: string): string | null {
 // (bastante común) no encontraba nada.
 const CONTENT_SELECTORS = [
   "article",
+  // MyAnimeList: su cuerpo de noticia vive aquí. Sin este selector se
+  // caía al plan B (todos los <p> de la página) y recogía el listado del
+  // foro que hay debajo del artículo.
+  ".news-container",
+  ".content-left",
   '[itemprop="articleBody"]',
   ".article-body",
   ".article-content",
@@ -27,7 +32,32 @@ const CONTENT_SELECTORS = [
 // Se descartan contenedores que casi seguro son ruido, aunque coincidan
 // con un selector de contenido (algunas plantillas anidan el menú de
 // navegación dentro de <main>, por ejemplo).
-const NOISE_SELECTOR = "nav, footer, header, aside, script, style, noscript, form, .related, .newsletter, .comments, .share, .social";
+const NOISE_SELECTOR =
+  "nav, footer, header, aside, script, style, noscript, form, .related, .newsletter, .comments, .comment, .share, .social, .forum, .forum-topic, .topic-list, .sidebar, .widget, .pagination, .breadcrumb";
+
+/**
+ * ¿Esta línea es una fila de un LISTADO en vez de una frase del artículo?
+ *
+ * Salió de un fallo real: en las noticias de MyAnimeList, el cuerpo que
+ * se extraía era la lista del foro — "Jul 12, 5:03 PM by SyverenWaterlow
+ * 0 Comments" repetido diez veces. Pasaba todos los filtros porque cada
+ * fila supera los 40 caracteres y no parece código.
+ *
+ * Se reconocen por lo que tienen en común: fecha u hora, un "por
+ * fulanito", y un recuento de comentarios, respuestas o visitas — y
+ * ningún punto final, porque no son frases.
+ */
+function looksLikeListRow(text: string): boolean {
+  const conRecuento = /\b\d+\s+(comment|comments|repl(y|ies)|view|views|comentarios?|respuestas?)\b/i.test(text);
+  const conAutor = /\b(by|por)\s+[A-Za-z0-9_\-]{3,}/i.test(text);
+  const conFecha = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s+(de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic|jan|apr|aug|dec)/i.test(text);
+  const sinFraseCompleta = !/[.!?]\s|[.!?]$/.test(text);
+
+  // Dos señales fuertes ya bastan; con una sola se corre el riesgo de
+  // tirar una frase legítima que mencione una fecha.
+  const señales = [conRecuento, conAutor, conFecha].filter(Boolean).length;
+  return señales >= 2 && sinFraseCompleta;
+}
 
 function looksLikeCode(text: string): boolean {
   const codeSignals = (text.match(/[{};]/g) || []).length;
@@ -39,7 +69,7 @@ function extractParagraphs($: cheerio.CheerioAPI, root: cheerio.Cheerio<AnyNode>
     .find("p")
     .map((_, el) => $(el).text().replace(/\s+/g, " ").trim())
     .get()
-    .filter((text) => text.length > 40 && !looksLikeCode(text));
+    .filter((text) => text.length > 40 && !looksLikeCode(text) && !looksLikeListRow(text));
 }
 
 /**
@@ -90,7 +120,20 @@ export async function fetchArticlePage(url: string): Promise<{ text: string | nu
       if (fallback.join(" ").length > paragraphs.join(" ").length) paragraphs = fallback;
     }
 
-    const combined = paragraphs.length > 0 ? paragraphs.join("\n\n") : null;
+    /*
+     * Última comprobación antes de dar el texto por bueno.
+     *
+     * Si lo que queda son cuatro líneas sueltas y ninguna termina en
+     * punto, no es un artículo: es un listado, un pie de página o los
+     * restos de una plantilla que no hemos sabido leer. En ese caso vale
+     * más devolver nada —y que la app enseñe el resumen del feed, que
+     * siempre es correcto— que enseñar una lista de comentarios como si
+     * fuera la noticia.
+     */
+    const conFrases = paragraphs.filter((p) => /[.!?]/.test(p)).length;
+    const pareceArticulo = paragraphs.join(" ").length >= 200 && conFrases >= 2;
+
+    const combined = paragraphs.length > 0 && pareceArticulo ? paragraphs.join("\n\n") : null;
     // Antes eran 4000 caracteres — para artículos largos (piezas de
     // análisis, no solo noticias breves) traducir eso necesitaba tanta
     // generación que solía agotar el tiempo de la función serverless

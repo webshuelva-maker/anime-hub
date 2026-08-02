@@ -10,6 +10,7 @@ import "./globals.css";
 import { siteConfig } from "@/config/site";
 import { SiteChrome } from "@/components/SiteChrome";
 import { SiteFooter } from "@/components/SiteFooter";
+import { BootIntro } from "@/components/BootIntro";
 import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
 
@@ -97,11 +98,12 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `try{if(location.pathname==='/'){var p=localStorage.getItem('anime-hub:preferences');var ok=false;try{ok=!!(p&&JSON.parse(p).onboardingCompleted)}catch(e){}document.cookie='anime-hub-onboarded='+(ok?'1':'0')+'; path=/; max-age=31536000; SameSite=Lax';location.replace(ok?'/noticias':'/onboarding')}}catch(e){}
-try{if(!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000)}}catch(e){}`,
+try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias')===0;if(enNoticias&&!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000)}}catch(e){}`,
           }}
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <BootIntro />
         <CloudSyncGate />
         <AmbientGlow />
         <SiteChrome />
