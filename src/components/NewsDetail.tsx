@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
+import { vibrar } from "@/lib/haptics";
 import { NewsItem } from "@/types/news";
 import { NewsCover } from "./NewsCover";
 import { ReliabilityBadge } from "./ReliabilityBadge";
@@ -216,7 +217,10 @@ export function NewsDetail({
               // Se cierra si has arrastrado lo bastante O si has hecho un
               // gesto rápido hacia abajo, aunque sea corto: soltar con
               // impulso es como se cierra una hoja en cualquier app.
-              if (info.offset.y > 110 || info.velocity.y > 600) onClose();
+              if (info.offset.y > 110 || info.velocity.y > 600) {
+                vibrar(8);
+                onClose();
+              }
             }}
             onClick={(e) => e.stopPropagation()}
           >

@@ -6,6 +6,8 @@ import { NewsCard } from "./NewsCard";
 import { NewsThumb } from "./NewsThumb";
 import { NewsDetail } from "./NewsDetail";
 import { FirstLoadOverlay } from "./FirstLoadOverlay";
+import { PullToRefresh } from "./PullToRefresh";
+import { vibrar } from "@/lib/haptics";
 import { ReliabilityBadge } from "./ReliabilityBadge";
 import { getPreferences, DEFAULT_PREFERENCES } from "@/lib/storage";
 import { NewsItem, UserPreferences } from "@/types/news";
@@ -408,6 +410,7 @@ export function NewsFeed() {
     toggleLike(item);
     setPrefs(getPreferences());
     playSuccess();
+    vibrar(12);
   };
 
   const handleOpenDetail = (itemId: string, item: NewsItem) => {
@@ -438,6 +441,7 @@ export function NewsFeed() {
         )}
       </AnimatePresence>
 
+      <PullToRefresh onRefresh={() => loadNews(true)} refreshing={refreshing}>
       <div className="border-b border-panel-border/70">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <div className="flex items-center gap-3">
@@ -755,6 +759,8 @@ export function NewsFeed() {
           </>
         )}
       </div>
+
+      </PullToRefresh>
 
       <NewsDetail
         item={openItem}

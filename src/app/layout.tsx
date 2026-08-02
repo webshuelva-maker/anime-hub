@@ -58,7 +58,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="h-full antialiased">
+    <html
+      lang="es"
+      className="h-full antialiased"
+      // El fondo va TAMBIÉN aquí y en línea, no solo en la hoja de
+      // estilos. Entre que el navegador recibe el HTML y termina de
+      // aplicar el CSS hay un instante en el que pinta el lienzo con su
+      // color por defecto, que es blanco; en un documento nuevo (al
+      // abrir la app o al llegar desde el redirect de la raíz) eso es un
+      // fogonazo claro de una o dos décimas. Un atributo style se aplica
+      // en el mismo momento de leer la etiqueta, antes que cualquier
+      // hoja externa. color-scheme dark hace lo propio con los elementos
+      // que pinta el sistema (barras de desplazamiento, fondo del
+      // navegador durante la carga).
+      style={{ background: "#06070a", colorScheme: "dark" }}
+    >
       <head>
         {/*
           Se ejecuta ANTES del primer pintado, a propósito.

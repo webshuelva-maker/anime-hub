@@ -48,6 +48,14 @@ body {
   overflow-x: clip;
 }
 
+html {
+  background: var(--background);
+  color-scheme: dark;
+  /* Sin esto, el navegador del móvil pone su propio gesto de "tirar para
+     recargar" y pelea con el nuestro. */
+  overscroll-behavior-y: contain;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

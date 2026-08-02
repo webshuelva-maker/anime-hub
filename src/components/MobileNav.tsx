@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { getPreferences, PREFERENCES_CHANGED_EVENT } from "@/lib/storage";
 import { Avatar } from "./AvatarPicker";
 import { playToggle } from "@/lib/sound";
+import { vibrar } from "@/lib/haptics";
 
 /**
  * Barra de navegación inferior, solo en móvil.
@@ -108,7 +109,11 @@ export function MobileNav() {
             <Link
               key={tab.href}
               href={tab.href}
-              onClick={() => !active && playToggle()}
+              onClick={() => {
+                if (active) return;
+                playToggle();
+                vibrar(8);
+              }}
               // min-h de 56px: por encima de los 44px recomendados, con
               // sitio de sobra para el dedo.
               className="relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 px-1 py-2"
@@ -143,7 +148,11 @@ export function MobileNav() {
 
         <Link
           href="/perfil"
-          onClick={() => !perfilActivo && playToggle()}
+          onClick={() => {
+            if (perfilActivo) return;
+            playToggle();
+            vibrar(8);
+          }}
           className="relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 px-1 py-2"
         >
           {perfilActivo && (
