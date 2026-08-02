@@ -419,12 +419,17 @@ export function AssistantOrb() {
     follows.slice(0, 4).forEach(async (title) => {
       let confirmacion = `No he encontrado ningún anime llamado "${title}"`;
       try {
-        const res = await fetch(`/api/anime-facts?title=${encodeURIComponent(title)}`);
+        // Se usa el buscador, no la ficha: devuelve varios candidatos y
+        // tolera nombres a medias ("sao", "re zero"), que es como los
+        // escribe la gente al hablar.
+        const res = await fetch(`/api/anime-search?q=${encodeURIComponent(title)}`);
         const data = (await res.json()) as {
-          facts?: { title?: string; genres?: string[]; studios?: string[] } | null;
+          results?: { title: string; genres?: string[] }[];
         };
-        if (data.facts?.title && titlesMatch(title, data.facts.title)) {
-          const canonico = data.facts.title;
+        const mejor =
+          data.results?.find((r) => titlesMatch(title, r.title)) ?? data.results?.[0] ?? null;
+        if (mejor) {
+          const canonico = mejor.title;
           const prefs = getPreferences();
           const yaEstaba = prefs.favoriteTitles.some(
             (t) => t.toLowerCase() === canonico.toLowerCase()
@@ -432,7 +437,7 @@ export function AssistantOrb() {
           if (!yaEstaba) {
             savePreferences({ ...prefs, favoriteTitles: [...prefs.favoriteTitles, canonico] });
           }
-          recordAnimeInterest(canonico, data.facts.genres ?? [], data.facts.studios ?? []);
+          recordAnimeInterest(canonico, mejor.genres ?? [], []);
           boostedTitlesGlobal.add(canonico.toLowerCase());
           confirmacion = yaEstaba
             ? `${canonico} ya estaba en tus favoritos`
@@ -467,17 +472,16 @@ export function AssistantOrb() {
       .slice(0, 2)
       .forEach(async (title) => {
         try {
-          const res = await fetch(`/api/anime-facts?title=${encodeURIComponent(title)}`);
+          const res = await fetch(`/api/anime-search?q=${encodeURIComponent(title)}`);
           const data = (await res.json()) as {
-            facts?: { title?: string; genres?: string[]; studios?: string[] } | null;
+            results?: { title: string; genres?: string[] }[];
           };
+          const facts = data.results?.find((r) => titlesMatch(title, r.title)) ?? null;
           // AniList siempre devuelve ALGO parecido de nombre, aunque le
           // preguntes por un videojuego. Si lo que vuelve no se parece a
           // lo pedido, no era un anime y no se apunta nada: por eso
           // acababa "Valorant" en la lista de series seguidas.
-          if (data.facts?.title && titlesMatch(title, data.facts.title)) {
-            recordAnimeInterest(data.facts.title, data.facts.genres ?? [], data.facts.studios ?? []);
-          }
+          if (facts) recordAnimeInterest(facts.title, facts.genres ?? [], []);
         } catch {
           // La afinidad es una mejora, no algo crítico: si falla, se ignora.
         }

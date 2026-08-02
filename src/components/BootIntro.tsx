@@ -34,6 +34,12 @@ export function BootIntro() {
         </svg>
       </span>
       <span className="boot-intro__name">{siteConfig.name}</span>
+      {/* Estos dos aparecen al final y son EXACTAMENTE lo que enseña la
+          pantalla de carga que hay debajo, en el mismo sitio y con la
+          misma tipografía. Cuando la cortina se disuelve, los dos planos
+          muestran lo mismo: no se ve un cambio de pantalla, se ve cómo
+          una continúa en la otra. */}
+      <span className="boot-intro__sub">Preparando tu feed</span>
       <span className="boot-intro__line" />
     </div>
   );

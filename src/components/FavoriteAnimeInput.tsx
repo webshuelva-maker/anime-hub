@@ -1,49 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { getPreferences, savePreferences, PREFERENCES_CHANGED_EVENT } from "@/lib/storage";
-import { playToggle, playSuccess, playError } from "@/lib/sound";
+import { boostCategories } from "@/lib/learning";
+import { playToggle, playSuccess } from "@/lib/sound";
 
 /**
- * Lista de animes favoritos, con dos diferencias respecto a la anterior:
+ * Añadir animes favoritos BUSCANDO, no escribiendo a ciegas.
  *
- * 1. SE GUARDA SOLA. Antes había que acordarse de pulsar "Guardar
- *    cambios" abajo del todo; si salías de la pantalla sin darle, se
- *    perdía lo que habías escrito y no había ninguna pista de ello.
- * 2. COMPRUEBA QUE EL ANIME EXISTE. Antes aceptaba cualquier cosa, así
- *    que escribir "vghjwx" te dejaba un favorito inventado que no iba a
- *    coincidir nunca con ninguna noticia. Ahora se busca en AniList y, si
- *    no aparece, se dice.
+ * La versión anterior pedía el título exacto y lo validaba en un
+ * segundo paso: si no coincidía, te decía que no existía. Y fallaba
+ * incluso con títulos correctos, porque cualquier tropiezo en la
+ * consulta de fichas se traducía en "no lo encuentro" — un diagnóstico
+ * falso y muy frustrante.
  *
- * Además se guarda el título tal y como lo conoce la base de datos, no
- * como lo escribiste: así coincide con lo que traen las noticias aunque
- * lo hayas escrito a medias o con otra grafía.
+ * Ahora escribes y salen resultados reales con su carátula y su año, y
+ * eliges. Ya no hay nada que "acertar": si la serie está, la ves. Y de
+ * paso se resuelven los nombres a medias ("re zero", "sao", "mushoku").
+ *
+ * Todo se guarda al momento, sin botón de confirmar.
  */
 
-/** ¿El resultado se parece de verdad a lo que se pidió? */
-function titulosCoinciden(pedido: string, encontrado: string): boolean {
-  const palabras = (t: string) =>
-    t
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length >= 3);
-
-  const a = palabras(pedido);
-  const b = palabras(encontrado);
-  if (a.length === 0 || b.length === 0) return false;
-  return a.some((w) => b.includes(w)) || b.some((w) => a.includes(w));
+interface Resultado {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  startYear: number | null;
+  format: string | null;
+  genres: string[];
 }
 
 export function FavoriteAnimeInput() {
   const [titles, setTitles] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
-  const [comprobando, setComprobando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ultimoAñadido, setUltimoAñadido] = useState<string | null>(null);
+  const [resultados, setResultados] = useState<Resultado[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [sinResultados, setSinResultados] = useState(false);
+  const cajaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const refresh = () => setTitles(getPreferences().favoriteTitles);
@@ -52,111 +47,132 @@ export function FavoriteAnimeInput() {
     return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, refresh);
   }, []);
 
-  const guardar = (nuevos: string[]) => {
+  // Búsqueda con freno: se espera a que dejes de teclear 400ms para no
+  // lanzar una petición por cada letra.
+  useEffect(() => {
+    const termino = draft.trim();
+
+    // Todo el trabajo va dentro del temporizador, incluido el limpiar los
+    // resultados: cambiar estado directamente en el cuerpo del efecto
+    // encadena renderizados y el linter lo marca con razón.
+    const id = setTimeout(async () => {
+      if (termino.length < 2) {
+        setResultados([]);
+        setSinResultados(false);
+        return;
+      }
+      // El "Buscando…" se enciende dentro del temporizador, no al
+      // teclear: si no, parpadearía con cada letra aunque todavía no se
+      // haya pedido nada.
+      setBuscando(true);
+      try {
+        const res = await fetch(`/api/anime-search?q=${encodeURIComponent(termino)}`);
+        const data = (await res.json()) as { results?: Resultado[] };
+        const encontrados = data.results ?? [];
+        setResultados(encontrados.slice(0, 6));
+        setSinResultados(encontrados.length === 0);
+      } catch {
+        setResultados([]);
+        setSinResultados(true);
+      } finally {
+        setBuscando(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(id);
+  }, [draft]);
+
+  useEffect(() => {
+    const fuera = (e: MouseEvent) => {
+      if (cajaRef.current && !cajaRef.current.contains(e.target as Node)) setResultados([]);
+    };
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, []);
+
+  const añadir = (r: Resultado) => {
     const prefs = getPreferences();
-    savePreferences({ ...prefs, favoriteTitles: nuevos });
-    setTitles(nuevos);
-  };
-
-  const añadir = async () => {
-    const escrito = draft.trim();
-    if (!escrito || comprobando) return;
-
-    setError(null);
-
-    if (titles.some((t) => t.toLowerCase() === escrito.toLowerCase())) {
-      setError("Ese ya está en la lista.");
+    if (prefs.favoriteTitles.some((t) => t.toLowerCase() === r.title.toLowerCase())) {
       setDraft("");
+      setResultados([]);
       return;
     }
 
-    setComprobando(true);
-    try {
-      const res = await fetch(`/api/anime-facts?title=${encodeURIComponent(escrito)}`);
-      const data = (await res.json()) as { facts?: { title?: string } | null };
-
-      if (!data.facts?.title || !titulosCoinciden(escrito, data.facts.title)) {
-        playError();
-        setError(`No encuentro ningún anime que se llame «${escrito}». ¿Está bien escrito?`);
-        return;
-      }
-
-      const canonico = data.facts.title;
-      if (titles.some((t) => t.toLowerCase() === canonico.toLowerCase())) {
-        setError("Ese ya está en la lista.");
-        setDraft("");
-        return;
-      }
-
-      guardar([...titles, canonico]);
-      setDraft("");
-      setUltimoAñadido(canonico);
-      setTimeout(() => setUltimoAñadido(null), 2200);
-      playSuccess();
-    } catch {
-      playError();
-      setError("No he podido comprobarlo ahora mismo. Inténtalo en un momento.");
-    } finally {
-      setComprobando(false);
-    }
+    savePreferences({ ...prefs, favoriteTitles: [...prefs.favoriteTitles, r.title] });
+    // Sus géneros cuentan también para la afinidad: marcar algo como
+    // favorito es la señal más clara que existe de lo que te gusta.
+    boostCategories(r.genres ?? [], [], 3, r.title);
+    setTitles([...prefs.favoriteTitles, r.title]);
+    setDraft("");
+    setResultados([]);
+    playSuccess();
   };
 
   const quitar = (titulo: string) => {
-    guardar(titles.filter((t) => t !== titulo));
+    const prefs = getPreferences();
+    const nuevos = prefs.favoriteTitles.filter((t) => t !== titulo);
+    savePreferences({ ...prefs, favoriteTitles: nuevos });
+    setTitles(nuevos);
     playToggle();
   };
 
   return (
-    <div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            if (error) setError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void añadir();
-            }
-          }}
-          placeholder="Ej: One Piece"
-          className="panel-elevated flex-1 rounded-lg px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
-        />
-        <button
-          type="button"
-          onClick={() => void añadir()}
-          disabled={comprobando || draft.trim().length === 0}
-          className="accent-gradient rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {comprobando ? "Buscando…" : "Añadir"}
-        </button>
-      </div>
+    <div ref={cajaRef} className="relative">
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="Escribe y elige de la lista — ej: mushoku"
+        className="panel-elevated w-full rounded-lg px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
+      />
 
-      <AnimatePresence mode="wait">
-        {error && (
-          <motion.p
-            key="error"
+      <AnimatePresence>
+        {draft.trim().length >= 2 && (resultados.length > 0 || buscando || sinResultados) && (
+          <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="mt-2 text-xs text-rumor"
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="panel absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-xl border border-panel-border shadow-xl shadow-black/40"
           >
-            {error}
-          </motion.p>
-        )}
-        {!error && ultimoAñadido && (
-          <motion.p
-            key="ok"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="ice-text mt-2 text-xs"
-          >
-            {ultimoAñadido} añadido y guardado.
-          </motion.p>
+            {buscando && resultados.length === 0 && (
+              <p className="px-3 py-3 text-xs text-muted">Buscando…</p>
+            )}
+
+            {!buscando && sinResultados && (
+              <p className="px-3 py-3 text-xs text-muted">
+                No hay ningún anime con ese nombre. Prueba con menos palabras.
+              </p>
+            )}
+
+            {resultados.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => añadir(r)}
+                className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-panel-soft"
+              >
+                {r.coverImage ? (
+                  <Image
+                    src={r.coverImage}
+                    alt=""
+                    width={32}
+                    height={44}
+                    unoptimized
+                    className="h-11 w-8 flex-shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <span className="h-11 w-8 flex-shrink-0 rounded bg-panel-soft" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-foreground">{r.title}</span>
+                  <span className="text-[11px] text-muted">
+                    {[r.format, r.startYear].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </motion.div>
         )}
       </AnimatePresence>
 

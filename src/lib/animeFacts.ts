@@ -129,6 +129,34 @@ interface RawRelationEdge {
 }
 
 /** Busca la ficha completa de un anime. Devuelve null si no hay match. */
+/**
+ * Consulta reducida, sin los campos "de lujo" (relaciones, enlaces
+ * externos, próximo episodio). Existe como respaldo: si AniList rechaza
+ * la consulta completa por cualquier motivo —un campo que cambia de
+ * nombre, un permiso, una versión del esquema— la app se quedaba SIN
+ * ficha para todo, y de golpe dejaban de funcionar cosas tan visibles
+ * como añadir un favorito. Con esto, lo básico sigue en pie.
+ */
+const FACTS_QUERY_MINIMA = `
+query ($search: String) {
+  Media(search: $search, type: ANIME) {
+    id
+    title { romaji english native }
+    format
+    status
+    episodes
+    season
+    seasonYear
+    startDate { year month day }
+    endDate { year month day }
+    genres
+    popularity
+    averageScore
+    siteUrl
+    studios(isMain: true) { nodes { name } }
+  }
+}`;
+
 export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | null> {
   const clean = searchText.trim();
   if (clean.length < 2) return null;
@@ -149,7 +177,29 @@ export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | nu
     });
 
     if (!res.ok) return null;
-    const data = await res.json();
+    let data = await res.json();
+
+    // Si la consulta completa falla, se reintenta con la reducida antes
+    // de darse por vencido. Un solo campo problemático no debe tumbar
+    // toda la búsqueda de fichas.
+    if (data?.errors || !data?.data?.Media) {
+      console.error(
+        "[animeFacts] consulta completa rechazada:",
+        JSON.stringify(data?.errors ?? "sin Media").slice(0, 300)
+      );
+      const resMin = await fetch(ANILIST_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0)",
+        },
+        body: JSON.stringify({ query: FACTS_QUERY_MINIMA, variables: { search: clean } }),
+      });
+      if (!resMin.ok) return null;
+      data = await resMin.json();
+    }
+
     const m = data?.data?.Media;
     if (!m) return null;
 

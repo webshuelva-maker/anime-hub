@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v111",
+    fecha: "2026-08-02",
+    titulo: "Buscar tus favoritos y una entrada más fluida",
+    puntos: [
+      "Los animes favoritos se buscan y se eligen de una lista con carátulas: ya no hay que escribir el título exacto.",
+      "La animación de entrada enlaza con la pantalla de carga en vez de cortar de golpe.",
+    ],
+  },
+  {
     version: "v110",
     fecha: "2026-08-02",
     titulo: "Iris ya puede tocar tu feed",
