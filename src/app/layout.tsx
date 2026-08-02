@@ -10,7 +10,6 @@ import "./globals.css";
 import { siteConfig } from "@/config/site";
 import { SiteChrome } from "@/components/SiteChrome";
 import { SiteFooter } from "@/components/SiteFooter";
-import { BootIntro } from "@/components/BootIntro";
 import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
 
@@ -85,14 +84,6 @@ export default function RootLayout({
           pedirlo, y la promesa se guarda en window para que NewsFeed la
           reutilice en vez de pedir lo mismo dos veces.
 
-          La marca "presentacion" es la de la animación de entrada y tiene
-          su PROPIO temporizador, separado de "arrancando". Antes iban
-          juntas, y como "arrancando" se retira en cuanto termina la
-          pantalla de carga, en un ordenador rápido la entrada se cortaba
-          a mitad o no llegaba a verse: la carga acababa antes que la
-          animación. Ahora la animación dura lo que dura, cargue rápido o
-          lento.
-
           Lo primero es el reparto desde la raíz. Normalmente ya lo ha
           hecho el servidor (ver src/proxy.ts) y aquí no se llega; esto
           es la red de seguridad para quien todavía no tiene la cookie
@@ -113,12 +104,11 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `try{if(location.pathname==='/'){var p=localStorage.getItem('anime-hub:preferences');var ok=false;try{ok=!!(p&&JSON.parse(p).onboardingCompleted)}catch(e){}document.cookie='anime-hub-onboarded='+(ok?'1':'0')+'; path=/; max-age=31536000; SameSite=Lax';location.replace(ok?'/noticias':'/onboarding')}}catch(e){}
-try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias')===0;if(enNoticias&&!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');d.classList.add('presentacion');setTimeout(function(){d.classList.remove('presentacion')},2400);setTimeout(function(){d.classList.remove('arrancando')},20000);window.__animeHubNoticias=fetch('/api/news').then(function(r){return r.json()}).catch(function(){return null})}}catch(e){}`,
+try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias')===0;if(enNoticias&&!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000);window.__animeHubNoticias=fetch('/api/news').then(function(r){return r.json()}).catch(function(){return null})}}catch(e){}`,
           }}
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <BootIntro />
         <CloudSyncGate />
         <AmbientGlow />
         <SiteChrome />

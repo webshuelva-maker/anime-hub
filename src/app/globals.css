@@ -228,23 +228,96 @@ html.arrancando [data-chrome-app] {
 }
 
 /*
- * Entrada de la pantalla de carga, hecha con CSS y no con JavaScript.
+ * LÍNEA TEMPORAL DE LA PANTALLA DE CARGA.
  *
- * El motivo es de tiempos, no de gusto. El HTML de /noticias ya llega
- * con la pantalla de carga dentro (bien), pero sus elementos empezaban
- * en opacidad 0 y solo se animaban cuando React terminaba de hidratar.
- * Resultado: durante esas dos décimas se veía el panel vacío, con los
- * resplandores y nada más — el "destello de otra pantalla" del que se
- * quejaba el usuario. Una animación CSS arranca en el primer fotograma,
- * sin esperar a nadie, así que ya no hay hueco.
+ * Aquí ya no hay dos pantallas. Antes existía una presentación de
+ * entrada aparte que se disolvía para dejar ver la pantalla de carga, y
+ * por muy bien que se emparejaran, siempre se notaba el cambio: una
+ * desaparecía y otra aparecía. Además dependía de una marca en el HTML
+ * que se retiraba al terminar la carga, así que en un ordenador rápido
+ * ni llegaba a verse.
  *
- * animation-fill-mode: both mantiene el estado inicial antes de empezar
- * y el final al acabar, que es lo que evita cualquier parpadeo.
+ * Ahora es UNA SOLA pantalla que se transforma. Los dos primeros
+ * segundos son la presentación (marca grande, nombre muy abierto, sin
+ * datos), y a partir de ahí encoge hasta su tamaño normal y aparecen la
+ * barra y el porcentaje. No hay transición entre dos cosas porque no hay
+ * dos cosas.
+ *
+ * Todo en CSS: se pinta en el primer fotograma, sin esperar a que React
+ * hidrate, y se comporta igual en móvil que en ordenador.
  */
-@keyframes boot-in {
+@keyframes boot-mark-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.1) rotate(-30deg);
+  }
+  14% {
+    opacity: 1;
+  }
+  30% {
+    transform: scale(2.05) rotate(4deg);
+  }
+  /* Se queda grande, respirando, mientras dura la presentación. */
+  55% {
+    transform: scale(1.95) rotate(0deg);
+  }
+  /* Y baja a su tamaño real justo cuando entran barra y porcentaje. */
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.boot-mark {
+  display: inline-block;
+  transform-origin: center;
+  animation: boot-mark-in 2.4s cubic-bezier(0.33, 1, 0.68, 1) both;
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--ice) 40%, transparent));
+}
+
+/* El nombre empieza muy abierto y se cierra hasta su interletraje normal
+   al mismo ritmo que la marca encoge: se leen como un solo movimiento. */
+@keyframes boot-name-in {
+  0% {
+    opacity: 0;
+    letter-spacing: 0.85em;
+    text-indent: 0.85em;
+  }
+  20% {
+    opacity: 1;
+  }
+  55% {
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+  }
+  100% {
+    opacity: 1;
+    letter-spacing: 0.15em;
+    text-indent: 0.15em;
+  }
+}
+
+.boot-in {
+  animation: boot-name-in 2.4s cubic-bezier(0.33, 1, 0.68, 1) 0.15s both;
+}
+
+/* "Preparando tu feed" entra a mitad de camino. */
+.boot-in-delay-1 {
+  animation: boot-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.15s both;
+}
+
+/* La barra y el porcentaje son ya la pantalla de carga propiamente
+   dicha: aparecen al final del movimiento, cuando la marca ha terminado
+   de encoger. */
+.boot-in-delay-2,
+.boot-pct {
+  animation: boot-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 1.95s both;
+}
+
+@keyframes boot-fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -252,32 +325,17 @@ html.arrancando [data-chrome-app] {
   }
 }
 
-@keyframes boot-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
+/* Con "reducir movimiento" activado: sin escalados ni desplazamientos,
+   solo un fundido rápido. */
+@media (prefers-reduced-motion: reduce) {
+  .boot-mark,
+  .boot-in,
+  .boot-in-delay-1,
+  .boot-in-delay-2,
+  .boot-pct {
+    animation: boot-fade-up 0.4s linear both;
+    transform: none;
   }
-  50% {
-    opacity: 1;
-  }
-}
-
-.boot-in {
-  animation: boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.boot-in-delay-1 {
-  animation: boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
-}
-
-.boot-in-delay-2 {
-  animation: boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
-}
-
-.boot-mark {
-  animation:
-    boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both,
-    boot-pulse 2.8s ease-in-out 0.6s infinite;
 }
 
 /*
@@ -294,163 +352,4 @@ html.arrancando body::before {
   z-index: 45;
   background: var(--background);
   pointer-events: none;
-}
-
-/*
- * Presentación de arranque (ver BootIntro.tsx).
- *
- * Todo en CSS a propósito: se pinta y se va sin que intervenga
- * JavaScript, así que ocupa exactamente el hueco en el que antes se veía
- * el destello. Oculta salvo que el documento venga marcado como
- * "arrancando".
- */
-.boot-intro {
-  display: none;
-}
-
-html.presentacion .boot-intro {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  /* Sin hueco fijo: cada pieza pone su propio margen para caer justo
-     encima de su equivalente en la pantalla de carga. */
-  gap: 0;
-  background: var(--background);
-  pointer-events: none;
-  /* Dura 2,2s: la versión de 1,15s no daba tiempo ni a leer el nombre.
-     Se mantiene opaca hasta el 78% (unos 1,7s) y se disuelve en el
-     resto. No retrasa nada: la petición de noticias se lanza en la
-     cabecera del documento, antes incluso de que exista React, así que
-     durante toda la presentación el servidor ya está trabajando. */
-  animation: boot-curtain 2.2s ease-in-out forwards;
-}
-
-@keyframes boot-curtain {
-  0%,
-  78% {
-    opacity: 1;
-    visibility: visible;
-  }
-  100% {
-    opacity: 0;
-    visibility: hidden;
-  }
-}
-
-.boot-intro__mark {
-  color: var(--ice);
-  transform-origin: center;
-  margin-bottom: 1rem; /* el mismo mb-4 que la pantalla de carga */
-  animation: boot-mark-in 2s cubic-bezier(0.16, 1, 0.3, 1) both;
-  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--ice) 45%, transparent));
-}
-
-/*
- * Entra grande y termina al tamaño exacto de la marca de la pantalla de
- * carga (26px sobre los 46 de aquí = 0,565). Así, en el momento del
- * fundido, las dos marcas se superponen y parece que es la misma que se
- * queda quieta mientras la app termina de cargar.
- */
-@keyframes boot-mark-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.5) rotate(-35deg);
-  }
-  45% {
-    opacity: 1;
-    transform: scale(1.12) rotate(4deg);
-  }
-  70% {
-    transform: scale(1) rotate(0deg);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(0.565) rotate(0deg);
-  }
-}
-
-.boot-intro__name {
-  font-family: var(--font-heading), serif;
-  font-size: 1.125rem; /* text-lg, igual que en la pantalla de carga */
-  color: color-mix(in srgb, var(--foreground) 90%, transparent);
-  animation: boot-name-in 1.9s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
-}
-
-/* Empieza muy abierto y acaba en 0.15em, que es exactamente el
-   interletraje del nombre en la pantalla de carga. */
-@keyframes boot-name-in {
-  from {
-    opacity: 0;
-    letter-spacing: 0.9em;
-    text-indent: 0.9em;
-  }
-  to {
-    opacity: 1;
-    letter-spacing: 0.15em;
-    text-indent: 0.15em;
-  }
-}
-
-/* Subtítulo, idéntico al de la pantalla de carga: aparece al final para
-   que ya esté ahí cuando se cruce el fundido. */
-.boot-intro__sub {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  text-indent: 0.2em;
-  color: var(--muted);
-  animation: boot-fade-in 0.7s ease-out 1.25s both;
-}
-
-/*
- * Esta barra ocupa el mismo sitio y mide lo mismo que la de progreso de
- * la pantalla de carga (w-56, 3px). Al disolverse la cortina, la barra
- * de abajo ya está ahí: parece que la misma barra empieza a llenarse.
- */
-.boot-intro__line {
-  margin-top: 2rem;
-  height: 3px;
-  width: 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--ice), transparent);
-  animation: boot-line 1.4s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
-}
-
-@keyframes boot-line {
-  from {
-    width: 0;
-    opacity: 0;
-  }
-  to {
-    width: 14rem;
-    opacity: 0.55;
-  }
-}
-
-@keyframes boot-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Quien tenga activado "reducir movimiento" en el sistema ve la marca
-   quieta y un fundido corto, sin escalados ni giros. */
-@media (prefers-reduced-motion: reduce) {
-  .boot-intro__mark,
-  .boot-intro__name,
-  .boot-intro__sub,
-  .boot-intro__line {
-    animation: none;
-  }
-  html.presentacion .boot-intro {
-    animation: boot-curtain 1.2s linear forwards;
-  }
 }

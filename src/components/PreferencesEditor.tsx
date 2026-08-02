@@ -64,7 +64,9 @@ function AffinityRow({
           // el 0.3 de base) y tarda casi un segundo en llenarse. Antes salía
           // a la vez que el resto y de un tirón, y por eso se veía como un
           // pegote al final de la animación de la página.
-          transition={{ duration: 0.65, delay: 0.12 + delay, ease: [0.22, 1, 0.36, 1] }}
+          // Un segundo largo y arrancando tras la fila: en el ordenador, con
+          // 0,65s se rellenaban de un plumazo y no daba tiempo a verlas.
+          transition={{ duration: 1.05, delay: 0.35 + delay, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
       {examples.length > 0 && (
@@ -194,14 +196,14 @@ export function PreferencesEditor() {
                       key={g.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
+                      transition={{ duration: 0.34, delay: i * 0.1, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={genreLabel(g.name)}
                         count={g.count}
                         max={maxCount}
                         examples={prefs.genreExamples?.[g.name] ?? []}
-                        delay={i * 0.06}
+                        delay={i * 0.1}
                       />
                     </motion.div>
                   ))}
@@ -220,14 +222,14 @@ export function PreferencesEditor() {
                       key={s.name}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.28, delay: i * 0.06, ease: "easeOut" }}
+                      transition={{ duration: 0.34, delay: i * 0.1, ease: "easeOut" }}
                     >
                       <AffinityRow
                         name={s.name}
                         count={s.count}
                         max={maxCount}
                         examples={prefs.studioExamples?.[s.name] ?? []}
-                        delay={i * 0.06}
+                        delay={i * 0.1}
                       />
                     </motion.div>
                   ))}
@@ -251,7 +253,7 @@ export function PreferencesEditor() {
                   key={t.name}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, delay: 0.35 + i * 0.03, ease: "easeOut" }}
+                  transition={{ duration: 0.3, delay: 0.9 + i * 0.04, ease: "easeOut" }}
                   className="inline-flex items-center gap-2 rounded-full border border-ice/25 bg-ice/5 py-1.5 pl-3 pr-2 text-xs text-foreground"
                 >
                   {t.name}

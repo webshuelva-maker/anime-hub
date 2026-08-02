@@ -96,7 +96,11 @@ export async function searchJikanList(term: string): Promise<
   const clean = term.trim();
   if (clean.length < 2) return [];
 
-  const data = (await getJson(`/anime?q=${encodeURIComponent(clean)}&limit=8&sfw=true`)) as
+  const data = (await getJson(// Sin el filtro "sfw": excluye todo lo clasificado para adultos, y ahí
+  // caen series perfectamente normales como Mushoku Tensei. Con el filtro
+  // puesto, buscar "mushoku" no devolvía NADA y la app concluía que no
+  // existía.
+  `/anime?q=${encodeURIComponent(clean)}&limit=8`)) as
     | { data?: (RawJikanAnime & { images?: { jpg?: { image_url?: string } }; synopsis?: string })[] }
     | null;
 
@@ -120,7 +124,7 @@ export async function searchJikanAnime(name: string): Promise<JikanFacts | null>
   const clean = name.trim();
   if (clean.length < 2) return null;
 
-  const data = (await getJson(`/anime?q=${encodeURIComponent(clean)}&limit=1&sfw=true`)) as
+  const data = (await getJson(`/anime?q=${encodeURIComponent(clean)}&limit=1`)) as
     | { data?: RawJikanAnime[] }
     | null;
   const m = data?.data?.[0];

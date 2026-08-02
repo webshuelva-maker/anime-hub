@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v113",
+    fecha: "2026-08-02",
+    titulo: "Una sola pantalla de entrada",
+    puntos: [
+      "La animación de entrada y la pantalla de carga son ahora la misma: la marca se encoge y aparece la barra, sin cortes.",
+      "Se ve igual en ordenador y en móvil.",
+      "El buscador de animes consulta dos bases de datos a la vez: encuentra muchos más títulos.",
+      "En tu perfil ya no hay botón de guardar: todo se guarda solo.",
+    ],
+  },
+  {
     version: "v112",
     fecha: "2026-08-02",
     titulo: "Buscador de animes más fiable",

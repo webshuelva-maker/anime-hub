@@ -120,30 +120,37 @@ export function ProfileEditor() {
 
   const isDirty = JSON.stringify(prefs) !== savedSnapshot;
 
-  const handleSave = () => {
+  /*
+   * Guardado automático. Espera medio segundo desde el último cambio para
+   * no escribir en cada pulsación de tecla mientras escribes el nombre,
+   * y para no mandar diez sincronizaciones seguidas a la nube.
+   */
+  useEffect(() => {
     if (!isDirty) return;
+    const id = setTimeout(() => {
+      // Los favoritos se guardan solos desde su propio componente, así que
+      // se releen justo antes: si no, este guardado escribiría la lista
+      // vieja que tenía en memoria y desharía lo recién añadido.
+      savePreferences({ ...prefs, favoriteTitles: getPreferences().favoriteTitles });
+      setSavedSnapshot(JSON.stringify(prefs));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1600);
 
-    // Los favoritos se guardan solos desde su propio componente, así que
-    // se releen justo antes de guardar: si no, este guardado escribiría
-    // la lista vieja que tenía en memoria y desharía lo recién añadido.
-    savePreferences({ ...prefs, favoriteTitles: getPreferences().favoriteTitles });
-    setSavedSnapshot(JSON.stringify(prefs));
-    setSaved(true);
-    playSuccess();
-    setTimeout(() => setSaved(false), 2000);
-
-    // Si hay sesión, el nombre también se guarda en el perfil de la
-    // nube (antes solo quedaba en este navegador, aunque ya tuviera
-    // cuenta creada).
-    if (account && account !== "loading") {
-      const supabase = createClient();
-      supabase.auth.getUser().then(({ data }) => {
-        if (data.user) {
-          supabase.from("profiles").update({ display_name: prefs.displayName }).eq("id", data.user.id);
-        }
-      });
-    }
-  };
+      // Con sesión iniciada, el nombre también viaja al perfil de la nube.
+      if (account && account !== "loading") {
+        const supabase = createClient();
+        supabase.auth.getUser().then(({ data }) => {
+          if (data.user) {
+            supabase
+              .from("profiles")
+              .update({ display_name: prefs.displayName })
+              .eq("id", data.user.id);
+          }
+        });
+      }
+    }, 500);
+    return () => clearTimeout(id);
+  }, [prefs, isDirty, account]);
 
   const handlePremiumClick = () => {
     setToast("Próximamente: implementaremos los pagos en cuanto conectemos un backend real. ¡Gracias por tu paciencia!");
@@ -251,26 +258,24 @@ export function ProfileEditor() {
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!isDirty && !saved}
-          className={`flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-all ${
-            saved
-              ? "border border-ice/40 text-ice"
-              : isDirty
-              ? "accent-gradient text-white hover:scale-[1.03] active:scale-95"
-              : "cursor-default border border-panel-border text-muted"
-          }`}
-        >
+      {/* Sin botón de guardar: cada cambio se guarda solo. Un botón de
+          "Guardar cambios" en una pantalla de ajustes personales solo
+          sirve para que se pierda lo que has puesto si sales sin darle.
+          A cambio, un aviso discreto para que se vea que ha cuajado. */}
+      <div className="mt-6 flex h-5 justify-end">
+        <AnimatePresence>
           {saved && (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
+            <motion.span
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="ice-text text-xs"
+            >
+              Guardado
+            </motion.span>
           )}
-          {saved ? "Guardado" : isDirty ? "Guardar cambios" : "Sin cambios"}
-        </button>
+        </AnimatePresence>
       </div>
 
       <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">

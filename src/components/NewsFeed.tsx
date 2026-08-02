@@ -25,6 +25,9 @@ import { playSuccess, playToggle } from "@/lib/sound";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
+/** Se pone a true en la primera carga del documento. Ver showInitialLoader. */
+let yaSeMostroLaPortada = false;
+
 export function NewsFeed() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [openItemId, setOpenItemId] = useState<string | null>(() =>
@@ -68,7 +71,26 @@ export function NewsFeed() {
   // nada en caché al entrar (primera visita real, o caché borrada). En
   // cualquier otro caso (visita normal, refresco silencioso cada 15 min)
   // no se muestra — eso ya lo cubre el aviso pequeño "Actualizando…".
-  const [showInitialLoader, setShowInitialLoader] = useState(() => getNewsItems().length === 0);
+  /*
+   * La pantalla de carga se enseña una vez POR CARGA DEL DOCUMENTO, haya
+   * o no noticias guardadas.
+   *
+   * Antes se condicionaba a que la caché estuviera vacía, y esa caché
+   * vive en sessionStorage, que sobrevive a las recargas de la misma
+   * pestaña. En el ordenador, donde se recarga sin cerrar la pestaña, la
+   * pantalla (y con ella la presentación de entrada) no volvía a salir
+   * nunca; en el móvil sí, porque la app se cierra del todo. De ahí que
+   * "en móvil se ve y en PC no".
+   *
+   * El indicador es de módulo, no de estado: así al navegar de otra
+   * sección a las noticias no reaparece, que sería molesto.
+   */
+  const [showInitialLoader, setShowInitialLoader] = useState(() => {
+    if (typeof window === "undefined") return true;
+    if (yaSeMostroLaPortada) return false;
+    yaSeMostroLaPortada = true;
+    return true;
+  });
   // Estable (no cambia con el tiempo, a diferencia de showInitialLoader):
   // si esta carga era de verdad la primera visita, para poder exigir un
   // mínimo de permanencia SOLO en ese caso (ver más abajo) — en cargas

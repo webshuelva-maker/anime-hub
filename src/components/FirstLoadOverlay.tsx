@@ -338,7 +338,7 @@ export function FirstLoadOverlay({
           />
         </motion.div>
       </div>
-      <p className="mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
+      <p className="boot-pct mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
 
       <div className="mt-8 h-20 w-full max-w-md">
         <AnimatePresence mode="wait">
