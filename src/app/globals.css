@@ -218,3 +218,72 @@ html.arrancando [data-chrome-app] {
     padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
   }
 }
+
+/*
+ * Entrada de la pantalla de carga, hecha con CSS y no con JavaScript.
+ *
+ * El motivo es de tiempos, no de gusto. El HTML de /noticias ya llega
+ * con la pantalla de carga dentro (bien), pero sus elementos empezaban
+ * en opacidad 0 y solo se animaban cuando React terminaba de hidratar.
+ * Resultado: durante esas dos décimas se veía el panel vacío, con los
+ * resplandores y nada más — el "destello de otra pantalla" del que se
+ * quejaba el usuario. Una animación CSS arranca en el primer fotograma,
+ * sin esperar a nadie, así que ya no hay hueco.
+ *
+ * animation-fill-mode: both mantiene el estado inicial antes de empezar
+ * y el final al acabar, que es lo que evita cualquier parpadeo.
+ */
+@keyframes boot-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes boot-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.boot-in {
+  animation: boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.boot-in-delay-1 {
+  animation: boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.boot-in-delay-2 {
+  animation: boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+.boot-mark {
+  animation:
+    boot-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both,
+    boot-pulse 2.8s ease-in-out 0.6s infinite;
+}
+
+/*
+ * Manta de arranque: cubre la pantalla con el fondo de la app desde el
+ * primer fotograma, por debajo de la pantalla de carga (z-50) pero por
+ * encima de todo lo demás. Así, pase lo que pase con la hidratación,
+ * nunca se llega a ver el feed ni el marco por debajo. La quita
+ * FirstLoadOverlay al terminar, junto con la clase "arrancando".
+ */
+html.arrancando body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: var(--background);
+  pointer-events: none;
+}

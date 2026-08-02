@@ -78,9 +78,30 @@ export function MobileNav() {
       // móviles sin botón: sin él, la última fila de iconos queda justo
       // debajo de la barra del sistema.
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-panel-border/70 bg-background/90 backdrop-blur-lg sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 sm:hidden"
     >
-      <div className="flex items-stretch justify-around">
+      {/*
+        Translúcida, pero NO transparente del todo.
+        Transparente entera se ve muy bien con un fondo liso y fatal en
+        cuanto pasa por debajo la portada clara de una noticia: los
+        iconos desaparecen justo cuando vas a pulsarlos. Y una barra
+        opaca con línea encima corta la pantalla en dos y parece una web.
+        El término medio es el de las apps del sistema: desenfoque fuerte,
+        fondo a medio camino y un degradado por encima que disuelve el
+        contenido al llegar a la barra, sin ninguna línea dura.
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-full h-8"
+        style={{ background: "linear-gradient(to top, var(--background), transparent)" }}
+      />
+      <div
+        className="relative flex items-stretch justify-around backdrop-blur-2xl"
+        style={{
+          background:
+            "linear-gradient(to bottom, color-mix(in srgb, var(--background) 62%, transparent), color-mix(in srgb, var(--background) 88%, transparent))",
+        }}
+      >
         {TABS.map((tab) => {
           const active = pathname?.startsWith(tab.href);
           return (

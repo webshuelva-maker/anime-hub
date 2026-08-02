@@ -299,44 +299,28 @@ export function FirstLoadOverlay({
         />
       </div>
 
-      <motion.span
-        initial={{ opacity: 0, scale: 0.85 }}
-        animate={{ opacity: [0.55, 1, 0.55], scale: 1 }}
-        transition={{
-          opacity: { duration: 2.8, repeat: Infinity, ease: "easeInOut" },
-          scale: { duration: 0.6, ease: "easeOut" },
-        }}
-        className="mb-4 ice-text"
-      >
+      {/* Estos cuatro elementos se animan con CSS (clases boot-*) y no con
+          framer-motion. Con framer empezaban invisibles y solo aparecían
+          al hidratar React, así que durante dos décimas esta pantalla se
+          veía vacía y parecía otra pantalla distinta. Con CSS la
+          animación arranca en el primer fotograma. */}
+      <span className="boot-mark mb-4 ice-text">
         <BrandMark size={26} />
-      </motion.span>
+      </span>
 
-      <motion.p
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="font-heading text-lg tracking-[0.15em] text-foreground/90"
-      >
+      <p className="boot-in font-heading text-lg tracking-[0.15em] text-foreground/90">
         {siteConfig.name}
-      </motion.p>
-      <motion.p
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-        className="mt-1 text-xs uppercase tracking-[0.2em] text-muted"
-      >
+      </p>
+      <p className="boot-in-delay-1 mt-1 text-xs uppercase tracking-[0.2em] text-muted">
         Preparando tu feed
-      </motion.p>
+      </p>
 
       {/* Barra de progreso real, crece desde el centro hacia los lados.
           El ancho sigue a "pct" (el contador animado de arriba, no el
           dato en crudo) — así avanza número a número de forma continua
           en vez de saltar directamente al siguiente valor real. */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="relative mt-8 h-[3px] w-56 overflow-hidden rounded-full"
+      <div
+        className="boot-in-delay-2 relative mt-8 h-[3px] w-56 overflow-hidden rounded-full"
         style={{ background: "var(--panel-border)" }}
       >
         <motion.div
@@ -353,7 +337,7 @@ export function FirstLoadOverlay({
             transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.4 }}
           />
         </motion.div>
-      </motion.div>
+      </div>
       <p className="mt-2 text-[11px] tabular-nums text-muted">{pct}%</p>
 
       <div className="mt-8 h-20 w-full max-w-md">

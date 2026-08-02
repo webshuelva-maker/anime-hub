@@ -214,16 +214,31 @@ export function SocialOnboarding() {
   };
 
   if (loading) {
+    // Marcador de posición con la MISMA forma que el contenido real, no
+    // un "Cargando…" suelto arriba del todo. Antes se veía una línea de
+    // texto durante un segundo y luego el apartado aparecía de golpe,
+    // sin transición: el salto entre las dos cosas era lo que quedaba
+    // mal. Ocupando ya el sitio correcto, lo que llega después se lee
+    // como que se ha rellenado, no como que ha cambiado de pantalla.
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-        <p className="text-sm text-muted">Cargando…</p>
+      <div className="mx-auto max-w-2xl animate-pulse px-4 py-10 sm:px-6">
+        <div className="h-7 w-40 rounded bg-panel-border/50" />
+        <div className="mt-3 h-4 w-full rounded bg-panel-border/30" />
+        <div className="mt-2 h-4 w-2/3 rounded bg-panel-border/30" />
+        <div className="panel mt-6 h-24 rounded-2xl border border-panel-border/50" />
+        <div className="panel mt-6 h-72 rounded-2xl border border-panel-border/50" />
       </div>
     );
   }
 
   if (!userId) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="mx-auto max-w-2xl px-4 py-10 sm:px-6"
+      >
         <h1 className="font-heading text-2xl font-bold">Conectar</h1>
         <p className="mt-2 text-sm text-muted">
           Conocer gente por lo que veis en común necesita cuenta: hace falta para saber tu edad y
@@ -235,7 +250,7 @@ export function SocialOnboarding() {
         >
           Iniciar sesión / Crear cuenta
         </Link>
-      </div>
+      </motion.div>
     );
   }
 
@@ -272,7 +287,12 @@ export function SocialOnboarding() {
   // --- Ya tiene perfil ---------------------------------------------------
   if (profile) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="mx-auto max-w-2xl px-4 py-10 sm:px-6"
+      >
         <h1 className="font-heading text-2xl font-bold">Conectar</h1>
         <p className="mt-1 text-sm text-muted">
           Tu perfil está listo, {profile.alias}. El emparejamiento todavía se está construyendo.
@@ -331,13 +351,18 @@ export function SocialOnboarding() {
           onConfirm={handleLeave}
           onCancel={() => setConfirmingLeave(false)}
         />
-      </div>
+      </motion.div>
     );
   }
 
   // --- Alta --------------------------------------------------------------
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="mx-auto max-w-2xl px-4 py-10 sm:px-6"
+    >
       <h1 className="font-heading text-2xl font-bold">Conectar</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted">
         Hablar con gente a la que le gusta lo mismo que a ti. Sin foto y sin nombre al principio: el
@@ -449,6 +474,6 @@ export function SocialOnboarding() {
           {saving ? "Guardando…" : "Crear mi perfil"}
         </motion.button>
       </div>
-    </div>
+    </motion.div>
   );
 }
