@@ -9,6 +9,8 @@ import "@fontsource/inter/700.css";
 import "./globals.css";
 import { siteConfig } from "@/config/site";
 import { SiteChrome } from "@/components/SiteChrome";
+import { SiteFooter } from "@/components/SiteFooter";
+import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
 
 export const metadata: Metadata = {
@@ -24,9 +26,11 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
+        <CloudSyncGate />
         <AmbientGlow />
         <SiteChrome />
         {children}
+        <SiteFooter />
       </body>
     </html>
   );

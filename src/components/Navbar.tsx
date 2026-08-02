@@ -12,7 +12,8 @@ import { playToggle, playHover, playClick } from "@/lib/sound";
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
-  { href: "/preferencias", label: "Afinidad" },
+  { href: "/conectar", label: "Conectar" },
+  { href: "/preferencias", label: "Tus gustos" },
 ];
 
 export function Navbar() {

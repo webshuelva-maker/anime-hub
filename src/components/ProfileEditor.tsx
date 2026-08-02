@@ -452,6 +452,26 @@ export function ProfileEditor() {
         >
           Borrar memoria de Ren
         </motion.button>
+        <p className="mt-3 text-sm text-muted">
+          Puedes ver y borrar recuerdo a recuerdo en{" "}
+          <Link href="/preferencias" className="ice-text hover:underline">
+            Tus gustos
+          </Link>
+          .
+        </p>
+      </div>
+
+      <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">
+        <h2 className="font-heading text-lg font-semibold">Ajustes de la app</h2>
+        <p className="mt-1 max-w-md text-sm text-muted">
+          Plataformas donde ves anime, formatos que te interesan, hora del resumen diario, sonidos.
+        </p>
+        <Link
+          href="/ajustes"
+          className="mt-4 inline-block rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+        >
+          Abrir ajustes →
+        </Link>
       </div>
 
       <div className="panel-elevated relative mt-10 overflow-hidden rounded-2xl border border-ice/25 p-6">

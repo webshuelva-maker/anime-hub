@@ -33,21 +33,40 @@ export function toggleLike(item: NewsItem): boolean {
   return !isLiked;
 }
 
+/**
+ * Añade un título a la lista de ejemplos de una categoría, sin repetir y
+ * quedándose con los tres últimos. Sirve para poder explicar la afinidad
+ * en cristiano: nadie sabe quién es "Bones", pero sí sabe que ha visto
+ * Mob Psycho.
+ */
+function addExample(map: Record<string, string[]>, key: string, title: string): void {
+  if (!title) return;
+  const current = map[key] ?? [];
+  if (current.some((t) => t.toLowerCase() === title.toLowerCase())) return;
+  map[key] = [title, ...current].slice(0, 3);
+}
+
 function applyBoost(prefs: UserPreferences, item: NewsItem, weight: number): void {
   const genreCounts = { ...prefs.genreInteractionCounts };
   const studioCounts = { ...prefs.studioInteractionCounts };
+  const genreExamples = { ...(prefs.genreExamples ?? {}) };
+  const studioExamples = { ...(prefs.studioExamples ?? {}) };
 
   item.genres.forEach((g) => {
     genreCounts[g] = (genreCounts[g] ?? 0) + weight;
+    addExample(genreExamples, g, item.relatedTitle);
   });
   item.studios.forEach((s) => {
     studioCounts[s] = (studioCounts[s] ?? 0) + weight;
+    addExample(studioExamples, s, item.relatedTitle);
   });
 
   savePreferences({
     ...prefs,
     genreInteractionCounts: genreCounts,
     studioInteractionCounts: studioCounts,
+    genreExamples,
+    studioExamples,
   });
 }
 
@@ -71,24 +90,35 @@ export function recordSearch(term: string): void {
  * y AniList responde después con la ficha — así no se cuenta dos veces
  * el mismo título.
  */
-export function boostCategories(genres: string[], studios: string[], weight = 2): void {
+export function boostCategories(
+  genres: string[],
+  studios: string[],
+  weight = 2,
+  fromTitle = ""
+): void {
   if (genres.length === 0 && studios.length === 0) return;
   const prefs = getPreferences();
 
   const genreCounts = { ...prefs.genreInteractionCounts };
+  const genreExamples = { ...(prefs.genreExamples ?? {}) };
   genres.forEach((g) => {
     genreCounts[g] = (genreCounts[g] ?? 0) + weight;
+    addExample(genreExamples, g, fromTitle);
   });
 
   const studioCounts = { ...prefs.studioInteractionCounts };
+  const studioExamples = { ...(prefs.studioExamples ?? {}) };
   studios.forEach((s) => {
     studioCounts[s] = (studioCounts[s] ?? 0) + weight;
+    addExample(studioExamples, s, fromTitle);
   });
 
   savePreferences({
     ...prefs,
     genreInteractionCounts: genreCounts,
     studioInteractionCounts: studioCounts,
+    genreExamples,
+    studioExamples,
   });
 }
 
@@ -115,13 +145,17 @@ export function recordAnimeInterest(
   const WEIGHT = 2;
 
   const genreCounts = { ...prefs.genreInteractionCounts };
+  const genreExamples = { ...(prefs.genreExamples ?? {}) };
   genres.forEach((g) => {
     genreCounts[g] = (genreCounts[g] ?? 0) + WEIGHT;
+    addExample(genreExamples, g, clean);
   });
 
   const studioCounts = { ...prefs.studioInteractionCounts };
+  const studioExamples = { ...(prefs.studioExamples ?? {}) };
   studios.forEach((s) => {
     studioCounts[s] = (studioCounts[s] ?? 0) + WEIGHT;
+    addExample(studioExamples, s, clean);
   });
 
   const titleCounts = { ...prefs.titleInterestCounts };
@@ -138,6 +172,8 @@ export function recordAnimeInterest(
     ...prefs,
     genreInteractionCounts: genreCounts,
     studioInteractionCounts: studioCounts,
+    genreExamples,
+    studioExamples,
     titleInterestCounts: titleCounts,
     searchHistory,
   });

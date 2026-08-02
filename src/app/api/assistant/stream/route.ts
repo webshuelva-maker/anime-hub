@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
             status: "running",
           });
 
-          const evidence = await gatherEvidence(intent.topic, intent.queries);
+          const evidence = await gatherEvidence(intent.topic, intent.queries, intent.isAnime);
           webFailed = evidence.empty;
 
           send("step", {

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ needsResearch: false, debug: intent.debug });
   }
 
-  const evidence = await gatherEvidence(intent.topic, intent.queries);
+  const evidence = await gatherEvidence(intent.topic, intent.queries, intent.isAnime);
   const confidence = computeConfidence({
     sources: evidence.sources,
     anilist: evidence.anilist,

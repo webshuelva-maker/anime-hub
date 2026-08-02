@@ -145,3 +145,34 @@ input:-webkit-autofill:focus {
   box-shadow: 0 0 0 1000px var(--panel-soft) inset;
   transition: background-color 5000s ease-in-out 0s;
 }
+
+/* Documentos legales: lectura larga, con jerarquía clara entre apartados. */
+.legal-body h2 {
+  font-family: var(--font-heading), serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+.legal-body h2:first-child {
+  margin-top: 0;
+}
+.legal-body h3 {
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.35rem;
+}
+.legal-body p {
+  margin-bottom: 0.75rem;
+}
+.legal-body ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.legal-body li {
+  margin-bottom: 0.35rem;
+}
+.legal-body strong {
+  color: var(--foreground);
+}

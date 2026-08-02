@@ -29,6 +29,8 @@ const INTENT_MODEL = "llama-3.1-8b-instant"; // decidir esto no debe costar segu
 
 export interface Intent {
   needsResearch: boolean;
+  /** false si la pregunta no va de anime/manga (un videojuego, cocina...). */
+  isAnime: boolean;
   /** Serie de la que trata, resuelta aunque el usuario no la nombre aquí. */
   topic: string;
   /** Consultas listas para buscar, en inglés y en español. */
@@ -65,8 +67,10 @@ NO necesita búsqueda si es un saludo, charla, una opinión, una recomendación 
 
 Si el último mensaje no nombra la serie pero se entiende por lo anterior, resuélvela tú.
 
+Marca también si el tema ES de anime o manga. Si preguntan por un videojuego, una película occidental, una serie de imagen real, o cualquier otra cosa, isAnime es false (aunque siga necesitando búsqueda).
+
 Responde SOLO con este JSON, sin texto alrededor ni markdown:
-{"needsResearch": true|false, "topic": "nombre de la serie en romaji o inglés, o cadena vacía", "queryEn": "búsqueda en inglés", "queryEs": "búsqueda en español"}
+{"needsResearch": true|false, "isAnime": true|false, "topic": "nombre de la obra, o cadena vacía", "queryEn": "búsqueda en inglés", "queryEs": "búsqueda en español"}
 
 Conversación:
 ${transcript}`;
@@ -101,6 +105,7 @@ ${transcript}`;
 
     return {
       needsResearch: parsed.needsResearch === true,
+      isAnime: parsed.isAnime !== false,
       topic,
       queries: queries.length > 0 ? queries : topic ? [topic] : [],
       debug: "decidido por el modelo",
@@ -113,6 +118,7 @@ ${transcript}`;
     const msg = e instanceof Error ? e.message : String(e);
     return {
       needsResearch: fallback.needed,
+      isAnime: true,
       topic,
       queries: topic ? [topic] : [],
       debug: `clasificador caído (${msg}), usando heurística: ${fallback.reason}`,
@@ -175,9 +181,17 @@ function buildRumorQueries(topic: string, queries: string[]): string[] {
  * que no pueda mezclarlas aunque quiera. Ninguna fuente es
  * imprescindible: solo se da la investigación por vacía si fallan todas.
  */
-export async function gatherEvidence(topic: string, queries: string[]): Promise<Evidence> {
+export async function gatherEvidence(
+  topic: string,
+  queries: string[],
+  isAnime = true
+): Promise<Evidence> {
   const searchTerms = queries.length > 0 ? queries : topic ? [topic] : [];
-  const rumorTerms = buildRumorQueries(topic, queries);
+  // Las fichas de AniList y MyAnimeList solo tienen sentido si el tema ES
+  // anime. Buscar "Valorant" ahí devolvía cualquier cosa parecida de
+  // nombre y Ren acababa mezclando un videojuego con un anime que no
+  // tiene nada que ver — de ahí que "se liara" con preguntas de fuera.
+  const rumorTerms = isAnime ? buildRumorQueries(topic, queries) : [];
 
   const [news, web, reddit, anilist, jikan] = await Promise.all([
     searchTerms.length > 0
@@ -189,8 +203,8 @@ export async function gatherEvidence(topic: string, queries: string[]): Promise<
     rumorTerms.length > 0
       ? searchReddit(rumorTerms, 5)
       : Promise.resolve({ hits: [] as RedditHit[], debug: "sin consulta" }),
-    topic ? getAnimeFacts(topic) : Promise.resolve(null),
-    topic ? searchJikanAnime(topic) : Promise.resolve(null),
+    topic && isAnime ? getAnimeFacts(topic) : Promise.resolve(null),
+    topic && isAnime ? searchJikanAnime(topic) : Promise.resolve(null),
   ]);
 
   // Noticias que MyAnimeList tiene de ESE anime concreto: una fuente
