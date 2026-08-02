@@ -8,6 +8,7 @@ import { getPreferences, PREFERENCES_CHANGED_EVENT } from "@/lib/storage";
 import { Avatar } from "./AvatarPicker";
 import { playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
+import { ULTIMA_VERSION } from "@/data/changelog";
 
 /**
  * Barra de navegación inferior, solo en móvil.
@@ -58,12 +59,14 @@ export function MobileNav() {
   const pathname = usePathname();
   const [avatarId, setAvatarId] = useState("a1");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [hayNovedades, setHayNovedades] = useState(false);
 
   useEffect(() => {
     const refresh = () => {
       const prefs = getPreferences();
       setAvatarId(prefs.avatarId);
       setPhotoDataUrl(prefs.avatarPhotoDataUrl);
+      setHayNovedades(prefs.lastSeenChangelog !== ULTIMA_VERSION);
     };
     refresh();
     window.addEventListener(PREFERENCES_CHANGED_EVENT, refresh);
@@ -163,8 +166,15 @@ export function MobileNav() {
               transition={{ type: "spring", stiffness: 400, damping: 32 }}
             />
           )}
-          <span className={perfilActivo ? "ring-1 ring-ice/60 rounded-full" : ""}>
+          <span className={`relative ${perfilActivo ? "rounded-full ring-1 ring-ice/60" : ""}`}>
             <Avatar avatarId={avatarId} photoDataUrl={photoDataUrl} size="sm" rounded="full" />
+            {hayNovedades && (
+              <span
+                aria-label="Hay novedades sin leer"
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background"
+                style={{ background: "var(--ice)" }}
+              />
+            )}
           </span>
           <span
             className={`text-[10px] leading-none ${perfilActivo ? "font-semibold text-foreground" : "text-muted"}`}

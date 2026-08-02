@@ -78,6 +78,13 @@ export default function RootLayout({
         {/*
           Se ejecuta ANTES del primer pintado, a propósito.
 
+          Aquí también arranca la petición de noticias. Es lo que hace
+          que la presentación de entrada no sea tiempo perdido: mientras
+          se ve la animación, el servidor ya está trabajando. Esta línea
+          se ejecuta unas cuatro décimas antes de que React llegue a
+          pedirlo, y la promesa se guarda en window para que NewsFeed la
+          reutilice en vez de pedir lo mismo dos veces.
+
           Lo primero es el reparto desde la raíz. Normalmente ya lo ha
           hecho el servidor (ver src/proxy.ts) y aquí no se llega; esto
           es la red de seguridad para quien todavía no tiene la cookie
@@ -98,7 +105,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `try{if(location.pathname==='/'){var p=localStorage.getItem('anime-hub:preferences');var ok=false;try{ok=!!(p&&JSON.parse(p).onboardingCompleted)}catch(e){}document.cookie='anime-hub-onboarded='+(ok?'1':'0')+'; path=/; max-age=31536000; SameSite=Lax';location.replace(ok?'/noticias':'/onboarding')}}catch(e){}
-try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias')===0;if(enNoticias&&!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000)}}catch(e){}`,
+try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias')===0;if(enNoticias&&!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000);window.__animeHubNoticias=fetch('/api/news').then(function(r){return r.json()}).catch(function(){return null})}}catch(e){}`,
           }}
         />
       </head>

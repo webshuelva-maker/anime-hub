@@ -26,6 +26,7 @@ const SECTIONS: Record<string, AssistantLink> = {
   gustos: { label: "Ver tus gustos", href: "/preferencias" },
   ajustes: { label: "Abrir Ajustes", href: "/ajustes" },
   perfil: { label: "Abrir tu perfil", href: "/perfil" },
+  novedades: { label: "Ver las novedades", href: "/novedades" },
   terminos: { label: "Leer los términos de uso", href: "/legal/terminos" },
   privacidad: { label: "Leer la política de privacidad", href: "/legal/privacidad" },
   normas: { label: "Leer las normas de convivencia", href: "/legal/normas" },

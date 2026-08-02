@@ -9,6 +9,7 @@ import { Avatar } from "./AvatarPicker";
 import { FullscreenButton } from "./FullscreenButton";
 import { BrandMark } from "./BrandMark";
 import { playToggle, playHover, playClick } from "@/lib/sound";
+import { ULTIMA_VERSION } from "@/data/changelog";
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
@@ -20,12 +21,14 @@ export function Navbar() {
   const pathname = usePathname();
   const [avatarId, setAvatarId] = useState("a1");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [hayNovedades, setHayNovedades] = useState(false);
 
   useEffect(() => {
     const refresh = () => {
       const prefs = getPreferences();
       setAvatarId(prefs.avatarId);
       setPhotoDataUrl(prefs.avatarPhotoDataUrl);
+      setHayNovedades(prefs.lastSeenChangelog !== ULTIMA_VERSION);
     };
     refresh();
     window.addEventListener(PREFERENCES_CHANGED_EVENT, refresh);
@@ -79,9 +82,18 @@ export function Navbar() {
             href="/perfil"
             onClick={playClick}
             onMouseEnter={playHover}
-            className="ml-1 shrink-0 transition-transform hover:scale-105 sm:ml-0"
+            className="relative ml-1 shrink-0 transition-transform hover:scale-105 sm:ml-0"
           >
             <Avatar avatarId={avatarId} photoDataUrl={photoDataUrl} size="sm" rounded="full" />
+            {/* Punto de novedades sin leer. Va sobre el avatar porque la
+                pantalla de Novedades cuelga del perfil. */}
+            {hayNovedades && (
+              <span
+                aria-label="Hay novedades sin leer"
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background"
+                style={{ background: "var(--ice)" }}
+              />
+            )}
           </Link>
         </nav>
       </div>

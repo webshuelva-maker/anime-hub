@@ -462,6 +462,19 @@ export function ProfileEditor() {
       </div>
 
       <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">
+        <h2 className="font-heading text-lg font-semibold">Novedades</h2>
+        <p className="mt-1 max-w-md text-sm text-muted">
+          Qué ha cambiado en la app últimamente.
+        </p>
+        <Link
+          href="/novedades"
+          className="mt-4 inline-block rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+        >
+          Ver novedades →
+        </Link>
+      </div>
+
+      <div className="panel-elevated mt-10 rounded-2xl border border-panel-border p-6">
         <h2 className="font-heading text-lg font-semibold">Ajustes de la app</h2>
         <p className="mt-1 max-w-md text-sm text-muted">
           Plataformas donde ves anime, formatos que te interesan, hora del resumen diario, sonidos.

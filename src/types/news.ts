@@ -69,6 +69,7 @@ export interface UserPreferences {
   genreExamples: Record<string, string[]>; // de qué series le viene cada género, para poder explicárselo
   studioExamples: Record<string, string[]>;
   updatedAt: string | null;
+  lastSeenChangelog: string | null; // última versión de novedades que ha visto, para el punto del menú
   acceptedLegalAt: string | null; // cuándo aceptó los términos, normas y privacidad
   acceptedLegalVersion: string | null; // qué versión aceptó — es lo que sirve de prueba // último cambio del usuario, para sincronizar entre dispositivos // de qué series le viene cada estudio ("no sabes quién es MAPPA, pero has visto esto")
   searchHistory: string[]; // términos buscados, para reforzar el feed sin que el usuario tenga que marcar nada

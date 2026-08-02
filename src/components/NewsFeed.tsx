@@ -50,6 +50,20 @@ export function NewsFeed() {
   // se vuelva a encolar hasta que termine.
   const translatingLockRef = useRef<Set<string>>(new Set());
 
+  /*
+   * La petición de noticias que lanzó el script de la cabecera del
+   * documento, antes incluso de que existiera React (ver layout.tsx).
+   * Se guarda en una referencia para consumirla una única vez: así la
+   * primera carga aprovecha el trabajo hecho durante la presentación de
+   * entrada, y un refresco posterior sí pide datos frescos.
+   */
+  const noticiasAdelantadasRef = useRef<Promise<{ items?: NewsItem[] } | null> | null>(
+    typeof window === "undefined"
+      ? null
+      : ((window as unknown as { __animeHubNoticias?: Promise<{ items?: NewsItem[] } | null> })
+          .__animeHubNoticias ?? null)
+  );
+
   // Pantalla de carga a pantalla completa: SOLO si de verdad no había
   // nada en caché al entrar (primera visita real, o caché borrada). En
   // cualquier otro caso (visita normal, refresco silencioso cada 15 min)
@@ -93,9 +107,30 @@ export function NewsFeed() {
     }
     if (!silent) setStatus("loading");
     if (silent) setRefreshing(true);
-    fetch("/api/news")
-      .then(async (res) => {
-        const data: { items?: NewsItem[] } = await res.json();
+
+    /*
+     * La primera carga NO vuelve a pedir las noticias: se aprovecha la
+     * petición que lanzó el script de la cabecera, mucho antes de que
+     * React existiera (ver layout.tsx). Así el tiempo que dura la
+     * presentación de entrada se usa para cargar de verdad, en vez de
+     * ser una espera decorativa.
+     *
+     * Se consume una sola vez y se borra, para que un refresco posterior
+     * pida datos frescos y no reviva los del arranque.
+     */
+    const adelantada = noticiasAdelantadasRef.current;
+    noticiasAdelantadasRef.current = null; // se usa una sola vez
+
+    const peticion = adelantada
+      ? adelantada.then((data) => ({ ok: Boolean(data?.items?.length), data: data ?? {} }))
+      : fetch("/api/news").then(async (res) => ({
+          ok: res.ok,
+          data: (await res.json()) as { items?: NewsItem[] },
+        }));
+
+    peticion
+      .then(({ ok: res_ok, data }) => {
+        const res = { ok: res_ok };
         if (res.ok && data.items && data.items.length > 0) {
           setNewsItems(data.items);
           setItems(data.items);
