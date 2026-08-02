@@ -632,8 +632,10 @@ export function AssistantOrb() {
             // 100vh). Con dvh y un máximo calculado, el panel siempre cabe.
             style={{
               transformOrigin: "bottom right",
-              bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
-              height: "min(29rem, calc(100dvh - 9rem))",
+              // Justo encima del botón, que a su vez se aparta de la
+              // barra inferior en móvil (ver --orb-offset en globals.css).
+              bottom: "calc(var(--orb-offset) + 4.5rem)",
+              height: "min(29rem, calc(100dvh - var(--orb-offset) - 6rem))",
             }}
             className="fixed right-4 z-40 w-[23rem] max-w-[calc(100vw-2rem)] rounded-[1.75rem] p-[1px] shadow-2xl shadow-black/60 sm:right-6"
           >
@@ -817,7 +819,7 @@ export function AssistantOrb() {
 
       <div
         data-chrome-app
-        style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+        style={{ bottom: "var(--orb-offset)" }}
         className="fixed right-4 z-40 sm:right-6"
       >
         <motion.div

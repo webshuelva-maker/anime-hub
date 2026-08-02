@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Navbar } from "./Navbar";
 import { AssistantOrb } from "./AssistantOrb";
+import { MobileNav } from "./MobileNav";
 
 const HIDDEN_ON = ["/", "/onboarding"];
 
@@ -24,6 +25,7 @@ export function SiteChrome() {
   return (
     <>
       <Navbar />
+      <MobileNav />
       <AssistantOrb />
     </>
   );

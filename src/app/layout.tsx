@@ -63,6 +63,12 @@ export default function RootLayout({
         {/*
           Se ejecuta ANTES del primer pintado, a propósito.
 
+          Lo primero es el reparto desde la raíz. Normalmente ya lo ha
+          hecho el servidor (ver src/proxy.ts) y aquí no se llega; esto
+          es la red de seguridad para quien todavía no tiene la cookie
+          puesta, típicamente alguien que ya usaba la app antes. Salta al
+          instante y deja la cookie lista, así que solo ocurre una vez.
+
           La barra superior y el orbe de Ren viven aquí, en el layout, y
           se pintan de inmediato; la pantalla de carga vive dentro de la
           página y tarda un pelín más en montarse. Ese desfase de una o
@@ -76,7 +82,8 @@ export default function RootLayout({
         */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000)}}catch(e){}`,
+            __html: `try{if(location.pathname==='/'){var p=localStorage.getItem('anime-hub:preferences');var ok=false;try{ok=!!(p&&JSON.parse(p).onboardingCompleted)}catch(e){}document.cookie='anime-hub-onboarded='+(ok?'1':'0')+'; path=/; max-age=31536000; SameSite=Lax';location.replace(ok?'/noticias':'/onboarding')}}catch(e){}
+try{if(!sessionStorage.getItem('anime-hub:news-cache')){var d=document.documentElement;d.classList.add('arrancando');setTimeout(function(){d.classList.remove('arrancando')},20000)}}catch(e){}`,
           }}
         />
       </head>

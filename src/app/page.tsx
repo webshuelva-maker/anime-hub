@@ -2,36 +2,30 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { getPreferences } from "@/lib/storage";
-import { BrandMark } from "@/components/BrandMark";
+import { getPreferences, syncOnboardingCookie } from "@/lib/storage";
 
+/**
+ * Raíz: solo decide a dónde ir. NO pinta nada.
+ *
+ * Normalmente aquí no se llega: el servidor ya ha redirigido leyendo la
+ * cookie (src/proxy.ts), y si no la hubiera, el script del <head> salta
+ * antes del primer pintado. Esto es el tercer nivel de seguridad, por si
+ * ambas cosas fallaran.
+ *
+ * Antes esta pantalla enseñaba el emblema latiendo. Se veía medio
+ * segundo, y era justo el parpadeo del que se quejaba el usuario: un
+ * destello de "algo" antes de la pantalla de carga de verdad. Ahora
+ * devuelve solo el fondo, así que aunque se pinte, no se distingue de la
+ * pantalla siguiente.
+ */
 export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
     const prefs = getPreferences();
+    syncOnboardingCookie(prefs);
     router.replace(prefs.onboardingCompleted ? "/noticias" : "/onboarding");
   }, [router]);
 
-  // Esta pantalla dura una fracción de segundo mientras se decide a dónde
-  // ir. Antes tenía un cuadrado azul latiendo y quedaba fuera de sitio;
-  // luego se dejó vacía y se notaba igual, como un hueco. Con el propio
-  // emblema de la app el salto se lee como parte del arranque en vez de
-  // como un parpadeo raro.
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <motion.span
-        className="ice-text"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: [0.5, 1, 0.5], scale: 1 }}
-        transition={{
-          opacity: { duration: 2.2, repeat: Infinity, ease: "easeInOut" },
-          scale: { duration: 0.4, ease: "easeOut" },
-        }}
-      >
-        <BrandMark size={30} />
-      </motion.span>
-    </div>
-  );
+  return <div className="min-h-screen bg-background" />;
 }

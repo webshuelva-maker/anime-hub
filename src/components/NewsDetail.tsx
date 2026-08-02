@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { NewsItem } from "@/types/news";
 import { NewsCover } from "./NewsCover";
 import { ReliabilityBadge } from "./ReliabilityBadge";
@@ -166,12 +166,34 @@ export function NewsDetail({
 
   const shownBody = body || englishFallback || item?.summary || item?.body || "";
 
+  /*
+   * En móvil el detalle deja de ser una ventana centrada y pasa a ser una
+   * hoja que sube desde abajo y se cierra arrastrándola. Es el gesto que
+   * espera cualquiera que use el móvil, y evita tener que apuntar a una
+   * ✕ diminuta en una esquina.
+   *
+   * El arrastre se inicia SOLO desde el asa de arriba (por eso
+   * dragListener={false} y los controles manuales). Si se pudiera
+   * arrastrar desde cualquier parte, el gesto pelearía con el
+   * desplazamiento del texto y cerrar sin querer sería constante.
+   */
+  const [isMobile, setIsMobile] = useState(false);
+  const dragControls = useDragControls();
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
   return (
     <AnimatePresence mode="wait">
       {item && (
         <motion.div
           key="overlay"
-          className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/85 p-4 py-10 sm:items-center"
+          className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto bg-black/85 p-0 sm:items-center sm:p-4 sm:py-10"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -180,23 +202,45 @@ export function NewsDetail({
         >
           <motion.div
             key="panel"
-            className="panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            className="panel relative max-h-[90dvh] w-full max-w-2xl overflow-hidden rounded-t-3xl sm:max-h-[85vh] sm:rounded-2xl"
+            initial={isMobile ? { y: "100%" } : { opacity: 0 }}
+            animate={isMobile ? { y: 0 } : { opacity: 1 }}
+            exit={isMobile ? { y: "100%" } : { opacity: 0 }}
+            transition={isMobile ? { type: "spring", stiffness: 320, damping: 34 } : { duration: 0.18 }}
+            drag={isMobile ? "y" : false}
+            dragListener={false}
+            dragControls={dragControls}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.55 }}
+            onDragEnd={(_, info) => {
+              // Se cierra si has arrastrado lo bastante O si has hecho un
+              // gesto rápido hacia abajo, aunque sea corto: soltar con
+              // impulso es como se cierra una hoja en cualquier app.
+              if (info.offset.y > 110 || info.velocity.y > 600) onClose();
+            }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Asa de arrastre: solo en móvil, y es el único sitio desde
+                el que se puede tirar de la hoja. */}
+            <div
+              onPointerDown={(e) => dragControls.start(e)}
+              className="absolute inset-x-0 top-0 z-20 flex touch-none justify-center py-3 sm:hidden"
+              style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.45), transparent)" }}
+            >
+              <span className="h-1 w-10 rounded-full bg-white/45" />
+            </div>
+
             <button
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white"
+              // 40px de área en móvil: la de 32px se fallaba con el dedo.
+              className="absolute right-3 top-3 z-30 hidden h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white sm:right-3 sm:flex sm:h-8 sm:w-8"
             >
               ✕
             </button>
 
-            <div className="max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain">
+            <div className="max-h-[90dvh] overflow-y-auto scrollbar-thin overscroll-contain sm:max-h-[85vh]">
               <NewsCover
                 category={item.category}
                 relatedTitle={item.relatedTitle}

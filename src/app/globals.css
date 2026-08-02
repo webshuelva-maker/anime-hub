@@ -196,3 +196,25 @@ input:-webkit-autofill:focus {
 html.arrancando [data-chrome-app] {
   visibility: hidden;
 }
+
+/*
+ * Altura a la que flota el orbe de Ren. En escritorio va pegado abajo;
+ * en móvil tiene que subir por encima de la barra de navegación
+ * inferior, que si no lo tapa. Se define aquí como variable para que el
+ * componente no tenga que saber nada de anchos de pantalla.
+ */
+:root {
+  --orb-offset: calc(1.25rem + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 639px) {
+  :root {
+    --orb-offset: calc(4.75rem + env(safe-area-inset-bottom));
+  }
+
+  /* Hueco al final de cada página para que la barra inferior no tape la
+     última fila de contenido. */
+  body {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+}

@@ -43,12 +43,15 @@ export function Navbar() {
               enlaces, el icono y el avatar la barra medía ~600px y se
               salía de un móvil de 390px, dejando arrastrar toda la web
               de lado. El emblema ya identifica la app de sobra. */}
-          <span className="font-heading hidden text-lg font-semibold tracking-wide sm:inline">
+          <span className="font-heading text-lg font-semibold tracking-wide">
             {siteConfig.name}
           </span>
         </Link>
 
-        <nav className="flex min-w-0 items-center gap-0.5 sm:gap-6">
+        {/* Los enlaces y el avatar se van a la barra inferior en móvil
+            (MobileNav): arriba se queda solo el emblema, que es lo que
+            pidió el usuario y además libera toda la fila para el título. */}
+        <nav className="hidden min-w-0 items-center gap-0.5 sm:flex sm:gap-6">
           {LINKS.map((link) => {
             const active = pathname?.startsWith(link.href);
             return (
