@@ -38,6 +38,8 @@ export function SupportChat() {
   const [enviando, setEnviando] = useState(false);
   const [haySesion, setHaySesion] = useState<boolean | null>(null);
   const [adminPresente, setAdminPresente] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
+  const [resuelta, setResuelta] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -126,11 +128,20 @@ export function SupportChat() {
 
   const handleCerrar = async () => {
     if (!ticket) return;
+    setCerrando(true);
     await cerrarTicket(ticket.id);
     playToggle();
-    setTicket(null);
-    setMensajes([]);
-    setMotivo("");
+    // Un momento de confirmación antes de vaciar la pantalla: si el chat
+    // desaparece de golpe, no queda claro si se ha cerrado bien o si se
+    // ha roto algo.
+    setResuelta(true);
+    setTimeout(() => {
+      setTicket(null);
+      setMensajes([]);
+      setMotivo("");
+      setResuelta(false);
+      setCerrando(false);
+    }, 1800);
   };
 
   if (cargando) {
@@ -151,6 +162,33 @@ export function SupportChat() {
           Iniciar sesión / Crear cuenta
         </Link>
       </div>
+    );
+  }
+
+  // --- Recién cerrada: confirmación antes de volver al formulario -------
+  if (resuelta) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="panel mt-6 rounded-2xl p-8 text-center"
+      >
+        <motion.span
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 18 }}
+          className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-ice/40 ice-text"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </motion.span>
+        <p className="font-heading text-base font-semibold">Consulta cerrada</p>
+        <p className="mt-1 text-sm text-muted">
+          Si vuelve a pasarte algo, puedes abrir otra cuando quieras.
+        </p>
+      </motion.div>
     );
   }
 
@@ -287,9 +325,10 @@ export function SupportChat() {
         <button
           type="button"
           onClick={handleCerrar}
-          className="text-xs text-muted underline transition-colors hover:text-foreground"
+          disabled={cerrando}
+          className="text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
         >
-          Dar por resuelta esta consulta
+          {cerrando ? "Cerrando…" : "Dar por resuelta esta consulta"}
         </button>
       </div>
     </div>

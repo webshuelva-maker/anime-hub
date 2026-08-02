@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { playToggle } from "@/lib/sound";
+import { createClient } from "@/lib/supabase/client";
 import {
   EstadoPush,
   activarPush,
@@ -23,6 +24,26 @@ export function AvisosPushToggle() {
   const [estado, setEstado] = useState<EstadoPush | null>(null);
   const [instalada, setInstalada] = useState(true);
   const [ocupado, setOcupado] = useState(false);
+  const [diagnostico, setDiagnostico] = useState<string | null>(null);
+
+  const probar = async () => {
+    setOcupado(true);
+    setDiagnostico("Probando…");
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      const res = await fetch("/api/push/probar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: data.user?.id }),
+      });
+      const json: { ok: boolean; detalle: string } = await res.json();
+      setDiagnostico(json.detalle);
+    } catch (e) {
+      setDiagnostico(`No se pudo contactar con el servidor: ${e instanceof Error ? e.message : e}`);
+    }
+    setOcupado(false);
+  };
 
   useEffect(() => {
     // Depende de APIs del navegador (matchMedia, Notification), así que
@@ -84,6 +105,23 @@ export function AvisosPushToggle() {
           </motion.button>
         )}
       </div>
+
+      {estado === "activo" && (
+        <button
+          type="button"
+          onClick={probar}
+          disabled={ocupado}
+          className="mt-3 text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          Enviarme un aviso de prueba
+        </button>
+      )}
+
+      {diagnostico && (
+        <p className="mt-2 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-xs leading-relaxed text-muted">
+          {diagnostico}
+        </p>
+      )}
 
       {esIOS && !instalada && pushDisponible() && (
         <p className="mt-3 rounded-lg border border-panel-border bg-panel-soft px-3 py-2 text-xs text-muted">
