@@ -16,10 +16,12 @@ create table if not exists public.profiles (
 -- la clave "anon" en el navegador.
 alter table public.profiles enable row level security;
 
+drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
   on public.profiles for update
   using (auth.uid() = id);
@@ -64,18 +66,22 @@ create table if not exists public.user_state (
 
 alter table public.user_state enable row level security;
 
+drop policy if exists "Users read their own state" on public.user_state;
 create policy "Users read their own state"
   on public.user_state for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users insert their own state" on public.user_state;
 create policy "Users insert their own state"
   on public.user_state for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users update their own state" on public.user_state;
 create policy "Users update their own state"
   on public.user_state for update
   using (auth.uid() = user_id);
 
+drop policy if exists "Users delete their own state" on public.user_state;
 create policy "Users delete their own state"
   on public.user_state for delete
   using (auth.uid() = user_id);
@@ -110,18 +116,22 @@ create table if not exists public.social_profiles (
 
 alter table public.social_profiles enable row level security;
 
+drop policy if exists "Users read their own social profile" on public.social_profiles;
 create policy "Users read their own social profile"
   on public.social_profiles for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users insert their own social profile" on public.social_profiles;
 create policy "Users insert their own social profile"
   on public.social_profiles for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users update their own social profile" on public.social_profiles;
 create policy "Users update their own social profile"
   on public.social_profiles for update
   using (auth.uid() = user_id);
 
+drop policy if exists "Users delete their own social profile" on public.social_profiles;
 create policy "Users delete their own social profile"
   on public.social_profiles for delete
   using (auth.uid() = user_id);
@@ -136,6 +146,7 @@ create table if not exists public.social_blocks (
 
 alter table public.social_blocks enable row level security;
 
+drop policy if exists "Users manage their own blocks" on public.social_blocks;
 create policy "Users manage their own blocks"
   on public.social_blocks for all
   using (auth.uid() = blocker_id)
@@ -155,6 +166,7 @@ create table if not exists public.social_reports (
 
 alter table public.social_reports enable row level security;
 
+drop policy if exists "Users can file reports" on public.social_reports;
 create policy "Users can file reports"
   on public.social_reports for insert
   with check (auth.uid() = reporter_id);

@@ -312,18 +312,21 @@ export function SocialOnboarding() {
           </dl>
         </div>
 
-        <button
+        <motion.button
           type="button"
           onClick={() => setConfirmingLeave(true)}
-          className="mt-6 rounded-full border border-rumor/40 px-4 py-2 text-sm font-medium text-rumor transition-colors hover:bg-rumor/10"
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.96 }}
+          transition={{ type: "spring", stiffness: 400, damping: 22 }}
+          className="mt-6 rounded-full border border-rumor/40 px-4 py-2 text-sm font-medium text-rumor transition-colors hover:bg-rumor/10 hover:border-rumor/70"
         >
           Salir del apartado social y borrar este perfil
-        </button>
+        </motion.button>
 
         <ConfirmDialog
           open={confirmingLeave}
-          title="Salir del apartado social"
-          message="Se borrará tu perfil social (alias, fecha de nacimiento, cómo te identificas y con quién quieres coincidir). El resto de tu cuenta y tus gustos no se tocan. Puedes volver a entrar cuando quieras."
+          title="¿Seguro que quieres salir?"
+          message={`Se borrará tu perfil social: el alias «${profile.alias}», tu fecha de nacimiento, cómo te identificas y con quién querías coincidir. Dejarás de aparecer en el apartado Conectar.\n\nEl resto de tu cuenta no se toca: tus noticias, tus gustos y lo que ${siteConfig.assistantName} recuerda de ti siguen igual.\n\nPuedes volver a entrar cuando quieras, pero tendrás que rellenarlo todo otra vez y el alias podría estar cogido por otra persona.`}
           confirmLabel="Sí, borrar mi perfil social"
           onConfirm={handleLeave}
           onCancel={() => setConfirmingLeave(false)}

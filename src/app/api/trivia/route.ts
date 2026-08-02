@@ -5,7 +5,7 @@ export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja marge
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
-const BATCH_SIZE = 15;
+const BATCH_SIZE = 20;
 
 /**
  * Genera curiosidades cortas de anime/manga en español, personalizadas
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ facts: [] });
   }
 
-  const exclude = (body.exclude ?? []).slice(-60); // no hace falta mandar un historial infinito
+  const exclude = (body.exclude ?? []).slice(-200); // historial largo a propósito: con 60 volvían curiosidades de sesiones anteriores
   const genres = body.genres ?? [];
   const favoriteTitles = body.favoriteTitles ?? [];
 
@@ -33,7 +33,13 @@ export async function POST(req: NextRequest) {
       ? `Al usuario le gustan estos géneros/series, dale algo de peso a eso en la selección (sin que sean TODAS sobre lo mismo): ${[...genres, ...favoriteTitles].join(", ")}.`
       : "";
 
-  const systemPrompt = `Generas curiosidades cortas y interesantes sobre anime y manga, en español de España, una frase por curiosidad (máximo ~25 palabras cada una). Temas variados: historia del medio, datos de producción, curiosidades de estudios, récords, adaptaciones, doblaje, cultura otaku, etc. Nada de spoilers de tramas recientes. ${personalization}
+  const systemPrompt = `Generas curiosidades cortas y interesantes sobre anime y manga, en español de España, una frase por curiosidad (máximo ~25 palabras cada una). Temas variados: historia del medio, datos de producción, curiosidades de estudios, adaptaciones, doblaje, cultura otaku, etc. Nada de spoilers de tramas recientes. ${personalization}
+
+MUY IMPORTANTE — solo datos que sepas con certeza:
+- NO inventes cifras, récords ni superlativos. Nada de "el más largo", "el más taquillero", "el primero en...", ni números de episodios, fechas exactas de emisión o cifras de ventas, salvo que sean archiconocidos y estés completamente seguro.
+- Ante la duda entre una curiosidad llamativa pero dudosa y una más sosa pero segura, elige SIEMPRE la segura.
+- Prefiere hechos cualitativos y verificables (qué estudio hizo qué, de qué obra nace una adaptación, rasgos de estilo de un director) antes que datos numéricos.
+Una curiosidad falsa hace más daño que una aburrida: esto se le enseña al usuario como si fuera un dato cierto.
 
 ${exclude.length > 0 ? `Ya se han mostrado estas — NO las repitas ni generes otras muy parecidas:\n${exclude.map((f) => `- ${f}`).join("\n")}` : ""}
 

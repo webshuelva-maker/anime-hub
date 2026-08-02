@@ -2,30 +2,61 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ANIME_TRIVIA, nextTriviaIndex } from "@/lib/trivia";
+import { ANIME_TRIVIA } from "@/lib/trivia";
+import { getPreferences } from "@/lib/storage";
+import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 import { siteConfig } from "@/config/site";
 import { BrandMark } from "./BrandMark";
 
 const ROTATE_MS = 4500;
+const REFILL_THRESHOLD = 5; // cuando queden menos de esto sin ver, se pide otro lote
+const SHOWN_KEY = "anime-hub:trivia-shown";
+const MAX_SHOWN_REMEMBERED = 600;
 
 /*
- * Las curiosidades salen de una lista escrita a mano y comprobada
- * (src/lib/trivia.ts), NO de la IA.
+ * Curiosidades de la espera. Dos fuentes, en este orden:
  *
- * Antes se generaban con Groq sobre la marcha y se colaban datos falsos
- * dichos con total seguridad ("el anime más largo en emisión lleva más de
- * 900 episodios" — Sazae-san pasa de 8.000 y One Piece de 1.100). Un
- * modelo generando "datos curiosos" sin ninguna fuente detrás va a
- * inventar tarde o temprano, igual que le pasaba a Ren antes de darle
- * búsqueda real. Aquí no compensa: es texto decorativo para una espera,
- * no merece la pena arriesgarse a soltar mentiras al usuario en la
- * primera pantalla que ve de la app.
+ * 1. Una lista escrita a mano y comprobada (src/lib/trivia.ts, 100).
+ * 2. Lotes generados con IA, que se van pidiendo a medida que se agotan.
  *
- * Además, la lista curada trae cola anti-repetición propia
- * (nextTriviaIndex): baraja las 100 y no repite ninguna hasta haberlas
- * mostrado todas, y lo recuerda entre sesiones. Con la IA se repetían
- * porque cada lote era pequeño y la rotación daba vueltas en bucle.
+ * Por qué las dos y en ese orden: la lista de mano nunca miente pero se
+ * acaba, y repetir curiosidades en la primera pantalla de la app queda
+ * cutre. La IA no se acaba nunca, pero se inventa cosas — llegó a decir
+ * que "el anime más largo en emisión lleva más de 900 episodios" (falso:
+ * Sazae-san pasa de 8.000). Así que se empieza por las seguras, y la IA
+ * solo entra cuando ya no quedan.
+ *
+ * TODO lo que se ha enseñado alguna vez se guarda en localStorage y se le
+ * manda a la IA como lista de exclusión, así que no repite ni entre
+ * sesiones. Antes solo se mandaban las últimas 60 y por eso volvían.
  */
+
+function loadShown(): string[] {
+  try {
+    const raw = localStorage.getItem(SHOWN_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveShown(facts: string[]) {
+  try {
+    localStorage.setItem(SHOWN_KEY, JSON.stringify(facts.slice(-MAX_SHOWN_REMEMBERED)));
+  } catch {
+    // localStorage lleno o bloqueado: se pierde la memoria entre sesiones, nada más
+  }
+}
+
+function barajar<T>(arr: T[]): T[] {
+  const copia = [...arr];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia;
+}
 
 /**
  * Pantalla de carga a pantalla completa — SOLO en la primera visita real
@@ -49,22 +80,83 @@ export function FirstLoadOverlay({
   estimatedDurationMs: number;
   onComplete: () => void;
 }) {
-  // "index" es solo la clave de la animación de entrada/salida; el texto
-  // real va en "fact", que lo decide la cola barajada.
   const [index, setIndex] = useState(0);
   const [fact, setFact] = useState<string>("");
 
+  // Pendientes por enseñar en esta sesión. Se rellena con lo que quede de
+  // la lista verificada y, cuando se agota, con lotes de la IA.
+  const pendientesRef = useRef<string[]>([]);
+  const vistasRef = useRef<string[]>([]);
+  const pidiendoRef = useRef(false);
+
+  const pedirLote = async () => {
+    if (pidiendoRef.current) return;
+    pidiendoRef.current = true;
+    try {
+      const prefs = getPreferences();
+      const estimatedTokens = 1200;
+      const data: { facts?: string[] } = await runExclusive(async () => {
+        await waitForTokenBudget(estimatedTokens, "normal");
+        const res = await fetch("/api/trivia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // Se manda TODO el historial, no solo lo último: es lo que
+            // evita que vuelvan curiosidades de sesiones anteriores.
+            exclude: vistasRef.current,
+            genres: prefs.genres,
+            favoriteTitles: prefs.favoriteTitles,
+          }),
+        });
+        const json = await res.json();
+        recordTokenUsage(estimatedTokens);
+        return json;
+      }, "normal");
+
+      if (data.facts?.length) {
+        // Filtro de seguridad por si el modelo repite algo pese a la
+        // lista de exclusión: no se fía, se comprueba aquí también.
+        const nuevas = data.facts.filter((f) => f && !vistasRef.current.includes(f));
+        pendientesRef.current.push(...nuevas);
+      }
+    } catch {
+      // Si falla, se sigue con lo que haya pendiente; la pantalla nunca
+      // se bloquea por esto.
+    } finally {
+      pidiendoRef.current = false;
+    }
+  };
+
+  /** Saca la siguiente sin repetir y pide más si quedan pocas. */
+  const siguiente = (): string => {
+    const proxima = pendientesRef.current.shift();
+    if (pendientesRef.current.length <= REFILL_THRESHOLD) void pedirLote();
+    if (!proxima) return "";
+    vistasRef.current.push(proxima);
+    saveShown(vistasRef.current);
+    return proxima;
+  };
+
   useEffect(() => {
-    // La cola anti-repetición vive en localStorage, así que no puede
-    // resolverse durante el render (en servidor no existe) — tiene que
-    // ser al montar.
+    vistasRef.current = loadShown();
+    // Las verificadas que esta persona todavía no ha visto van primero.
+    pendientesRef.current = barajar(ANIME_TRIVIA.filter((f) => !vistasRef.current.includes(f)));
+    // Si ya las ha visto todas, hace falta pedir a la IA desde el principio.
+    if (pendientesRef.current.length <= REFILL_THRESHOLD) void pedirLote();
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFact(ANIME_TRIVIA[nextTriviaIndex()]);
+    setFact(siguiente());
     const timer = setInterval(() => {
-      setFact(ANIME_TRIVIA[nextTriviaIndex()]);
-      setIndex((i) => i + 1);
+      const proxima = siguiente();
+      // Si el lote todavía no ha llegado, se deja la anterior en pantalla
+      // en vez de dejarlo en blanco.
+      if (proxima) {
+        setFact(proxima);
+        setIndex((i) => i + 1);
+      }
     }, ROTATE_MS);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Contador animado dirigido por TIEMPO ESTIMADO, no por los saltos

@@ -37,7 +37,7 @@ export function ConfirmDialog({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-heading text-lg font-semibold text-foreground">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted">{message}</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted">{message}</p>
             <div className="mt-6 flex items-center justify-center gap-3">
               <motion.button
                 type="button"
