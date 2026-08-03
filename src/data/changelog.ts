@@ -23,6 +23,14 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v134",
+    fecha: "2026-08-03",
+    titulo: "Comprobador de fuentes",
+    puntos: [
+      "Una página nueva dice de un vistazo qué fuentes de noticias funcionan y cuáles no.",
+    ],
+  },
+  {
     version: "v133",
     fecha: "2026-08-03",
     titulo: "Noticias en español, de muchas más fuentes",

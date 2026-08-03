@@ -32,7 +32,7 @@ export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja marge
  * ignora y las demás siguen. El campo "diagnostico" de la respuesta dice
  * cuáles han contestado.
  */
-const FEEDS = [
+export const FEEDS = [
   // ---------- Prensa en español (sin coste de traducción) ----------
   { url: "https://www.crunchyroll.com/newsrss?lang=esES", platform: "Crunchyroll News", label: "Ver en Crunchyroll", language: "es" as const, tier: "oficial" as const },
   { url: "https://ramenparados.com/feed/", platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es" as const, tier: "oficial" as const },
