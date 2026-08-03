@@ -22,8 +22,15 @@ function decodeEntities(raw: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&nbsp;/g, " ")
-    .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    // Cualquier entidad numérica, decimal (&#39; &#039;) o hexadecimal
+    // (&#x27;). Antes solo se contemplaba "&#39;" literal, y
+    // MyAnimeList manda "&#039;" con cero delante: no coincidía y el
+    // título se quedaba con la entidad dentro, que además luego se
+    // mandaba tal cual a AniList y no encontraba nada.
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&amp;/g, "&"); // siempre el último, para no volver a decodificar entidades ya resueltas
 }
 
@@ -103,6 +110,22 @@ const MARCAS_TITULAR = [
   "lanza", "presenta", "Reseña", "Entrevista", "tráiler", "temporada", "película",
 ];
 
+/*
+ * Palabras que por sí solas no son el nombre de ninguna obra. Si el
+ * recorte deja solo esto, es que el titular no tenía la forma esperada y
+ * el resultado no vale para buscar en AniList.
+ *
+ * Salieron del diagnóstico real: los titulares daban "North American",
+ * "Web", "Light", "Third", "Your", "Visual", "Japan's Video"... y todos
+ * ellos se mandaban a AniList, que como es lógico no encontraba nada.
+ */
+const RELLENO = new Set([
+  "north american", "web", "light", "third", "your", "visual", "manga", "anime",
+  "new", "the", "japan's video", "japanese animation tv ranking", "additional cast",
+  "supporting cast pair", "toei animation produces new", "webtoon-based", "crunchyroll",
+  "discotek to release", "sublime licenses robin at the break of dawn, cake dog caramel",
+]);
+
 function extractSeriesName(title: string): string {
   const limpio = title
     .replace(/\s+/g, " ")
@@ -110,6 +133,18 @@ function extractSeriesName(title: string): string {
     // X...". Ese "El anime" sobra para buscar la obra en la base de datos.
     .replace(/^(el|la|los|las)\s+(anime|manga|serie|pel[íi]cula|film|novela)\s+/i, "")
     .trim();
+
+  /*
+   * Muchos medios (MyAnimeList sobre todo) ponen el nombre de la obra
+   * entre comillas: «'Mato Seihei no Slave' Gets Third Season». Cuando
+   * las hay, eso ES el título y no hace falta adivinar nada — es mucho
+   * más fiable que cortar por palabras clave.
+   */
+  const entrecomillado = limpio.match(/["'“”«]([^"'“”«»]{3,64})["'“”»]/);
+  if (entrecomillado?.[1]) {
+    const dentro = entrecomillado[1].trim();
+    if (!RELLENO.has(dentro.toLowerCase())) return dentro;
+  }
 
   let corte = limpio.length;
   for (const marca of MARCAS_TITULAR) {
@@ -125,9 +160,13 @@ function extractSeriesName(title: string): string {
     .replace(/^['"«]|['"»]$/g, "")
     .trim();
 
-  // Si el recorte deja algo demasiado corto, no era un titular con esta
-  // forma: mejor el titular entero que un fragmento sin sentido.
-  if (nombre.length < 3) return limpio.length > 64 ? `${limpio.slice(0, 61)}…` : limpio;
+  // Si el recorte deja algo demasiado corto, o solo palabras de relleno,
+  // no era un titular con esta forma: mejor el titular entero, que al
+  // menos tiene alguna posibilidad de coincidir, que un fragmento suelto
+  // que seguro que no.
+  if (nombre.length < 3 || RELLENO.has(nombre.toLowerCase())) {
+    return limpio.length > 64 ? `${limpio.slice(0, 61)}…` : limpio;
+  }
   return nombre.length > 64 ? `${nombre.slice(0, 61)}…` : nombre;
 }
 

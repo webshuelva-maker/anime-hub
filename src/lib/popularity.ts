@@ -66,9 +66,24 @@ ${titulos
       body: JSON.stringify({ query: consulta }),
       signal: controller.signal,
     });
-    if (!res.ok) return resultado;
 
-    const json = await res.json();
+    /*
+     * AQUÍ ESTABA EL FALLO QUE DEJABA LA POPULARIDAD A CERO.
+     *
+     * Antes esto era `if (!res.ok) return resultado;` y se tiraba la
+     * respuesta entera. Pero AniList responde con estado 404 en cuanto
+     * UNO SOLO de los títulos del lote no existe — y como los títulos
+     * salen de recortar titulares de noticias, en un lote de doce
+     * siempre falla alguno. Resultado: TODOS los lotes se descartaban y
+     * ni una sola noticia llegaba a tener popularidad, ni siquiera las
+     * de series conocidísimas que AniList sí había encontrado.
+     *
+     * El cuerpo viene igual, con "data" relleno para los que sí ha
+     * encontrado y "errors" para los que no. Así que se lee siempre y se
+     * aprovecha lo que haya.
+     */
+    const json = await res.json().catch(() => null);
+    if (!json) return resultado;
     // Con alias, AniList devuelve error para los que no encuentra pero
     // rellena igualmente los demás: por eso se lee "data" aunque haya
     // "errors", en vez de descartarlo todo.
