@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v136",
+    fecha: "2026-08-03",
+    titulo: "Todas las noticias en español",
+    intro: "Se acabaron las noticias en inglés esperando traducción.",
+    puntos: [
+      "El feed lo forman ahora solo medios en español: Crunchyroll, Somos Kudasai, Ramen Para Dos, AnmoSugoi, Koi-Nya y Misión Tokyo.",
+      "Más Hobby Consolas, Meristation, IGN España, Vandal, Vida Extra y 3DJuegos, filtrados a lo que es anime y manga.",
+      "Las noticias salen al momento, sin esperar a que se traduzcan.",
+    ],
+  },
+  {
     version: "v135",
     fecha: "2026-08-03",
     titulo: "Muchas más noticias en español",

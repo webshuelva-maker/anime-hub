@@ -50,8 +50,32 @@ export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja marge
  *   145 de golpe; sin tope, se comía el feed entero y todo llegaba en
  *   inglés por mucho medio español que hubiera.
  */
-export const FEEDS = [
-  // ---------- Prensa en español (sin coste de traducción) ----------
+export interface Fuente {
+  urls: string[];
+  platform: string;
+  label: string;
+  language: "en" | "es";
+  tier?: "oficial" | "rumor";
+  soloAnime?: boolean;
+}
+
+/*
+ * ¿Se incluyen las fuentes en inglés?
+ *
+ * Puesto a false a petición del usuario: con ellas dentro, Anime News
+ * Network sola aportaba 145 noticias y arrasaba con las españolas, así
+ * que el feed seguía saliendo casi entero en inglés — y traducirlo era
+ * justo lo que se quería dejar de pagar.
+ *
+ * Se dejan escritas y no borradas: volver a activarlas es cambiar este
+ * valor a true. Ten en cuenta lo que implica: TODAS las fuentes de
+ * rumores y filtraciones están en inglés, así que con esto en false el
+ * feed solo trae noticias confirmadas.
+ */
+const INCLUIR_INGLES = false;
+
+const FUENTES_ES: Fuente[] = [
+  // ---------- Medios españoles de anime ----------
   {
     urls: [
       "https://cr-news-api-service.prd.crunchyrollsvc.com/v1/es-ES/rss",
@@ -59,36 +83,60 @@ export const FEEDS = [
     ],
     platform: "Crunchyroll News",
     label: "Ver en Crunchyroll",
-    language: "es" as const,
-    tier: "oficial" as const,
+    language: "es",
+    tier: "oficial",
   },
-  { urls: ["https://ramenparados.com/feed/", "https://ramenparados.com/feed/rss/"], platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es" as const, tier: "oficial" as const },
-  { urls: ["https://koi-nya.net/feed/", "https://koi-nya.net/?feed=rss2"], platform: "Koi-Nya", label: "Ver en Koi-Nya", language: "es" as const, tier: "oficial" as const },
-  { urls: ["https://somoskudasai.com/feed/", "https://somoskudasai.com/?feed=rss2", "https://somoskudasai.com/noticias/feed/"], platform: "Somos Kudasai", label: "Ver en Somos Kudasai", language: "es" as const, tier: "oficial" as const },
-  { urls: ["https://www.misiontokyo.com/feed/", "https://misiontokyo.com/?feed=rss2"], platform: "Misión Tokyo", label: "Ver en Misión Tokyo", language: "es" as const, tier: "oficial" as const },
-  { urls: ["https://anmosugoi.com/feed/", "https://anmosugoi.com/?feed=rss2"], platform: "AnmoSugoi", label: "Ver en AnmoSugoi", language: "es" as const, tier: "oficial" as const },
+  { urls: ["https://somoskudasai.com/noticias/feed/", "https://somoskudasai.com/feed/"], platform: "Somos Kudasai", label: "Ver en Somos Kudasai", language: "es", tier: "oficial" },
+  { urls: ["https://ramenparados.com/feed/", "https://ramenparados.com/feed/rss/"], platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es", tier: "oficial" },
+  { urls: ["https://anmosugoi.com/feed/", "https://anmosugoi.com/?feed=rss2"], platform: "AnmoSugoi", label: "Ver en AnmoSugoi", language: "es", tier: "oficial" },
+  { urls: ["https://koi-nya.net/feed/", "https://koi-nya.net/?feed=rss2"], platform: "Koi-Nya", label: "Ver en Koi-Nya", language: "es", tier: "oficial" },
+  {
+    urls: [
+      "https://www.misiontokyo.com/feed/rss/",
+      "https://www.misiontokyo.com/?feed=rss2",
+      "https://misiontokyo.com/feed/",
+    ],
+    platform: "Misión Tokyo",
+    label: "Ver en Misión Tokyo",
+    language: "es",
+    tier: "oficial",
+  },
 
   // ---------- Generalistas españoles, filtrados a anime ----------
-  { urls: ["https://vandal.elespanol.com/xml.cgi/noticias.xml"], platform: "Vandal", label: "Ver en Vandal", language: "es" as const, tier: "oficial" as const, soloAnime: true },
-  { urls: ["https://as.com/rss/meristation/portada.xml"], platform: "Meristation", label: "Ver en Meristation", language: "es" as const, tier: "oficial" as const, soloAnime: true },
-  { urls: ["https://www.hobbyconsolas.com/rss", "https://www.hobbyconsolas.com/rss/portada.xml", "https://www.hobbyconsolas.com/feed"], platform: "Hobby Consolas", label: "Ver en Hobby Consolas", language: "es" as const, tier: "oficial" as const, soloAnime: true },
-  { urls: ["https://www.3djuegos.com/rss/noticias.xml", "https://www.3djuegos.com/rss/", "https://www.3djuegos.com/feed/"], platform: "3DJuegos", label: "Ver en 3DJuegos", language: "es" as const, tier: "oficial" as const, soloAnime: true },
-  { urls: ["https://www.vidaextra.com/feedburner.xml"], platform: "Vida Extra", label: "Ver en Vida Extra", language: "es" as const, tier: "oficial" as const, soloAnime: true },
-  { urls: ["https://es.ign.com/feed.xml"], platform: "IGN España", label: "Ver en IGN España", language: "es" as const, tier: "oficial" as const, soloAnime: true },
-
-  // ---------- Referencia internacional (se traducen) ----------
-  { urls: ["https://www.animenewsnetwork.com/all/rss.xml"], platform: "Anime News Network", label: "Ver en Anime News Network", language: "en" as const, tier: "oficial" as const },
-  { urls: ["https://myanimelist.net/rss/news.xml"], platform: "MyAnimeList", label: "Ver en MyAnimeList", language: "en" as const, tier: "oficial" as const },
-
-  // ---------- Rumores y filtraciones ----------
-  { urls: ["https://animecorner.me/feed/"], platform: "Anime Corner", label: "Ver en Anime Corner", language: "en" as const, tier: "rumor" as const },
-  { urls: ["https://animesenpai.net/feed/"], platform: "Anime Senpai", label: "Ver en Anime Senpai", language: "en" as const, tier: "rumor" as const },
-  { urls: ["https://comicbook.com/category/anime/feed/"], platform: "ComicBook Anime", label: "Ver en ComicBook", language: "en" as const, tier: "rumor" as const },
-  { urls: ["https://screenrant.com/feed/anime/", "https://screenrant.com/feed/"], platform: "Screen Rant", label: "Ver en Screen Rant", language: "en" as const, tier: "rumor" as const, soloAnime: true },
-  { urls: ["https://www.cbr.com/feed/category/anime-news/"], platform: "CBR", label: "Ver en CBR", language: "en" as const, tier: "rumor" as const },
-  { urls: ["https://gamerant.com/feed/anime/", "https://gamerant.com/feed/"], platform: "Game Rant", label: "Ver en Game Rant", language: "en" as const, tier: "rumor" as const, soloAnime: true },
-  { urls: ["https://www.dexerto.com/anime/feed/"], platform: "Dexerto", label: "Ver en Dexerto", language: "en" as const, tier: "rumor" as const },
+  { urls: ["https://www.hobbyconsolas.com/rss"], platform: "Hobby Consolas", label: "Ver en Hobby Consolas", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://as.com/rss/meristation/portada.xml"], platform: "Meristation", label: "Ver en Meristation", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://es.ign.com/feed.xml"], platform: "IGN España", label: "Ver en IGN España", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://vandal.elespanol.com/xml.cgi/noticias.xml"], platform: "Vandal", label: "Ver en Vandal", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://www.vidaextra.com/feedburner.xml"], platform: "Vida Extra", label: "Ver en Vida Extra", language: "es", tier: "oficial", soloAnime: true },
+  {
+    urls: [
+      "https://www.3djuegos.com/feeds/noticias/",
+      "https://www.3djuegos.com/rss/",
+      "https://www.3djuegos.com/noticias/rss/",
+      "https://www.3djuegos.com/feed/",
+    ],
+    platform: "3DJuegos",
+    label: "Ver en 3DJuegos",
+    language: "es",
+    tier: "oficial",
+    soloAnime: true,
+  },
 ];
+
+/** Desactivadas. Ver INCLUIR_INGLES arriba. */
+const FUENTES_EN: Fuente[] = [
+  { urls: ["https://www.animenewsnetwork.com/all/rss.xml"], platform: "Anime News Network", label: "Ver en Anime News Network", language: "en", tier: "oficial" },
+  { urls: ["https://myanimelist.net/rss/news.xml"], platform: "MyAnimeList", label: "Ver en MyAnimeList", language: "en", tier: "oficial" },
+  { urls: ["https://animecorner.me/feed/"], platform: "Anime Corner", label: "Ver en Anime Corner", language: "en", tier: "rumor" },
+  { urls: ["https://animesenpai.net/feed/"], platform: "Anime Senpai", label: "Ver en Anime Senpai", language: "en", tier: "rumor" },
+  { urls: ["https://comicbook.com/category/anime/feed/"], platform: "ComicBook Anime", label: "Ver en ComicBook", language: "en", tier: "rumor" },
+  { urls: ["https://screenrant.com/feed/anime/"], platform: "Screen Rant", label: "Ver en Screen Rant", language: "en", tier: "rumor", soloAnime: true },
+  { urls: ["https://www.cbr.com/feed/category/anime-news/"], platform: "CBR", label: "Ver en CBR", language: "en", tier: "rumor" },
+  { urls: ["https://gamerant.com/feed/anime/"], platform: "Game Rant", label: "Ver en Game Rant", language: "en", tier: "rumor", soloAnime: true },
+  { urls: ["https://www.dexerto.com/anime/feed/"], platform: "Dexerto", label: "Ver en Dexerto", language: "en", tier: "rumor" },
+];
+
+export const FEEDS: Fuente[] = INCLUIR_INGLES ? [...FUENTES_ES, ...FUENTES_EN] : FUENTES_ES;
 
 /*
  * Cabeceras de navegador normal.
@@ -111,7 +159,7 @@ const CABECERAS_NAVEGADOR = {
  * anime o manga. Se mira en el titular y en el resumen.
  */
 const PALABRAS_ANIME =
-  /\b(anime|manga|manhwa|otaku|shonen|shōnen|shojo|seinen|isekai|crunchyroll|studio ghibli|ghibli|jujutsu|dragon ball|one piece|naruto|bleach|demon slayer|kimetsu|chainsaw man|evangelion|pokémon anime|shingeki|attack on titan|my hero academia|spy x family|solo leveling|jump|shueisha|kodansha|toei|mappa|ufotable|madhouse|bones|wit studio|cloverworks)\b/i;
+  /\b(anime|animes|manga|mangas|manhwa|manhua|otaku|shonen|shōnen|shojo|sh[óo]jo|seinen|josei|isekai|mecha|waifu|cosplay|crunchyroll|netflix anime|studio ghibli|ghibli|jujutsu|dragon ball|one piece|naruto|boruto|bleach|demon slayer|kimetsu|chainsaw man|evangelion|shingeki|attack on titan|my hero academia|boku no hero|spy x family|solo leveling|frieren|oshi no ko|blue lock|tokyo revengers|hunter x hunter|fullmetal|death note|sailor moon|doraemon|shin chan|pok[ée]mon|digimon|gundam|sakura|jump|shueisha|kodansha|shogakukan|toei|mappa|ufotable|madhouse|bones|wit studio|cloverworks|kyoto animation|trigger|pierrot|sunrise|aniplex|vertical garden|panini manga|norma editorial|ivr[ée]a|planeta c[óo]mic|selecta visi[óo]n)\b/i;
 
 function decodeEntities(raw: string): string {
   return raw
@@ -278,15 +326,6 @@ function dedupeAgainstTitle(text: string, title: string): string {
   return text;
 }
 
-export interface Fuente {
-  urls: string[];
-  platform: string;
-  label: string;
-  language: "en" | "es";
-  tier?: "oficial" | "rumor";
-  soloAnime?: boolean;
-}
-
 /**
  * Descarga el RSS probando las direcciones de la fuente EN ORDEN hasta
  * que una funcione.
@@ -307,7 +346,11 @@ export async function descargarRss(
       const res = await fetch(url, {
         headers: CABECERAS_NAVEGADOR,
         next: { revalidate: 900 },
-        signal: AbortSignal.timeout(12000),
+        // Seis segundos. Con doce, una fuente colgada (Koi-Nya tardaba
+        // veinticuatro) retrasaba TODO el feed, porque el conjunto tarda
+        // lo que la más lenta. Más vale perder una fuente lenta que
+        // hacer esperar al usuario.
+        signal: AbortSignal.timeout(6000),
       });
       if (!res.ok) {
         ultimoEstado = `HTTP ${res.status}`;
