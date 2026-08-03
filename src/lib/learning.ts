@@ -201,7 +201,17 @@ export function removeAnimeInterest(title: string): void {
 export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
   let score = 0;
 
-  if (prefs.likedNewsIds.includes(item.id)) score += 100; // ya lo marcó, siempre arriba
+  /*
+   * Una noticia que ya marcaste con ♡ NO se queda clavada arriba para
+   * siempre. Antes valía 100 puntos, tanto que noticias de hace dos
+   * semanas seguían encabezando el feed: al usuario le salía como
+   * "novedad" algo que ya había leído y marcado.
+   *
+   * El ♡ sigue contando —y mucho— pero donde de verdad sirve: enseñando
+   * a la app tus géneros, estudios y títulos. Aquí solo queda un empujón
+   * suave para que puedas reencontrarla.
+   */
+  if (prefs.likedNewsIds.includes(item.id)) score += 10;
 
   if (
     prefs.favoriteTitles.some((title) =>
@@ -231,12 +241,38 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
     }
   });
 
-  item.genres.forEach((g) => {
-    score += prefs.genreInteractionCounts[g] ?? 0;
-  });
-  item.studios.forEach((s) => {
-    score += prefs.studioInteractionCounts[s] ?? 0;
-  });
+  /*
+   * Afinidad acumulada, NORMALIZADA. Este era el fallo gordo del orden.
+   *
+   * Antes se sumaba el contador tal cual: si de tanto usar la app tenías
+   * "Acción" con 40 puntos, cualquier noticia de acción se llevaba 40 de
+   * golpe, y con tres géneros coincidentes se plantaba en 120. Contra
+   * eso, la popularidad (máximo 25) o un favorito (40) no pintaban nada.
+   *
+   * Y lo peor: los géneros no distinguen. "Acción" encaja igual con One
+   * Piece que con una serie que no conoce nadie, así que el feed se
+   * llenaba de títulos desconocidos que casualmente compartían género.
+   *
+   * Ahora cada género vale según lo que te gusta EN RELACIÓN a lo demás
+   * (0 a 1 comparado con tu género más fuerte), y el total está acotado.
+   * Así sigue mandando lo que te gusta, pero deja sitio para desempatar.
+   */
+  const maxGenero = Math.max(1, ...Object.values(prefs.genreInteractionCounts));
+  const maxEstudio = Math.max(1, ...Object.values(prefs.studioInteractionCounts));
+
+  const afinidadGeneros = item.genres
+    .map((g) => (prefs.genreInteractionCounts[g] ?? 0) / maxGenero)
+    .sort((a, b) => b - a)
+    .slice(0, 3) // más de tres géneros coincidentes no dicen nada nuevo
+    .reduce((a, b) => a + b, 0);
+  score += afinidadGeneros * 12;
+
+  const afinidadEstudios = item.studios
+    .map((st) => (prefs.studioInteractionCounts[st] ?? 0) / maxEstudio)
+    .sort((a, b) => b - a)
+    .slice(0, 2)
+    .reduce((a, b) => a + b, 0);
+  score += afinidadEstudios * 8;
 
   // Preferencias explícitas del cuestionario antiguo (si el usuario las
   // rellenó alguna vez en Preferencias) siguen contando, pero poco: son la
@@ -275,7 +311,7 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
    * por popularidad—, pero cuando dos noticias te encajan igual de bien,
    * gana la que reconoces.
    */
-  const SUELO_POPULARIDAD = 0.35;
+  const SUELO_POPULARIDAD = 0.5;
   const popularityWeight = Math.max(
     SUELO_POPULARIDAD,
     1 - totalAffinitySignal / COLD_START_THRESHOLD
@@ -301,7 +337,22 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
     // One Piece, y entonces el orden apenas cambiaba. Con la raíz, lo
     // desconocido saca migajas y lo muy conocido saca el máximo.
     const escala = Math.min(1, Math.sqrt(item.popularity / 150000));
-    score += escala * popularityWeight * 25;
+    score += escala * popularityWeight * 30;
+  }
+
+  /*
+   * Frescura. Esto faltaba por completo, y en una app de NOTICIAS es
+   * grave: nada impedía que una noticia de hace dos semanas encabezara
+   * el feed solo porque encajaba bien con tus gustos.
+   *
+   * Lo de hoy suma 20 puntos, lo de ayer unos 16, y a partir de cinco
+   * días ya no suma nada. No hunde lo antiguo —si te interesa mucho,
+   * sigue subiendo por sus otros puntos— pero a igualdad de interés
+   * gana lo reciente, que es lo que se espera al abrir un feed.
+   */
+  const horas = (Date.now() - new Date(item.publishedAt).getTime()) / 3_600_000;
+  if (Number.isFinite(horas) && horas >= 0) {
+    score += Math.max(0, 20 - horas / 6);
   }
 
   return score;

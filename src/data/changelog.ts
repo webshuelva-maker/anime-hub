@@ -23,6 +23,18 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v131",
+    fecha: "2026-08-03",
+    titulo: "El feed vuelve a tener sentido",
+    intro: "Tres arreglos en cómo se ordenan las noticias.",
+    puntos: [
+      "Las series conocidas ya no quedan enterradas: antes un género con mucho uso se llevaba tantos puntos que aplastaba todo lo demás.",
+      "Las noticias recientes suben: lo de hoy va por delante de lo de hace dos semanas.",
+      "Una noticia que marcaste con ♡ ya no se queda clavada arriba para siempre.",
+      "Los ♡ que das en el móvil aparecen en el ordenador al volver a la pestaña, sin recargar.",
+    ],
+  },
+  {
     version: "v119",
     fecha: "2026-08-02",
     titulo: "El feed reconoce mejor de qué serie habla cada noticia",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { pullCloudState } from "@/lib/cloudSync";
+import { pullCloudState, iniciarSincronizacionAlVolver } from "@/lib/cloudSync";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -21,6 +21,7 @@ export function CloudSyncGate() {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
 
     void pullCloudState();
+    const pararEscucha = iniciarSincronizacionAlVolver();
 
     const supabase = createClient();
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
@@ -29,7 +30,10 @@ export function CloudSyncGate() {
       }
     });
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      sub.subscription.unsubscribe();
+      pararEscucha();
+    };
   }, []);
 
   return null;

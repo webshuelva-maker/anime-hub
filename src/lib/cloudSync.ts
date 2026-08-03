@@ -127,6 +127,37 @@ export async function pullCloudState(): Promise<boolean> {
 }
 
 /** Borra el estado guardado en la nube (al borrar todo desde Ajustes). */
+/**
+ * Vuelve a mirar la nube cuando el usuario regresa a la pestaña.
+ *
+ * Antes solo se bajaba el estado al cargar la página y al iniciar
+ * sesión. Si dabas un ♡ en el móvil y tenías el ordenador abierto, ahí
+ * seguía la versión vieja hasta que recargaras — podían pasar horas.
+ * Ahora, cada vez que vuelves a la pestaña (y como mucho una vez cada
+ * 20 segundos, para no machacar a Supabase), se comprueba si hay algo
+ * más nuevo.
+ */
+let ultimaComprobacion = 0;
+
+export function iniciarSincronizacionAlVolver(): () => void {
+  if (typeof window === "undefined" || !hasSupabase()) return () => {};
+
+  const comprobar = () => {
+    if (document.visibilityState !== "visible") return;
+    const ahora = Date.now();
+    if (ahora - ultimaComprobacion < 20_000) return;
+    ultimaComprobacion = ahora;
+    void pullCloudState();
+  };
+
+  document.addEventListener("visibilitychange", comprobar);
+  window.addEventListener("focus", comprobar);
+  return () => {
+    document.removeEventListener("visibilitychange", comprobar);
+    window.removeEventListener("focus", comprobar);
+  };
+}
+
 export async function clearCloudState(): Promise<void> {
   if (typeof window === "undefined" || !hasSupabase()) return;
   try {
