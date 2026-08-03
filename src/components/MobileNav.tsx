@@ -9,6 +9,7 @@ import { Avatar } from "./AvatarPicker";
 import { playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
 import { ULTIMA_VERSION } from "@/data/changelog";
+import { useEsAdmin } from "@/lib/useEsAdmin";
 
 /**
  * Barra de navegación inferior, solo en móvil.
@@ -55,6 +56,22 @@ const TABS = [
   },
 ];
 
+/*
+ * Pestaña de moderación. Va aparte de TABS porque solo la ve quien es
+ * administrador: para todos los demás la barra sigue teniendo cuatro
+ * columnas exactas y no cambia nada.
+ */
+const TAB_MODERACION = {
+  href: "/admin/soporte",
+  label: "Moderar",
+  icon: (
+    <>
+      <path d="M12 3l7 3v5.5c0 4.2-2.9 7.6-7 8.5-4.1-.9-7-4.3-7-8.5V6l7-3Z" />
+      <path d="M9.5 12l1.8 1.8 3.4-3.6" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+};
+
 export function MobileNav() {
   const pathname = usePathname();
   const [avatarId, setAvatarId] = useState("a1");
@@ -73,7 +90,13 @@ export function MobileNav() {
     return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, refresh);
   }, [pathname]);
 
+  const esAdmin = useEsAdmin();
   const perfilActivo = pathname?.startsWith("/perfil");
+
+  // Con la pestaña de moderación son cinco columnas en vez de cuatro, así
+  // que cada una se estrecha: se recorta el texto un pelín para que
+  // "Tus gustos" no se parta en dos líneas en pantallas pequeñas.
+  const tabs = esAdmin ? [...TABS, TAB_MODERACION] : TABS;
 
   return (
     <nav
@@ -106,7 +129,7 @@ export function MobileNav() {
             "linear-gradient(to bottom, color-mix(in srgb, var(--background) 62%, transparent), color-mix(in srgb, var(--background) 88%, transparent))",
         }}
       >
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = pathname?.startsWith(tab.href);
           return (
             <Link
@@ -141,7 +164,7 @@ export function MobileNav() {
                 {tab.icon}
               </svg>
               <span
-                className={`text-[10px] leading-none ${active ? "font-semibold text-foreground" : "text-muted"}`}
+                className={`${esAdmin ? "text-[9px]" : "text-[10px]"} leading-none ${active ? "font-semibold text-foreground" : "text-muted"}`}
               >
                 {tab.label}
               </span>
@@ -177,7 +200,7 @@ export function MobileNav() {
             )}
           </span>
           <span
-            className={`text-[10px] leading-none ${perfilActivo ? "font-semibold text-foreground" : "text-muted"}`}
+            className={`${esAdmin ? "text-[9px]" : "text-[10px]"} leading-none ${perfilActivo ? "font-semibold text-foreground" : "text-muted"}`}
           >
             Perfil
           </span>

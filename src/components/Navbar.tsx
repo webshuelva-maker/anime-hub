@@ -9,7 +9,10 @@ import { Avatar } from "./AvatarPicker";
 import { FullscreenButton } from "./FullscreenButton";
 import { BrandMark } from "./BrandMark";
 import { playToggle, playHover, playClick } from "@/lib/sound";
+import { useEsAdmin } from "@/lib/useEsAdmin";
 import { ULTIMA_VERSION } from "@/data/changelog";
+
+const LINK_MODERACION = { href: "/admin/soporte", label: "Moderación" };
 
 const LINKS = [
   { href: "/noticias", label: "Noticias" },
@@ -19,6 +22,7 @@ const LINKS = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const esAdmin = useEsAdmin();
   const [avatarId, setAvatarId] = useState("a1");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [hayNovedades, setHayNovedades] = useState(false);
@@ -34,6 +38,9 @@ export function Navbar() {
     window.addEventListener(PREFERENCES_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, refresh);
   }, [pathname]);
+
+  // Solo para administradores; el resto ni ve el enlace.
+  const enlaces = esAdmin ? [...LINKS, LINK_MODERACION] : LINKS;
 
   return (
     <header data-chrome-app className="sticky top-0 z-20 border-b border-panel-border/70 bg-background/85 backdrop-blur-md">
@@ -55,7 +62,7 @@ export function Navbar() {
             (MobileNav): arriba se queda solo el emblema, que es lo que
             pidió el usuario y además libera toda la fila para el título. */}
         <nav className="hidden min-w-0 items-center gap-0.5 sm:flex sm:gap-6">
-          {LINKS.map((link) => {
+          {enlaces.map((link) => {
             const active = pathname?.startsWith(link.href);
             return (
               <Link

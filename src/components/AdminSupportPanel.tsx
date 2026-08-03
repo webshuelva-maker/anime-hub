@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { legalConfig } from "@/config/legal";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +15,7 @@ import {
   cerrarTicket,
   enviarMensaje,
   escucharMensajes,
+  escucharCambiosTickets,
   escucharTicketsNuevos,
   esAdministrador,
   getMensajes,
@@ -38,6 +40,7 @@ function haceCuanto(iso: string): string {
 export function AdminSupportPanel() {
   const [esAdmin, setEsAdmin] = useState<boolean | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [activo, setActivo] = useState<Ticket | null>(null);
   const [mensajes, setMensajes] = useState<MensajeSoporte[]>([]);
@@ -55,6 +58,22 @@ export function AdminSupportPanel() {
       }
     })();
   }, []);
+
+  // Los tickets cerrados (por el usuario o por otro administrador)
+  // desaparecen solos de la lista. Antes solo se escuchaban los nuevos,
+  // así que una consulta cerrada se quedaba ahí como pendiente para
+  // siempre hasta recargar la página.
+  useEffect(() => {
+    if (!esAdmin) return;
+    return escucharCambiosTickets((t) => {
+      if (t.estado === "cerrado") {
+        setTickets((prev) => prev.filter((x) => x.id !== t.id));
+        setActivo((prev) => (prev?.id === t.id ? null : prev));
+      } else {
+        setTickets((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+      }
+    });
+  }, [esAdmin]);
 
   useEffect(() => {
     if (!esAdmin) return;
@@ -96,6 +115,22 @@ export function AdminSupportPanel() {
       setTickets((prev) => prev.map((x) => (x.id === t.id ? { ...x, estado: "atendido" } : x)));
     }
   };
+
+  // Si se llega desde una notificación (/admin/soporte?ticket=...), se
+  // abre directamente esa conversación en vez de dejar la lista y que
+  // haya que buscarla a mano. Va DESPUÉS de definir "abrir": si se
+  // declara antes, se estaría usando una función que aún no existe.
+  const ticketPedido = searchParams.get("ticket");
+  const yaAbiertoRef = useRef(false);
+  useEffect(() => {
+    if (!ticketPedido || yaAbiertoRef.current || tickets.length === 0) return;
+    const encontrado = tickets.find((t) => t.id === ticketPedido);
+    if (encontrado) {
+      yaAbiertoRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void abrir(encontrado);
+    }
+  }, [ticketPedido, tickets]);
 
   const responder = async () => {
     const contenido = texto.trim();

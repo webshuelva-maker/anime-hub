@@ -233,11 +233,42 @@ export function SupportChat() {
       {/* Cabecera: quién hay al otro lado, según el estado real */}
       <div className="flex items-center gap-3 border-b border-panel-border px-5 py-4">
         <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+          className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
             atendido ? "border-ice/40 ice-text" : "border-panel-border text-muted"
           }`}
         >
-          {atendido ? legalConfig.soporteNombre.slice(0, 1) : "·"}
+          {atendido ? (
+            legalConfig.soporteNombre.slice(0, 1)
+          ) : (
+            <>
+              {/* Anillo que late hacia fuera: se ve de lejos que algo
+                  está pasando. Antes había un punto de 1,5px que apenas
+                  se distinguía del borde. */}
+              <motion.span
+                aria-hidden
+                className="absolute inset-0 rounded-full border border-ice/50"
+                animate={{ scale: [1, 1.45], opacity: [0.55, 0] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
+              />
+              {/* Tres puntos que suben por turnos, como un "escribiendo…" */}
+              <span className="flex items-end gap-[3px]">
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="block h-[5px] w-[5px] rounded-full"
+                    style={{ background: "var(--ice)" }}
+                    animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{
+                      duration: 1.1,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: i * 0.18,
+                    }}
+                  />
+                ))}
+              </span>
+            </>
+          )}
         </span>
         <div className="min-w-0">
           {atendido ? (

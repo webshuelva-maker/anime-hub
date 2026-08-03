@@ -120,6 +120,16 @@ export async function enviarMensaje(
       .from("support_tickets")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", ticketId);
+
+    // Aviso a la otra parte. Va aquí y no en cada componente para que
+    // valga igual desde el chat del usuario y desde el panel de
+    // moderación, sin poder olvidarse en uno de los dos. Si falla no
+    // importa: el mensaje ya está guardado y se verá igual al abrir.
+    void fetch("/api/push/mensaje", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticketId, rolEmisor: rol, texto: contenido.trim() }),
+    }).catch(() => {});
   }
   return !error;
 }
@@ -204,6 +214,23 @@ export function escucharTicketsNuevos(alLlegar: (t: Ticket) => void): () => void
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "support_tickets" },
       (payload) => alLlegar(payload.new as Ticket)
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(canal);
+  };
+}
+
+/** Escucha cambios de estado en cualquier ticket, para el panel. */
+export function escucharCambiosTickets(alCambiar: (t: Ticket) => void): () => void {
+  const supabase = createClient();
+  const canal = supabase
+    .channel("tickets-cambios")
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "support_tickets" },
+      (payload) => alCambiar(payload.new as Ticket)
     )
     .subscribe();
 
