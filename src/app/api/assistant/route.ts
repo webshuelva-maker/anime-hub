@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
   // confirmado, los rumores, los matices), así que se le da más margen
   // que en una charla normal — pero solo en ese caso, para no gastar
   // presupuesto de tokens de más en el resto de mensajes.
-  const maxTokens = researchText ? 750 : 420;
+  const maxTokens = researchText ? 1100 : 700;
   const attempt = await callModel(apiKey, model, systemPrompt, messages, maxTokens);
 
   if (!attempt.ok) {

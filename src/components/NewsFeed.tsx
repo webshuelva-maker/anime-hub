@@ -7,6 +7,7 @@ import { NewsThumb } from "./NewsThumb";
 import { NewsDetail } from "./NewsDetail";
 import { FirstLoadOverlay } from "./FirstLoadOverlay";
 import { PullToRefresh } from "./PullToRefresh";
+import { SinNoticias } from "./SinNoticias";
 import { vibrar } from "@/lib/haptics";
 import { ReliabilityBadge } from "./ReliabilityBadge";
 import { getPreferences, DEFAULT_PREFERENCES } from "@/lib/storage";
@@ -729,18 +730,7 @@ export function NewsFeed() {
               Noticias recientes
             </p>
             {searchResults.length === 0 ? (
-              <p className="panel rounded-xl p-8 text-center text-sm text-muted">
-                {(() => {
-                  const known = animeResults[0];
-                  if (known?.status === "FINISHED" && known.endYear) {
-                    return `No hay noticias recientes sobre "${searchTerm}". La serie terminó en ${known.endYear}, así que ya no suelen salir noticias nuevas sobre ella. No tienes que estar pendiente. Si sale algo, lo verás solo en la sección de Noticias.`;
-                  }
-                  if (known?.status === "NOT_YET_RELEASED") {
-                    return `"${searchTerm}" todavía no se ha estrenado, así que de momento no hay noticias recientes sobre ella. Cuando se acerque la fecha, deberían empezar a salir en la sección de Noticias.`;
-                  }
-                  return `No hay noticias recientes disponibles sobre "${searchTerm}" ahora mismo.`;
-                })()}
-              </p>
+              <SinNoticias termino={searchTerm} ficha={animeResults[0]} />
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {searchResults.map(({ item, score }) => (

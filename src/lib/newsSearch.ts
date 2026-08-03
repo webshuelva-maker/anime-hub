@@ -181,7 +181,9 @@ export async function searchNews(
   limit = 10
 ): Promise<{ hits: NewsHit[]; debug: string }> {
   const jobs: { label: string; url: string }[] = [];
-  for (const q of queries.slice(0, 2)) {
+  // Tres consultas en vez de dos: al no haber traducción compitiendo por
+  // la cuota, se puede buscar más y contrastar mejor.
+  for (const q of queries.slice(0, 3)) {
     if (!q.trim()) continue;
     jobs.push({ label: "google-en", url: googleNewsUrl(q, "en") });
     jobs.push({ label: "google-es", url: googleNewsUrl(q, "es") });

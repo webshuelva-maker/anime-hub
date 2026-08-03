@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v141",
+    fecha: "2026-08-03",
+    titulo: "Iris con vía libre",
+    puntos: [
+      "Iris puede buscar en más sitios y explicarse más largo: la cuota que se iba en traducir es ahora suya.",
+      "Cuando una búsqueda no tiene noticias, se te explica por qué y puedes seguir la serie desde ahí.",
+    ],
+  },
+  {
     version: "v140",
     fecha: "2026-08-03",
     titulo: "El artículo entero, al instante",

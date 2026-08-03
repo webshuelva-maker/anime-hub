@@ -207,7 +207,17 @@ export async function POST(req: NextRequest) {
             model: PRIMARY_MODEL,
             messages: [{ role: "system", content: systemPrompt }, ...messages],
             temperature: 0.6,
-            max_tokens: researchText ? 700 : 420,
+            /*
+             * Márgenes al alza.
+             *
+             * Estos números estaban apretados para dejar cuota libre a la
+             * traducción del feed, que se comía la mayor parte. Con las
+             * fuentes en español ya no hay traducción, así que la cuota
+             * es prácticamente toda para el asistente: puede explicarse
+             * con calma y separar bien lo confirmado de lo que se rumorea
+             * sin quedarse a media frase.
+             */
+            max_tokens: researchText ? 1100 : 700,
             stream: true,
           }),
         });
