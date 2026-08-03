@@ -20,8 +20,31 @@ const ANILIST_URL = "https://graphql.anilist.co";
 const TTL_MS = 6 * 60 * 60 * 1000; // seis horas: la popularidad se mueve muy despacio
 
 export interface DatosTitulo {
-  /** Identificador de la obra en AniList: dos títulos distintos de la misma serie comparten id. */
+  /** Identificador de la ficha en AniList. */
   anilistId: number | null;
+  /*
+   * Título original en romaji.
+   *
+   * Es lo que de verdad identifica la OBRA, y no el id: AniList tiene
+   * fichas separadas para el anime y para el manga de la misma serie, con
+   * ids distintos (Chained Soldier cayó en la 141821 y Mato Seihei no
+   * Slave en la 106064, siendo la misma historia). Las dos fichas sí
+   * comparten el romaji "Mato Seihei no Slave", así que comparando esto
+   * se detectan las noticias repetidas con el título japonés en un medio
+   * y el internacional en otro.
+   */
+  tituloCanonico: string | null;
+  /*
+   * Carátula oficial de AniList.
+   *
+   * Se pide AQUÍ, en el mismo lote, y no una por una desde /api/enrich.
+   * Ese camino solo cubría las 9 primeras noticias, con 3 segundos de
+   * margen y con la consulta que devuelve 404 al no encontrar — por eso
+   * la mayoría se quedaba con una fotografía genérica sin relación con
+   * la noticia. En el lote ya se resuelve el título igualmente, así que
+   * la carátula sale gratis y para todas.
+   */
+  coverImageUrl: string | null;
   popularity: number | null;
   genres: string[];
   studios: string[];
@@ -83,6 +106,8 @@ ${titulos
     (t, i) => `  t${i}: Page(perPage: 1) {
     media(search: "${escapar(t)}", sort: SEARCH_MATCH) {
       id
+      title { romaji }
+      coverImage { extraLarge large }
       popularity
       genres
       studios(isMain: true) { nodes { name } }
@@ -132,6 +157,8 @@ ${titulos
       if (!m) return;
       resultado.set(claveDe(t), {
         anilistId: typeof m.id === "number" ? m.id : null,
+        tituloCanonico: typeof m.title?.romaji === "string" ? m.title.romaji : null,
+        coverImageUrl: m.coverImage?.extraLarge ?? m.coverImage?.large ?? null,
         popularity: typeof m.popularity === "number" ? m.popularity : null,
         genres: Array.isArray(m.genres) ? m.genres : [],
         studios: (m.studios?.nodes ?? []).map((s: { name: string }) => s.name),

@@ -1,13 +1,21 @@
 const ANILIST_URL = "https://graphql.anilist.co";
 
+/*
+ * Se pregunta con Page(...) { media(...) } y no con Media(...) directo,
+ * por el mismo motivo que en popularity.ts: con Media, un título que no
+ * existe hace que AniList responda 404 y no devuelva nada. Con Page, no
+ * encontrar nada es una lista vacía, que es una respuesta normal.
+ */
 const QUERY = `
 query ($search: String, $type: MediaType) {
-  Media(search: $search, type: $type) {
-    coverImage {
-      extraLarge
-      large
+  Page(perPage: 1) {
+    media(search: $search, type: $type, sort: SEARCH_MATCH) {
+      coverImage {
+        extraLarge
+        large
+      }
+      popularity
     }
-    popularity
   }
 }`;
 
@@ -18,7 +26,9 @@ interface AniListMatch {
 
 async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promise<AniListMatch> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+  // 3 segundos se quedaban cortos y muchas carátulas se perdían por
+  // tiempo agotado; nadie está esperando esta imagen con un cronómetro.
+  const timeout = setTimeout(() => controller.abort(), 7000);
 
   try {
     const res = await fetch(ANILIST_URL, {
@@ -31,10 +41,11 @@ async function searchAniList(searchText: string, type: "ANIME" | "MANGA"): Promi
       body: JSON.stringify({ query: QUERY, variables: { search: searchText, type } }),
       signal: controller.signal,
     });
-    if (!res.ok) return { cover: null, popularity: null };
-    const data = await res.json();
-    const cover = data?.data?.Media?.coverImage?.extraLarge || data?.data?.Media?.coverImage?.large;
-    const popularity = typeof data?.data?.Media?.popularity === "number" ? data.data.Media.popularity : null;
+    const data = await res.json().catch(() => null);
+    const m = data?.data?.Page?.media?.[0];
+    if (!m) return { cover: null, popularity: null };
+    const cover = m.coverImage?.extraLarge || m.coverImage?.large;
+    const popularity = typeof m.popularity === "number" ? m.popularity : null;
     return { cover: cover ?? null, popularity };
   } catch {
     return { cover: null, popularity: null };

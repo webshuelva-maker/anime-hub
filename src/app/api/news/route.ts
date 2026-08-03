@@ -295,6 +295,7 @@ export async function GET() {
    * ordenarse solo por fecha, como antes.
    */
   let items = itemsBrutos;
+  let quitadasPorObra = 0;
   try {
     const datos = await datosDeTitulos(items.map((i) => i.relatedTitle));
     for (const item of items) {
@@ -305,6 +306,11 @@ export async function GET() {
         item.prominence = d.popularity >= 20000 ? "mainstream" : "indie";
       }
       if (typeof d.anilistId === "number") item.anilistId = d.anilistId;
+      if (d.tituloCanonico) item.tituloCanonico = d.tituloCanonico;
+      // La carátula oficial manda sobre la imagen que traiga el feed:
+      // los medios suelen poner un fotograma suelto o su propio logo, y
+      // la portada de AniList es la de la obra.
+      if (d.coverImageUrl) item.coverImageUrl = d.coverImageUrl;
       if (item.genres.length === 0 && d.genres.length > 0) item.genres = d.genres;
       if (item.studios.length === 0 && d.studios.length > 0) item.studios = d.studios;
     }
@@ -324,15 +330,21 @@ export async function GET() {
      * noticias distintas y las dos deben salir; lo que se quita es la
      * misma historia contada por dos medios el mismo día.
      */
-    const vistasPorObra = new Map<string, string>();
+    const antesDeDeduplicar = items.length;
+    const vistasPorObra = new Set<string>();
     items = items.filter((item) => {
-      if (typeof item.anilistId !== "number") return true;
+      // Se compara el título original (romaji) y NO el id: AniList tiene
+      // fichas separadas para el anime y el manga de la misma serie, con
+      // ids distintos, así que comparar ids no detectaba nada. El romaji
+      // sí coincide en las dos fichas.
+      if (!item.tituloCanonico) return true;
       const dia = item.publishedAt.slice(0, 10);
-      const clave = `${item.anilistId}-${dia}`;
+      const clave = `${normalizarTitular(item.tituloCanonico)}-${dia}`;
       if (vistasPorObra.has(clave)) return false;
-      vistasPorObra.set(clave, item.id);
+      vistasPorObra.add(clave);
       return true;
     });
+    quitadasPorObra = antesDeDeduplicar - items.length;
   } catch {
     // Mejor esfuerzo: sin estos datos el feed sigue funcionando.
   }
@@ -349,6 +361,10 @@ export async function GET() {
     diagnostico: {
       total: items.length,
       conPopularidad,
+      conCaratula: items.filter((i) => !!i.coverImageUrl).length,
+      // Cuántas noticias repetidas se han quitado por ser la misma obra
+      // publicada con el título japonés y el internacional.
+      quitadasPorObra,
       // Los títulos que AniList no ha reconocido, para ver si el problema
       // está en cómo se recorta el titular.
       sinReconocer: items

@@ -47,7 +47,9 @@ export interface NewsItem {
   prominence: Prominence;
   popularity?: number;
   /** Id de la obra en AniList: sirve para detectar la misma noticia publicada con el título japonés y el internacional. */
-  anilistId?: number; // de AniList — cuánta gente tiene el título en su lista, usado para priorizar animes conocidos con usuarios nuevos
+  anilistId?: number;
+  /** Título original en romaji: identifica la obra aunque el anime y el manga tengan fichas distintas. */
+  tituloCanonico?: string; // de AniList — cuánta gente tiene el título en su lista, usado para priorizar animes conocidos con usuarios nuevos
   language?: "en" | "es"; // "es" = ya viene en español (fuentes españolas), no hace falta traducirlo
 }
 
