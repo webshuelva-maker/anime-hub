@@ -49,10 +49,45 @@ export function modeloPotente(): string {
   return proveedorIA() === "gemini" ? "gemini-2.5-flash" : "llama-3.3-70b-versatile";
 }
 
-/** Modelo rápido y barato: charla, clasificar, traducir, trivias. */
+/**
+ * Modelo rápido y barato: charla, clasificar, traducir, trivias.
+ *
+ * En Gemini apunta al MISMO modelo que el potente a propósito. La
+ * versión "lite" que se usaba antes dejó de estar disponible para claves
+ * nuevas (Google retira modelos cada pocos meses), y poner a dedo el
+ * nombre del siguiente es garantía de volver a romperse. Flash ya es
+ * rápido, así que mientras tanto sirve para las dos cosas.
+ *
+ * Si en /api/ia ves un modelo ligero disponible en tu clave, ponlo en la
+ * variable IA_MODELO_RAPIDO y se usará ese: no hace falta tocar código
+ * ni desplegar nada nuevo.
+ */
 export function modeloRapido(): string {
   if (process.env.IA_MODELO_RAPIDO) return process.env.IA_MODELO_RAPIDO;
-  return proveedorIA() === "gemini" ? "gemini-2.5-flash-lite" : "llama-3.1-8b-instant";
+  return proveedorIA() === "gemini" ? "gemini-2.5-flash" : "llama-3.1-8b-instant";
+}
+
+/** Lista los modelos que la clave puede usar de verdad (solo Gemini). */
+export async function modelosDisponibles(clave: string): Promise<string[]> {
+  if (proveedorIA() !== "gemini") return [];
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(clave)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as {
+      models?: { name?: string; supportedGenerationMethods?: string[] }[];
+    };
+    return (json.models ?? [])
+      // Solo los que sirven para conversar: la lista incluye también
+      // modelos de imágenes, de audio y de vectores.
+      .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+      .map((m) => (m.name ?? "").replace(/^models\//, ""))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 /** Cabeceras de la petición. Los dos usan Bearer, así que valen igual. */

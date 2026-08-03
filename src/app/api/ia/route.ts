@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { claveIA, modeloPotente, modeloRapido, proveedorIA, urlIA, cabecerasIA } from "@/lib/ia";
+import {
+  claveIA,
+  modeloPotente,
+  modeloRapido,
+  modelosDisponibles,
+  proveedorIA,
+  urlIA,
+  cabecerasIA,
+} from "@/lib/ia";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -56,7 +64,11 @@ export async function GET() {
     }
   };
 
-  const [potente, rapido] = await Promise.all([probar(modeloPotente()), probar(modeloRapido())]);
+  const [potente, rapido, disponibles] = await Promise.all([
+    probar(modeloPotente()),
+    probar(modeloRapido()),
+    modelosDisponibles(clave),
+  ]);
 
   return NextResponse.json(
     {
@@ -64,6 +76,13 @@ export async function GET() {
       url: urlIA(),
       potente,
       rapido,
+      /*
+       * Los modelos que ESTA clave puede usar. Google retira nombres cada
+       * pocos meses, así que en vez de adivinar cuál poner, aquí se ve la
+       * lista real y se elige con la variable IA_MODELO_RAPIDO.
+       */
+      disponibles: disponibles.filter((m) => /flash|lite|pro/i.test(m)),
+      todosLosModelos: disponibles.length,
     },
     { headers: { "Cache-Control": "no-store" } }
   );

@@ -23,6 +23,14 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v145",
+    fecha: "2026-08-03",
+    titulo: "Ajuste del motor de Iris",
+    puntos: [
+      "Iris ya funciona con Gemini sin fallos por modelos retirados.",
+    ],
+  },
+  {
     version: "v144",
     fecha: "2026-08-03",
     titulo: "Iris cambia de motor",
