@@ -1,6 +1,7 @@
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const PRIMARY_MODEL = "llama-3.3-70b-versatile";
-const FALLBACK_MODEL = "llama-3.1-8b-instant";
+import { urlIA, modeloPotente, modeloRapido, claveIA } from "./ia";
+
+
+
 
 export interface BatchTranslateItem {
   id: string;
@@ -30,7 +31,7 @@ async function callBatch(
   const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(urlIA(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
@@ -116,10 +117,10 @@ async function callBatch(
  * sea true, en cuyo caso usa directamente el de respaldo.
  */
 export async function translateBatch(items: BatchTranslateItem[], preferFallback = false): Promise<BatchTranslateResult[]> {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = claveIA();
   if (!apiKey || items.length === 0) return [];
 
-  const model = preferFallback ? FALLBACK_MODEL : PRIMARY_MODEL;
+  const model = preferFallback ? modeloRapido() : modeloPotente();
   const attempt = await callBatch(items, apiKey, model);
   return attempt.ok ? attempt.results : [];
 }

@@ -1,14 +1,15 @@
+import { urlIA, claveIA } from "@/lib/ia";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
 const MODEL = "llama-3.3-70b-versatile";
 
 export async function GET() {
   try {
-    const key = process.env.GROQ_API_KEY ?? "";
+    const key = claveIA() ?? "";
 
     const base = {
       hasKey: key.length > 0,
@@ -27,7 +28,7 @@ export async function GET() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const res = await fetch(GROQ_URL, {
+      const res = await fetch(urlIA(), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         signal: controller.signal,
@@ -54,7 +55,7 @@ export async function GET() {
       const batchTimeout = setTimeout(() => batchController.abort(), 25000);
       try {
         const sampleItems = [{ id: "prueba-1", title: "Demon Slayer Season 5 Announced", summary: "The studio confirmed a new season is in production." }];
-        const batchRes = await fetch(GROQ_URL, {
+        const batchRes = await fetch(urlIA(), {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
           signal: batchController.signal,

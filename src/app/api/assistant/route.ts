@@ -1,8 +1,6 @@
+import { urlIA, modeloPotente, modeloRapido, claveIA } from "@/lib/ia";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  GROQ_URL,
-  PRIMARY_MODEL,
-  FALLBACK_MODEL,
   ChatMessage,
   buildResearchBlock,
   buildSystemPrompt,
@@ -31,7 +29,7 @@ async function callModel(
   const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
-    const response = await fetch(GROQ_URL, {
+    const response = await fetch(urlIA(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
@@ -94,7 +92,7 @@ async function callModel(
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = claveIA();
 
   if (!apiKey) {
     return NextResponse.json(
@@ -132,7 +130,7 @@ export async function POST(req: NextRequest) {
   });
   const systemPrompt = buildSystemPrompt(context, researchBlock);
 
-  const model = body.preferFallback === true ? FALLBACK_MODEL : PRIMARY_MODEL;
+  const model = body.preferFallback === true ? modeloRapido() : modeloPotente();
   // Con investigación por delante hay bastante más que contar (lo
   // confirmado, los rumores, los matices), así que se le da más margen
   // que en una charla normal — pero solo en ese caso, para no gastar

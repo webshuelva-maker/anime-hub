@@ -1,9 +1,10 @@
+import { urlIA, claveIA } from "@/lib/ia";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
 const MODEL = "llama-3.3-70b-versatile";
 const BATCH_SIZE = 20;
 
@@ -14,7 +15,7 @@ const BATCH_SIZE = 20;
  * carga inicial, nunca debe competir con Ren ni con una traducción real.
  */
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = claveIA();
   if (!apiKey) return NextResponse.json({ facts: [] });
 
   let body: { exclude?: string[]; genres?: string[]; favoriteTitles?: string[] };
@@ -49,7 +50,7 @@ Devuelve ÚNICAMENTE un array JSON de ${BATCH_SIZE} strings, sin numerar, sin te
   const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(urlIA(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,

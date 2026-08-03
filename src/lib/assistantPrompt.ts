@@ -8,9 +8,11 @@ import { siteConfig } from "@/config/site";
  * entre la petición sin que nadie se dé cuenta.
  */
 
-export const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-export const PRIMARY_MODEL = "llama-3.3-70b-versatile";
-export const FALLBACK_MODEL = "llama-3.1-8b-instant";
+/*
+ * La dirección y los modelos ya no viven aquí: los decide el proveedor
+ * configurado, en lib/ia.ts. Cada archivo pide directamente urlIA(),
+ * modeloPotente() o modeloRapido().
+ */
 
 export interface ChatMessage {
   role: "user" | "assistant";

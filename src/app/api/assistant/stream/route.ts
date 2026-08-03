@@ -1,7 +1,6 @@
+import { urlIA, modeloPotente, modeloRapido, claveIA } from "@/lib/ia";
 import { NextRequest } from "next/server";
 import {
-  GROQ_URL,
-  PRIMARY_MODEL,
   ChatMessage,
   buildResearchBlock,
   buildSystemPrompt,
@@ -72,7 +71,7 @@ function createTagFilter() {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = claveIA();
 
   let body: StreamBody;
   try {
@@ -105,7 +104,29 @@ export async function POST(req: NextRequest) {
         // palabras clave. Así da igual el idioma, el vocabulario, las
         // faltas o que la pregunta sea "y la 3?".
         send("step", { id: "intent", label: "Entendiendo la pregunta", status: "running" });
-        const intent = await classifyIntent(apiKey, messages);
+
+        /*
+         * Atajo para la charla evidente.
+         *
+         * Preguntarle a un modelo si "hola" necesita una búsqueda en
+         * internet cuesta una llamada entera y un par de segundos, y la
+         * respuesta es siempre la misma. Esto NO es volver a decidir por
+         * palabras clave si algo es una pregunta: solo se salta cuando el
+         * mensaje es corto, no lleva interrogación y encaja con un
+         * saludo o una cortesía. En cuanto hay la menor duda, decide el
+         * modelo como hasta ahora.
+         */
+        const ultimoMensaje = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+        const esCharlaEvidente =
+          ultimoMensaje.trim().length <= 40 &&
+          !/[?¿]/.test(ultimoMensaje) &&
+          /^\s*(hola|buenas|hey|holi|qu[ée] tal|c[óo]mo (est[áa]s|va)|gracias|vale|ok|adi[óo]s|hasta luego|buenos d[íi]as|buenas (tardes|noches))\b/i.test(
+            ultimoMensaje
+          );
+
+        const intent = esCharlaEvidente
+          ? { needsResearch: false, isAnime: false, topic: "", queries: [], debug: "charla evidente" }
+          : await classifyIntent(apiKey, messages);
         send("step", {
           id: "intent",
           label: "Entendiendo la pregunta",
@@ -200,11 +221,21 @@ export async function POST(req: NextRequest) {
           buildResearchBlock({ researchText, confidenceLine, webFailed })
         );
 
-        const groqRes = await fetch(GROQ_URL, {
+        const groqRes = await fetch(urlIA(), {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: PRIMARY_MODEL,
+            /*
+             * Para charlar, el modelo rápido; para responder con
+             * investigación por delante, el grande.
+             *
+             * El de 70.000 millones de parámetros hace falta para separar
+             * lo confirmado de los rumores sin liarse, pero para "¿qué
+             * tal estás?" solo añade espera: en el plan gratuito de Groq
+             * el grande va con cola y puede tardar diez segundos en
+             * arrancar. El rápido contesta en uno o dos.
+             */
+            model: researchText ? modeloPotente() : modeloRapido(),
             messages: [{ role: "system", content: systemPrompt }, ...messages],
             temperature: 0.6,
             /*

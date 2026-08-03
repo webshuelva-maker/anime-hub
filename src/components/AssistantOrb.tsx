@@ -8,6 +8,7 @@ import { buildAssistantContext } from "@/lib/assistantContext";
 import { useRouter } from "next/navigation";
 import { parseAndRunActions, AssistantAction, AssistantLink } from "@/lib/assistantActions";
 import { ResearchSource } from "@/lib/sourceTiers";
+import { AvisoProactivo } from "./AvisoProactivo";
 import { Confidence } from "@/lib/confidence";
 import { recordAnimeInterest } from "@/lib/learning";
 import { savePreferences } from "@/lib/storage";
@@ -885,6 +886,18 @@ export function AssistantOrb() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Aviso proactivo: si hay novedades de algo que sigue, Iris se
+          asoma solo. Al pulsar "Cuéntamelo" se abre el chat con la
+          pregunta ya escrita, para no tener que teclearla. */}
+      {!open && (
+        <AvisoProactivo
+          onAbrirChat={(texto) => {
+            setOpen(true);
+            setInput(texto);
+          }}
+        />
+      )}
 
       <div
         data-chrome-app

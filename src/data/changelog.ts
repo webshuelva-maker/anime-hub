@@ -23,6 +23,32 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v144",
+    fecha: "2026-08-03",
+    titulo: "Iris cambia de motor",
+    puntos: [
+      "La app puede funcionar con Gemini o con Groq, y se cambia de uno a otro sin tocar el código.",
+    ],
+  },
+  {
+    version: "v143",
+    fecha: "2026-08-03",
+    titulo: "Iris contesta al momento",
+    puntos: [
+      "Saludar o charlar con Iris ya no tarda diez segundos: usa el modelo rápido y se salta el análisis cuando no hay nada que investigar.",
+    ],
+  },
+  {
+    version: "v142",
+    fecha: "2026-08-03",
+    titulo: "Iris te avisa, y responde al instante",
+    intro: "Dos mejoras al asistente que se notan desde el primer día.",
+    puntos: [
+      "Si hay novedades de una serie que sigues, Iris se asoma solo al entrar y te lo cuenta.",
+      "Preguntar dos veces por lo mismo es ahora instantáneo: guarda lo que ya investigó durante tres horas.",
+    ],
+  },
+  {
     version: "v141",
     fecha: "2026-08-03",
     titulo: "Iris con vía libre",

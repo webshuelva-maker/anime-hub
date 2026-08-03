@@ -1,3 +1,4 @@
+import { claveIA } from "@/lib/ia";
 import { NextRequest, NextResponse } from "next/server";
 import { classifyIntent, gatherEvidence } from "@/lib/research";
 import { computeConfidence, confidenceInstruction } from "@/lib/confidence";
@@ -14,7 +15,7 @@ export const maxDuration = 60;
  * resultado es idéntico, solo que llega de golpe.
  */
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = claveIA();
   if (!apiKey) {
     return NextResponse.json({ error: "Falta GROQ_API_KEY en el servidor." }, { status: 503 });
   }

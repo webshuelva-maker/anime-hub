@@ -1,3 +1,4 @@
+import { urlIA } from "./ia";
 import { ResearchSource, classifySource } from "./sourceTiers";
 import { searchNews, searchWeb, hitsToPromptText, newestDate, NewsHit } from "./newsSearch";
 import { searchReddit, redditToPromptText, RedditHit } from "./redditSearch";
@@ -24,7 +25,7 @@ import { shouldResearch, guessTopicFromQuestion } from "./researchIntent";
  *    MyAnimeList y las noticias que MAL tiene de ese anime concreto.
  */
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
 const INTENT_MODEL = "llama-3.1-8b-instant"; // decidir esto no debe costar segundos
 
 export interface Intent {
@@ -81,7 +82,7 @@ ${transcript}`;
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(urlIA(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
@@ -183,11 +184,44 @@ function buildRumorQueries(topic: string, queries: string[]): string[] {
  * que no pueda mezclarlas aunque quiera. Ninguna fuente es
  * imprescindible: solo se da la investigación por vacía si fallan todas.
  */
+/*
+ * CACHÉ DE INVESTIGACIONES.
+ *
+ * Reunir las pruebas de un tema (buscadores, AniList, MyAnimeList,
+ * Reddit) tarda entre tres y seis segundos, y la respuesta a "¿cuándo
+ * sale la temporada 3 de X?" es exactamente la misma si se pregunta dos
+ * veces en la misma tarde. Guardarla evita repetir todo ese trabajo.
+ *
+ * Se guarda por TEMA, no por pregunta: "cuándo sale la 3", "hay fecha
+ * ya" y "se sabe algo de la tercera" dan las mismas pruebas, y con la
+ * pregunta como clave no se aprovecharía ninguna.
+ *
+ * Tres horas: suficiente para que preguntar dos veces salga gratis, y
+ * poco para no dar por buena una noticia de esta mañana cuando ya se ha
+ * anunciado algo por la tarde. La respuesta que escribe Iris SÍ se
+ * genera siempre de nuevo: las pruebas se reutilizan, el texto no, para
+ * que siga adaptándose a la conversación.
+ */
+const TTL_INVESTIGACION = 3 * 60 * 60 * 1000;
+const cacheEvidencias = new Map<string, { evidencia: Evidence; expira: number }>();
+
+function claveEvidencia(topic: string, queries: string[]): string {
+  const norm = (t: string) =>
+    t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  return `${norm(topic)}|${queries.map(norm).sort().join("~")}`;
+}
+
 export async function gatherEvidence(
   topic: string,
   queries: string[],
   isAnime = true
 ): Promise<Evidence> {
+  const clave = claveEvidencia(topic, queries);
+  const guardada = cacheEvidencias.get(clave);
+  if (guardada && guardada.expira > Date.now()) {
+    return { ...guardada.evidencia, debug: `${guardada.evidencia.debug} | reutilizado de caché` };
+  }
+
   const searchTerms = queries.length > 0 ? queries : topic ? [topic] : [];
   // Las fichas de AniList y MyAnimeList solo tienen sentido si el tema ES
   // anime. Buscar "Valorant" ahí devolvía cualquier cosa parecida de
@@ -261,7 +295,7 @@ export async function gatherEvidence(
     .filter((d): d is string => Boolean(d))
     .sort();
 
-  return {
+  const evidencia: Evidence = {
     text: blocks.join("\n\n"),
     sources: sources.slice(0, 10),
     anilist,
@@ -273,4 +307,12 @@ export async function gatherEvidence(
     empty: blocks.length === 0,
     debug: `tema="${topic}" | noticias: ${news.debug} | web: ${web.debug} | reddit: ${reddit.debug} | anilist:${anilist ? "sí" : "no"} | mal:${jikan ? "sí" : "no"} | noticias-mal:${malNews.length}`,
   };
+
+  // Solo se guarda lo que ha salido bien: si la búsqueda ha vuelto vacía,
+  // guardarlo condenaría tres horas a repetir la misma nada.
+  if (!evidencia.empty) {
+    cacheEvidencias.set(clave, { evidencia, expira: Date.now() + TTL_INVESTIGACION });
+  }
+
+  return evidencia;
 }

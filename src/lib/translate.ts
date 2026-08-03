@@ -1,5 +1,6 @@
+import { urlIA, modeloPotente, modeloRapido, claveIA } from "./ia";
 import { repartirEnParrafos } from "./parrafos";
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
 
 export interface TranslationOutcome {
   result: { title: string; summary: string; body: string } | null;
@@ -11,9 +12,9 @@ export interface TranslationOutcome {
 // clave y los nombres de los modelos. Groq está construido con hardware
 // propio (LPU) pensado específicamente para respuestas rápidas, que es
 // justo lo que faltaba con el tier gratuito de NVIDIA.
-const PRIMARY_MODEL = "llama-3.3-70b-versatile";
+
 // Modelo más pequeño y rápido para el segundo intento si el principal falla.
-const FALLBACK_MODEL = "llama-3.1-8b-instant";
+
 
 async function callOnce(
   title: string,
@@ -28,7 +29,7 @@ async function callOnce(
   const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(urlIA(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
@@ -99,10 +100,10 @@ export async function translateNewsFields(
   maxTokens = 2000,
   preferFallback = false
 ): Promise<TranslationOutcome> {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = claveIA();
   if (!apiKey) return { result: null, debug: "sin GROQ_API_KEY configurada" };
 
-  const model = preferFallback ? FALLBACK_MODEL : PRIMARY_MODEL;
+  const model = preferFallback ? modeloRapido() : modeloPotente();
   const attempt = await callOnce(title, summary, body, apiKey, model, maxTokens);
 
   if (!attempt.ok) {
