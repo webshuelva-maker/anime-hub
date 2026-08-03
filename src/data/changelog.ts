@@ -23,6 +23,18 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v133",
+    fecha: "2026-08-03",
+    titulo: "Noticias en español, de muchas más fuentes",
+    intro: "El feed pasa de 5 fuentes a más de 20, y la mayoría publican ya en español.",
+    puntos: [
+      "Crunchyroll en español, Ramen Para Dos, Koi-Nya, Somos Kudasai, Misión Tokyo y AnimeCL.",
+      "Vandal, Meristation, Hobby Consolas, 3DJuegos, Vida Extra e IGN España, filtrados para que solo entre lo de anime.",
+      "Siete fuentes internacionales dedicadas a rumores y filtraciones, marcadas como tales.",
+      "Las noticias en español no se traducen: salen antes y la app gasta muchísimo menos.",
+    ],
+  },
+  {
     version: "v132",
     fecha: "2026-08-03",
     titulo: "Buscador con carátulas y moderación de verdad",

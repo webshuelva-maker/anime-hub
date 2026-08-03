@@ -9,13 +9,67 @@ export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja marge
 // puede seguir dando noticias. "language" marca las fuentes que YA
 // vienen en español (no hace falta traducirlas, y no hay que dejar que
 // la IA las "retraduzca" sin necesidad).
+/*
+ * FUENTES.
+ *
+ * El cambio de fondo aquí es de COSTE. Casi todo el gasto de la API de
+ * IA se iba en traducir titulares y artículos del inglés. Una fuente que
+ * ya publica en español no se traduce: cuesta cero. Por eso el grueso de
+ * la lista es prensa española, y las de fuera se reservan para lo que no
+ * cubren (rumores y filtraciones que tardan en llegar aquí).
+ *
+ * Cada fuente lleva:
+ * - "language": "es" salta la traducción por completo.
+ * - "tier": "oficial" son medios que publican cuando hay anuncio;
+ *   "rumor" son agregadores y filtradores. Se refleja en la etiqueta de
+ *   fiabilidad de la tarjeta, sin depender de que el titular diga
+ *   "rumor".
+ * - "soloAnime": para medios generalistas de videojuegos, donde el anime
+ *   es una sección pequeña. Sin este filtro, el feed se llenaría de
+ *   análisis de consolas.
+ *
+ * Si una fuente no responde o cambia de dirección, no pasa nada: se
+ * ignora y las demás siguen. El campo "diagnostico" de la respuesta dice
+ * cuáles han contestado.
+ */
 const FEEDS = [
-  { url: "https://www.animenewsnetwork.com/all/rss.xml", platform: "Anime News Network", label: "Ver en Anime News Network", language: "en" as const },
-  { url: "https://www.crunchyroll.com/newsrss?lang=en", platform: "Crunchyroll News", label: "Ver en Crunchyroll News", language: "en" as const },
-  { url: "https://myanimelist.net/rss/news.xml", platform: "MyAnimeList", label: "Ver en MyAnimeList", language: "en" as const },
-  { url: "https://otakuusamagazine.com/anime/feed", platform: "Otaku USA", label: "Ver en Otaku USA", language: "en" as const },
-  { url: "https://ramenparados.com/feed/rss/", platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es" as const },
+  // ---------- Prensa en español (sin coste de traducción) ----------
+  { url: "https://www.crunchyroll.com/newsrss?lang=esES", platform: "Crunchyroll News", label: "Ver en Crunchyroll", language: "es" as const, tier: "oficial" as const },
+  { url: "https://ramenparados.com/feed/", platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es" as const, tier: "oficial" as const },
+  { url: "https://koi-nya.net/feed/", platform: "Koi-Nya", label: "Ver en Koi-Nya", language: "es" as const, tier: "oficial" as const },
+  { url: "https://somoskudasai.com/feed/", platform: "Somos Kudasai", label: "Ver en Somos Kudasai", language: "es" as const, tier: "oficial" as const },
+  { url: "https://misiontokyo.com/feed/", platform: "Misión Tokyo", label: "Ver en Misión Tokyo", language: "es" as const, tier: "oficial" as const },
+  { url: "https://www.animecl.com/feed/", platform: "AnimeCL", label: "Ver en AnimeCL", language: "es" as const, tier: "oficial" as const },
+  { url: "https://www.crunchyroll.com/es/news/rss", platform: "Crunchyroll News", label: "Ver en Crunchyroll", language: "es" as const, tier: "oficial" as const },
+
+  // ---------- Generalistas españoles, filtrados a anime ----------
+  { url: "https://vandal.elespanol.com/xml.cgi/noticias.xml", platform: "Vandal", label: "Ver en Vandal", language: "es" as const, tier: "oficial" as const, soloAnime: true },
+  { url: "https://as.com/rss/meristation/portada.xml", platform: "Meristation", label: "Ver en Meristation", language: "es" as const, tier: "oficial" as const, soloAnime: true },
+  { url: "https://www.hobbyconsolas.com/rss/portada", platform: "Hobby Consolas", label: "Ver en Hobby Consolas", language: "es" as const, tier: "oficial" as const, soloAnime: true },
+  { url: "https://www.3djuegos.com/feed/", platform: "3DJuegos", label: "Ver en 3DJuegos", language: "es" as const, tier: "oficial" as const, soloAnime: true },
+  { url: "https://www.vidaextra.com/feedburner.xml", platform: "Vida Extra", label: "Ver en Vida Extra", language: "es" as const, tier: "oficial" as const, soloAnime: true },
+  { url: "https://es.ign.com/feed.xml", platform: "IGN España", label: "Ver en IGN España", language: "es" as const, tier: "oficial" as const, soloAnime: true },
+
+  // ---------- Referencia internacional (se traducen) ----------
+  { url: "https://www.animenewsnetwork.com/all/rss.xml", platform: "Anime News Network", label: "Ver en Anime News Network", language: "en" as const, tier: "oficial" as const },
+  { url: "https://myanimelist.net/rss/news.xml", platform: "MyAnimeList", label: "Ver en MyAnimeList", language: "en" as const, tier: "oficial" as const },
+
+  // ---------- Rumores y filtraciones ----------
+  { url: "https://animecorner.me/feed/", platform: "Anime Corner", label: "Ver en Anime Corner", language: "en" as const, tier: "rumor" as const },
+  { url: "https://animesenpai.net/feed/", platform: "Anime Senpai", label: "Ver en Anime Senpai", language: "en" as const, tier: "rumor" as const },
+  { url: "https://comicbook.com/category/anime/feed/", platform: "ComicBook Anime", label: "Ver en ComicBook", language: "en" as const, tier: "rumor" as const },
+  { url: "https://screenrant.com/feed/category/anime/", platform: "Screen Rant", label: "Ver en Screen Rant", language: "en" as const, tier: "rumor" as const },
+  { url: "https://www.cbr.com/feed/category/anime-news/", platform: "CBR", label: "Ver en CBR", language: "en" as const, tier: "rumor" as const },
+  { url: "https://gamerant.com/feed/category/anime/", platform: "Game Rant", label: "Ver en Game Rant", language: "en" as const, tier: "rumor" as const },
+  { url: "https://www.dexerto.com/anime/feed/", platform: "Dexerto", label: "Ver en Dexerto", language: "en" as const, tier: "rumor" as const },
 ];
+
+/*
+ * Palabras que marcan que una noticia de un medio generalista va de
+ * anime o manga. Se mira en el titular y en el resumen.
+ */
+const PALABRAS_ANIME =
+  /\b(anime|manga|manhwa|otaku|shonen|shōnen|shojo|seinen|isekai|crunchyroll|studio ghibli|ghibli|jujutsu|dragon ball|one piece|naruto|bleach|demon slayer|kimetsu|chainsaw man|evangelion|pokémon anime|shingeki|attack on titan|my hero academia|spy x family|solo leveling|jump|shueisha|kodansha|toei|mappa|ufotable|madhouse|bones|wit studio|cloverworks)\b/i;
 
 function decodeEntities(raw: string): string {
   return raw
@@ -182,7 +236,14 @@ function dedupeAgainstTitle(text: string, title: string): string {
   return text;
 }
 
-async function fetchFeed(feed: { url: string; platform: string; label: string; language: "en" | "es" }): Promise<NewsItem[]> {
+async function fetchFeed(feed: {
+  url: string;
+  platform: string;
+  label: string;
+  language: "en" | "es";
+  tier?: "oficial" | "rumor";
+  soloAnime?: boolean;
+}): Promise<NewsItem[]> {
   const res = await fetch(feed.url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; AnimeHubBot/1.0; +https://animehubbs.netlify.app)" },
     next: { revalidate: 900 },
@@ -192,7 +253,9 @@ async function fetchFeed(feed: { url: string; platform: string; label: string; l
   const xml = await res.text();
   const blocks = xml.split("<item>").slice(1).map((b) => b.split("</item>")[0]);
 
-  return blocks.slice(0, 20).map((block) => {
+  return blocks
+    .slice(0, 20)
+    .map((block) => {
     const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "Sin título";
     const title = stripHtml(rawTitle);
     const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? "").trim();
@@ -211,7 +274,10 @@ async function fetchFeed(feed: { url: string; platform: string; label: string; l
       summary: description ? description.slice(0, 200) : title,
       body: description || title,
       imageQuery: title,
-      reliability: guessReliability(title),
+      // Las fuentes marcadas como "rumor" lo son por origen, no por lo
+      // que diga el titular: un agregador puede publicar una filtración
+      // sin usar la palabra "rumor" en ningún sitio.
+      reliability: feed.tier === "rumor" ? ("rumor" as Reliability) : guessReliability(title),
       category: inferCategory(title),
       genres: [],
       studios: [],
@@ -223,7 +289,18 @@ async function fetchFeed(feed: { url: string; platform: string; label: string; l
     };
     if (embeddedImage) item.coverImageUrl = embeddedImage;
     return item;
-  });
+  })
+    /*
+     * Filtro para medios generalistas. Vandal, IGN o 3DJuegos publican
+     * sobre todo videojuegos; sin esto, el feed se llenaría de análisis
+     * de consolas y el anime quedaría enterrado. Se mira el titular y el
+     * resumen, y en la duda se descarta: es preferible perder una
+     * noticia de anime que colar veinte que no lo son.
+     */
+    .filter((item) => {
+      if (!feed.soloAnime) return true;
+      return PALABRAS_ANIME.test(`${item.title} ${item.summary}`);
+    });
 }
 
 /**
@@ -269,6 +346,14 @@ function quitarRepetidas(items: NewsItem[]): NewsItem[] {
 
 export async function GET() {
   const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+
+  // Cuántas noticias ha aportado cada fuente. Con treinta orígenes, si
+  // alguno cambia de dirección o deja de publicar hay que poder verlo de
+  // un vistazo en vez de notarlo semanas después.
+  const porFuente = FEEDS.map((f, i) => {
+    const r = results[i];
+    return `${f.platform}: ${r.status === "fulfilled" ? r.value.length : "error"}`;
+  });
   const itemsBrutos = quitarRepetidas(
     results
       .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
@@ -374,6 +459,7 @@ export async function GET() {
       // Qué contestó AniList de verdad en el último lote: con esto se ve
       // si rechaza la petición, si devuelve vacío o si ni llega.
       aniList: ultimoIntentoAniList,
+      fuentes: porFuente,
     },
   });
 }
