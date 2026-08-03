@@ -183,11 +183,56 @@ async function fetchFeed(feed: { url: string; platform: string; label: string; l
   });
 }
 
+/**
+ * Quita noticias repetidas al juntar las fuentes.
+ *
+ * Antes no había ninguna comprobación: se juntaban los cinco feeds tal
+ * cual. Como el id se calcula a partir del enlace, la MISMA noticia
+ * publicada por dos medios daba dos ids distintos y aparecía dos veces —
+ * con el mismo titular y la misma carátula, pero con descripciones
+ * distintas (cada medio redacta la suya, y encima se traducen por
+ * separado). Justo el efecto raro de ver la misma noticia dos veces con
+ * texto diferente.
+ *
+ * Se comparan los titulares normalizados: sin tildes, sin signos, sin
+ * mayúsculas y sin palabras de relleno. No vale comparar el enlace,
+ * porque precisamente es lo único que sí es distinto.
+ */
+function normalizarTitular(t: string): string {
+  return t
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // tildes
+    .replace(/[^a-z0-9\s]/g, " ") // signos
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function quitarRepetidas(items: NewsItem[]): NewsItem[] {
+  const vistos = new Set<string>();
+  const salida: NewsItem[] = [];
+
+  for (const item of items) {
+    const clave = normalizarTitular(item.title);
+    // Titulares muy cortos podrían chocar por casualidad; por debajo de
+    // 15 caracteres no se arriesga y se deja pasar.
+    if (clave.length >= 15 && vistos.has(clave)) continue;
+    vistos.add(clave);
+    salida.push(item);
+  }
+
+  return salida;
+}
+
 export async function GET() {
   const results = await Promise.allSettled(FEEDS.map(fetchFeed));
-  const items = results
-    .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  const items = quitarRepetidas(
+    results
+      .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+      // Se ordena ANTES de quitar repetidas para que, de dos copias, se
+      // quede la más reciente.
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+  );
 
   if (items.length === 0) {
     return NextResponse.json({ items: [], error: "Ninguna fuente respondió." }, { status: 502 });
@@ -222,5 +267,24 @@ export async function GET() {
     // Mejor esfuerzo: sin estos datos el feed sigue funcionando.
   }
 
-  return NextResponse.json({ items });
+  // Resumen para diagnóstico. Si la popularidad no ordena bien puede ser
+  // por dos motivos muy distintos: que AniList no reconozca los títulos
+  // sacados de los titulares (y entonces casi nadie tiene el dato), o que
+  // sí lleguen y el problema esté en cómo se puntúa. Sin este número hay
+  // que adivinar cuál de los dos es.
+  const conPopularidad = items.filter((i) => typeof i.popularity === "number").length;
+
+  return NextResponse.json({
+    items,
+    diagnostico: {
+      total: items.length,
+      conPopularidad,
+      // Los títulos que AniList no ha reconocido, para ver si el problema
+      // está en cómo se recorta el titular.
+      sinReconocer: items
+        .filter((i) => typeof i.popularity !== "number")
+        .slice(0, 12)
+        .map((i) => i.relatedTitle),
+    },
+  });
 }

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { playToggle } from "@/lib/sound";
+import { playToggle, playClick, playSuccess, playError } from "@/lib/sound";
+import { vibrar } from "@/lib/haptics";
 import { createClient } from "@/lib/supabase/client";
 import {
   EstadoPush,
@@ -29,6 +30,7 @@ export function AvisosPushToggle() {
 
   const probar = async () => {
     setOcupado(true);
+    playClick();
     setDiagnostico("Probando…");
     try {
       const supabase = createClient();
@@ -40,6 +42,8 @@ export function AvisosPushToggle() {
       });
       const json: { ok: boolean; detalle: string } = await res.json();
       setDiagnostico(json.detalle);
+      if (json.ok) playSuccess();
+      else playError();
     } catch (e) {
       setDiagnostico(`No se pudo contactar con el servidor: ${e instanceof Error ? e.message : e}`);
     }
@@ -56,16 +60,27 @@ export function AvisosPushToggle() {
 
   const alternar = async () => {
     setOcupado(true);
+    // Sonido distinto según cómo acaba, no uno genérico al pulsar:
+    // activar los avisos y que fallen suenan igual de bien si solo se
+    // avisa al principio, y eso confunde.
     playToggle();
+    vibrar(10);
     if (estado === "activo") {
       await desactivarPush();
       setEstado("sin-permiso");
+      setDiagnostico(null);
     } else {
       const nuevo = await activarPush();
       setEstado(nuevo);
       // Si no ha quedado activo, se enseña el motivo en vez de dejar el
       // botón como si no hubiera pasado nada.
       setDiagnostico(nuevo === "activo" ? null : ultimoErrorPush);
+      if (nuevo === "activo") {
+        playSuccess();
+        vibrar(18);
+      } else {
+        playError();
+      }
     }
     setOcupado(false);
   };
@@ -112,14 +127,17 @@ export function AvisosPushToggle() {
       </div>
 
       {estado === "activo" && (
-        <button
+        <motion.button
           type="button"
           onClick={probar}
           disabled={ocupado}
-          className="mt-3 text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 22 }}
+          className="mt-3 inline-block text-xs text-muted underline transition-colors hover:text-foreground disabled:opacity-50"
         >
           Enviarme un aviso de prueba
-        </button>
+        </motion.button>
       )}
 
       {diagnostico && (

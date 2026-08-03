@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { legalConfig } from "@/config/legal";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +41,14 @@ export function AdminSupportPanel() {
   const [esAdmin, setEsAdmin] = useState<boolean | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Quien no es administrador acaba en las noticias, sin ningún mensaje
+  // que le confirme que aquí hay un panel de moderación. Va en un efecto
+  // y no durante el dibujado, que es donde no deben pasar estas cosas.
+  useEffect(() => {
+    if (esAdmin === false) router.replace("/noticias");
+  }, [esAdmin, router]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [activo, setActivo] = useState<Ticket | null>(null);
   const [mensajes, setMensajes] = useState<MensajeSoporte[]>([]);
@@ -153,13 +161,11 @@ export function AdminSupportPanel() {
 
   if (esAdmin === null) return <p className="mt-6 text-sm text-muted">Comprobando…</p>;
 
-  if (!esAdmin) {
-    return (
-      <div className="panel mt-6 rounded-2xl p-6">
-        <p className="text-sm text-muted">Esta página es solo para administradores.</p>
-      </div>
-    );
-  }
+  // A quien no es administrador no se le anuncia que esta página existe:
+  // se le devuelve al feed y punto. Decirle "esto es solo para
+  // administradores" es confirmarle que hay un panel aquí e invitarle a
+  // curiosear. Que exista y no exista para él es más limpio.
+  if (!esAdmin) return null;
 
   return (
     <>
