@@ -10,6 +10,7 @@ import "./globals.css";
 import { siteConfig } from "@/config/site";
 import { SiteChrome } from "@/components/SiteChrome";
 import { SiteFooter } from "@/components/SiteFooter";
+import { BanGate } from "@/components/BanGate";
 import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
 
@@ -109,6 +110,7 @@ try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <BanGate />
         <CloudSyncGate />
         <AmbientGlow />
         <SiteChrome />

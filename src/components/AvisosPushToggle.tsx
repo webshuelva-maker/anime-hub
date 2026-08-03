@@ -92,8 +92,20 @@ export function AvisosPushToggle() {
   // dejar que lo pulse y no pase nada, sin explicación.
   const esIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+  // El estado se lee del navegador y del servidor, así que tarda un
+  // instante en estar listo. Antes el recuadro se pintaba vacío desde el
+  // principio y su contenido aparecía después, de golpe y sin animación,
+  // por eso quedaba raro. Ahora no se pinta hasta saber qué decir, y
+  // entonces entra animado como el resto del panel.
+  if (estado === null) return null;
+
   return (
-    <div className="panel mt-4 rounded-2xl p-4">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+      className="panel mt-4 rounded-2xl p-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium">Avisarme al móvil</p>
@@ -152,6 +164,6 @@ export function AvisosPushToggle() {
           desde ahí y activa esto dentro.
         </p>
       )}
-    </div>
+    </motion.div>
   );
 }

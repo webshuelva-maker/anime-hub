@@ -407,3 +407,65 @@ create policy "Actualizar suscripcion propia"
   on public.push_subscriptions for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- ============================================================
+--  v132 — Sanciones (expulsión temporal y permanente)
+-- ============================================================
+-- Hasta ahora, desde el panel de moderación solo se podía responder a
+-- mensajes. Eso no es moderar: si alguien acosa a otra persona, hace
+-- falta poder impedirle entrar, y hacerlo de forma que quede constancia
+-- de quién lo hizo, cuándo y por qué.
+--
+-- Una fila por sanción, y se conserva el historial: no se borran al
+-- levantarlas, se marcan como levantadas. Así se puede ver si alguien
+-- reincide, que es justo lo que hace falta para decidir si la siguiente
+-- es temporal o definitiva.
+create table if not exists public.user_bans (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  -- 'temporal' expira sola en la fecha indicada; 'permanente' no expira.
+  tipo text not null check (tipo in ('temporal', 'permanente')),
+  motivo text not null,
+  -- Nulo en las permanentes.
+  hasta timestamptz,
+  creado_por uuid references auth.users on delete set null,
+  creado_en timestamptz default now() not null,
+  -- Al levantar una sanción no se borra: se marca. El historial importa.
+  levantada_en timestamptz,
+  levantada_por uuid references auth.users on delete set null
+);
+
+create index if not exists user_bans_user_idx on public.user_bans (user_id, levantada_en);
+
+alter table public.user_bans enable row level security;
+
+-- Cada persona puede LEER sus propias sanciones: la app necesita saberlo
+-- para enseñarle el aviso al entrar. No puede crearlas, editarlas ni
+-- borrarlas, evidentemente.
+create policy "Users read their own bans"
+  on public.user_bans for select
+  using (auth.uid() = user_id);
+
+-- El administrador (profiles.is_admin) puede verlas y gestionarlas todas.
+create policy "Admins manage bans"
+  on public.user_bans for all
+  using (public.es_admin())
+  with check (public.es_admin());
+
+-- ¿Está sancionada esta persona ahora mismo? Se resuelve en la base de
+-- datos y no en el navegador: una comprobación que vive solo en el
+-- cliente se salta abriendo las herramientas de desarrollo.
+create or replace function public.sancion_activa(uid uuid)
+returns table (tipo text, motivo text, hasta timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  select b.tipo, b.motivo, b.hasta
+  from public.user_bans b
+  where b.user_id = uid
+    and b.levantada_en is null
+    and (b.tipo = 'permanente' or b.hasta > now())
+  order by (b.tipo = 'permanente') desc, b.hasta desc nulls first
+  limit 1;
+$$;

@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v132",
+    fecha: "2026-08-03",
+    titulo: "Buscador con carátulas y moderación de verdad",
+    puntos: [
+      "El buscador de noticias enseña la carátula, el formato y el año, como el de animes favoritos.",
+      "Las carátulas ya no desaparecen al refrescarse el feed.",
+      "Panel de moderación: se puede suspender por 1, 7 o 30 días, o expulsar de forma permanente, siempre con motivo y con historial.",
+      "Quien esté sancionado ve una pantalla explicando el motivo y hasta cuándo.",
+    ],
+  },
+  {
     version: "v131",
     fecha: "2026-08-03",
     titulo: "El feed vuelve a tener sentido",

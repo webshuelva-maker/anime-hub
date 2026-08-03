@@ -28,6 +28,12 @@ type FeedStatus = "loading" | "live" | "offline" | "down";
 /** Se pone a true en la primera carga del documento. Ver showInitialLoader. */
 let yaSeMostroLaPortada = false;
 
+/**
+ * Carátulas ya averiguadas, por id de noticia. Vive fuera del componente
+ * para sobrevivir a las recargas del feed dentro de la misma sesión.
+ */
+const caratulasConocidas = new Map<string, string>();
+
 export function NewsFeed() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [openItemId, setOpenItemId] = useState<string | null>(() =>
@@ -154,10 +160,18 @@ export function NewsFeed() {
       .then(({ ok: res_ok, data }) => {
         const res = { ok: res_ok };
         if (res.ok && data.items && data.items.length > 0) {
-          setNewsItems(data.items);
-          setItems(data.items);
+          // Se devuelven las carátulas que ya se habían averiguado antes:
+          // las noticias llegan del servidor sin ellas, y sin este paso
+          // cada refresco borraba las imágenes que ya se veían.
+          const conCaratulas = data.items.map((item) =>
+            !item.coverImageUrl && caratulasConocidas.has(item.id)
+              ? { ...item, coverImageUrl: caratulasConocidas.get(item.id) }
+              : item
+          );
+          setNewsItems(conCaratulas);
+          setItems(conCaratulas);
           setStatus("live");
-          enrichItems(data.items);
+          enrichItems(conCaratulas);
         } else if (!silent) {
           setStatus("down");
         }
@@ -249,7 +263,16 @@ export function NewsFeed() {
         const data: { coverImageUrl?: string | null; popularity?: number | null; prominence?: "mainstream" | "indie" | null } =
           await (await fetch(`/api/enrich?${params.toString()}`)).json();
         const patch: Partial<NewsItem> = {};
-        if (data.coverImageUrl) patch.coverImageUrl = data.coverImageUrl;
+        if (data.coverImageUrl) {
+          patch.coverImageUrl = data.coverImageUrl;
+          // Se recuerda aparte de la lista. Cuando el feed se recarga (el
+          // refresco automático cada 15 minutos, o tirando hacia abajo)
+          // llegan noticias NUEVAS del servidor, sin la carátula que se
+          // había averiguado después — y la imagen que llevabas medio
+          // segundo viendo desaparecía. Con este recuerdo se vuelve a
+          // poner al instante.
+          caratulasConocidas.set(item.id, data.coverImageUrl);
+        }
         if (typeof data.popularity === "number") patch.popularity = data.popularity;
         if (data.prominence) patch.prominence = data.prominence;
         if (Object.keys(patch).length > 0) {

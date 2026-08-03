@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { legalConfig } from "@/config/legal";
 import { createClient } from "@/lib/supabase/client";
 import { AvisosPushToggle } from "./AvisosPushToggle";
+import { SancionesPanel } from "./SancionesPanel";
 import { playReceive, playSend } from "@/lib/sound";
 import {
   Ticket,
@@ -224,6 +225,10 @@ export function AdminSupportPanel() {
               Cerrar ticket
             </button>
           </div>
+
+          {/* Moderar no es solo contestar: desde aquí se puede suspender
+              o expulsar a la persona de esta conversación. */}
+          <SancionesPanel userId={activo.user_id} />
 
           <div className="flex max-h-[55vh] flex-col gap-3 overflow-y-auto px-5 py-4">
             <AnimatePresence initial={false}>

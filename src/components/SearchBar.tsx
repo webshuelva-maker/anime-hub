@@ -1,7 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
 import { NewsItem } from "@/types/news";
+
+/**
+ * Sugerencia con carátula, igual que en "Animes favoritos".
+ *
+ * Antes esto era una lista de títulos sueltos en texto plano. Con la
+ * portada, el formato y el año se reconoce la serie de un vistazo, que
+ * es justo lo que se pide a un buscador de anime: casi nadie recuerda el
+ * título exacto, pero todo el mundo reconoce la carátula.
+ */
+interface Sugerencia {
+  titulo: string;
+  cover: string | null;
+  formato: string | null;
+  anio: number | null;
+  /** true si viene del feed ya cargado (aparece al instante). */
+  local: boolean;
+}
 
 export function SearchBar({
   items,
@@ -14,22 +33,30 @@ export function SearchBar({
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const [dbSuggestions, setDbSuggestions] = useState<string[]>([]);
+  const [dbSuggestions, setDbSuggestions] = useState<Sugerencia[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   // Sugerencias de lo que ya está cargado en el feed (aparecen al instante)
-  const localSuggestions = useMemo(() => {
+  const localSuggestions = useMemo<Sugerencia[]>(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 1) return [];
     const seen = new Set<string>();
-    const matches: string[] = [];
+    const matches: Sugerencia[] = [];
     for (const item of items) {
       const t = item.relatedTitle;
       if (t.toLowerCase().includes(q) && !seen.has(t.toLowerCase())) {
         seen.add(t.toLowerCase());
-        matches.push(t);
+        matches.push({
+          titulo: t,
+          // Si esa noticia ya tiene carátula cargada, se reutiliza: sale
+          // al instante y sin pedir nada.
+          cover: item.coverImageUrl ?? null,
+          formato: null,
+          anio: null,
+          local: true,
+        });
       }
-      if (matches.length >= 4) break;
+      if (matches.length >= 3) break;
     }
     return matches;
   }, [query, items]);
@@ -47,25 +74,42 @@ export function SearchBar({
     const timer = setTimeout(() => {
       fetch(`/api/anime-search?q=${encodeURIComponent(q)}`)
         .then((res) => res.json())
-        .then((data: { results?: { title: string }[] }) => {
-          setDbSuggestions((data.results ?? []).map((r) => r.title));
-        })
+        .then(
+          (data: {
+            results?: {
+              title: string;
+              coverImage?: string | null;
+              format?: string | null;
+              startYear?: number | null;
+            }[];
+          }) => {
+            setDbSuggestions(
+              (data.results ?? []).map((r) => ({
+                titulo: r.title,
+                cover: r.coverImage ?? null,
+                formato: r.format ?? null,
+                anio: r.startYear ?? null,
+                local: false,
+              }))
+            );
+          }
+        )
         .catch(() => setDbSuggestions([]))
         .finally(() => setLoadingSuggestions(false));
     }, 350);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const suggestions = useMemo(() => {
+  const suggestions = useMemo<Sugerencia[]>(() => {
     const seen = new Set<string>();
-    const combined: string[] = [];
-    for (const t of [...localSuggestions, ...dbSuggestions]) {
-      if (!seen.has(t.toLowerCase())) {
-        seen.add(t.toLowerCase());
-        combined.push(t);
-      }
+    const combined: Sugerencia[] = [];
+    for (const sug of [...localSuggestions, ...dbSuggestions]) {
+      const clave = sug.titulo.toLowerCase();
+      if (seen.has(clave)) continue;
+      seen.add(clave);
+      combined.push(sug);
     }
-    return combined.slice(0, 7);
+    return combined.slice(0, 6);
   }, [localSuggestions, dbSuggestions]);
 
   const runSearch = (term: string) => {
@@ -115,23 +159,53 @@ export function SearchBar({
         )}
       </div>
 
-      {focused && (suggestions.length > 0 || loadingSuggestions) && (
-        <div className="panel absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl shadow-xl shadow-black/40">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onMouseDown={() => runSearch(s)}
-              className="block w-full truncate px-4 py-2.5 text-left text-sm text-foreground hover:bg-panel-soft"
-            >
-              {s}
-            </button>
-          ))}
-          {loadingSuggestions && suggestions.length === 0 && (
-            <p className="px-4 py-2.5 text-xs text-muted">Buscando…</p>
-          )}
-        </div>
-      )}
+      <AnimatePresence>
+        {focused && (suggestions.length > 0 || loadingSuggestions) && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            className="panel absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-panel-border shadow-xl shadow-black/40"
+          >
+            {suggestions.map((sug) => (
+              <button
+                key={sug.titulo}
+                type="button"
+                onMouseDown={() => runSearch(sug.titulo)}
+                className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-panel-soft"
+              >
+                {sug.cover ? (
+                  <Image
+                    src={sug.cover}
+                    alt=""
+                    width={32}
+                    height={44}
+                    unoptimized
+                    className="h-11 w-8 flex-shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <span
+                    className="h-11 w-8 flex-shrink-0 rounded"
+                    style={{ background: "var(--panel-soft)" }}
+                  />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-foreground">{sug.titulo}</span>
+                  <span className="text-[11px] text-muted">
+                    {sug.local
+                      ? "En tu feed"
+                      : [sug.formato, sug.anio].filter(Boolean).join(" · ") || "Base de datos"}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {loadingSuggestions && suggestions.length === 0 && (
+              <p className="px-4 py-3 text-xs text-muted">Buscando…</p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
