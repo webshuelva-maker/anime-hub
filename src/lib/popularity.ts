@@ -27,6 +27,22 @@ export interface DatosTitulo {
 
 const cache = new Map<string, { datos: DatosTitulo; expira: number }>();
 
+/*
+ * Rastro del último intento contra AniList.
+ *
+ * La popularidad sigue saliendo a cero incluso con los títulos ya
+ * limpios, así que el fallo está en la propia llamada y desde fuera no
+ * se distingue: una respuesta vacía y una respuesta rechazada se ven
+ * igual. Esto guarda el código de estado y el primer error que devuelva
+ * AniList para poder mirarlo en /api/news sin tener que adivinar.
+ */
+export let ultimoIntentoAniList: {
+  estado: number | null;
+  error: string | null;
+  cuantosDatos: number;
+  ejemploConsulta: string | null;
+} = { estado: null, error: null, cuantosDatos: 0, ejemploConsulta: null };
+
 function claveDe(titulo: string): string {
   return titulo.toLowerCase().trim();
 }
@@ -83,6 +99,15 @@ ${titulos
      * aprovecha lo que haya.
      */
     const json = await res.json().catch(() => null);
+
+    // Rastro para el diagnóstico (ver arriba).
+    ultimoIntentoAniList = {
+      estado: res.status,
+      error: json?.errors?.[0]?.message ?? null,
+      cuantosDatos: json?.data ? Object.values(json.data).filter(Boolean).length : 0,
+      ejemploConsulta: titulos[0] ?? null,
+    };
+
     if (!json) return resultado;
     // Con alias, AniList devuelve error para los que no encuentra pero
     // rellena igualmente los demás: por eso se lee "data" aunque haya

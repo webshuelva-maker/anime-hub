@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { datosDeTitulos } from "@/lib/popularity";
+import { datosDeTitulos, ultimoIntentoAniList } from "@/lib/popularity";
 import { NewsCategory, NewsItem, Reliability } from "@/types/news";
 
 export const runtime = "nodejs";
@@ -136,14 +136,18 @@ function extractSeriesName(title: string): string {
 
   /*
    * Muchos medios (MyAnimeList sobre todo) ponen el nombre de la obra
-   * entre comillas: «'Mato Seihei no Slave' Gets Third Season». Cuando
-   * las hay, eso ES el título y no hace falta adivinar nada — es mucho
-   * más fiable que cortar por palabras clave.
+   * entre comillas: «'Mato Seihei no Slave' Gets Third Season», «Third
+   * Season of New 'Ranma ½' Anime...». Cuando las hay, eso ES el título.
+   *
+   * Se descarta si el trozo acaba en coma o punto y coma: eso delata que
+   * no es un título sino una cita suelta de dentro de la frase, como en
+   * «Witch on the Holy Night Film Reveals 'Double Visual,' Game's...»,
+   * que daba "Double Visual," en vez de la película.
    */
-  const entrecomillado = limpio.match(/["'“”«]([^"'“”«»]{3,64})["'“”»]/);
+  const entrecomillado = limpio.match(/["'“«]([^"'“”«»]{3,64})["'”»]/);
   if (entrecomillado?.[1]) {
     const dentro = entrecomillado[1].trim();
-    if (!RELLENO.has(dentro.toLowerCase())) return dentro;
+    if (!/[,;:]$/.test(dentro) && !RELLENO.has(dentro.toLowerCase())) return dentro;
   }
 
   let corte = limpio.length;
@@ -324,6 +328,9 @@ export async function GET() {
         .filter((i) => typeof i.popularity !== "number")
         .slice(0, 12)
         .map((i) => i.relatedTitle),
+      // Qué contestó AniList de verdad en el último lote: con esto se ve
+      // si rechaza la petición, si devuelve vacío o si ni llega.
+      aniList: ultimoIntentoAniList,
     },
   });
 }
