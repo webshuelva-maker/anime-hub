@@ -78,7 +78,12 @@ export function NewsDetail({
         return result;
       }, "high") as Promise<{ title?: string | null; body?: string | null }>;
 
-    const params = new URLSearchParams({ url: targetItem.source.url });
+    // Se avisa del idioma para que el servidor devuelva el artículo
+    // entero cuando no haya que traducirlo.
+    const params = new URLSearchParams({
+      url: targetItem.source.url,
+      lang: targetItem.language ?? "en",
+    });
     fetch(`/api/enrich-detail?${params.toString()}`)
       .then((res) => res.json())
       .then(async (data: { coverImageUrl?: string | null; articleText?: string | null }) => {

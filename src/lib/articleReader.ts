@@ -24,6 +24,21 @@ const CONTENT_SELECTORS = [
   ".article-content",
   ".entry-content",
   ".post-content",
+  // Plantillas habituales en los medios españoles del feed (WordPress
+  // con temas tipo Newspaper/Jannah, y los CMS propios de Weblogs SL y
+  // Prisa). Sin estos, la extracción caía al plan B y devolvía cuatro
+  // frases sueltas.
+  ".td-post-content",
+  ".tdb-block-inner",
+  ".single-post-content",
+  ".article__body",
+  ".article-main",
+  ".cuerpo-articulo",
+  ".contenido-articulo",
+  ".texto-articulo",
+  ".m-detail--body",
+  ".post-body",
+  ".entry",
   ".story-body",
   "#content",
   "main",
@@ -103,7 +118,21 @@ function extractParagraphs($: cheerio.CheerioAPI, root: cheerio.Cheerio<AnyNode>
  * seguridad. Si algo falla o tarda demasiado, ambos valores quedan en
  * null (y quien llame a esta función decide qué mostrar mientras tanto).
  */
-export async function fetchArticlePage(url: string): Promise<{ text: string | null; image: string | null }> {
+export async function fetchArticlePage(
+  url: string,
+  /**
+   * Cuántos caracteres del artículo se devuelven.
+   *
+   * El límite existía porque TODO el artículo pasaba por la IA para
+   * traducirlo, y con textos largos la traducción agotaba el tiempo de
+   * la función. Ahora que las fuentes son españolas no hay nada que
+   * traducir, así que ese límite ya no protege de nada: solo cortaba la
+   * noticia a media frase con unos puntos suspensivos y obligaba a
+   * salir a la web original. Quien llama decide: mucho margen para el
+   * español, moderado para lo que aún haya que traducir.
+   */
+  maxCaracteres = 1500
+): Promise<{ text: string | null; image: string | null }> {
   if (!url) return { text: null, image: null };
   const controller = new AbortController();
   // 5s se quedaba corto para bastantes webs de noticias — 8s da más
@@ -176,7 +205,10 @@ export async function fetchArticlePage(url: string): Promise<{ text: string | nu
     // ~1500 caracteres (un resumen extendido, no el artículo entero) la
     // traducción es mucho más fiable — para leer el artículo íntegro
     // siempre queda el enlace a la fuente original.
-    const text = combined && combined.length > 1500 ? `${combined.slice(0, 1500)}…` : combined;
+    const text =
+      combined && combined.length > maxCaracteres
+        ? `${combined.slice(0, maxCaracteres)}…`
+        : combined;
 
     return { text, image: extractOgImage(html) };
   } catch {

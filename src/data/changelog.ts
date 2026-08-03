@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v139",
+    fecha: "2026-08-03",
+    titulo: "Las noticias se leen enteras",
+    intro: "Se acabaron los artículos que terminaban en puntos suspensivos.",
+    puntos: [
+      "El artículo completo se lee dentro de la app, sin tener que ir a la web original.",
+      "Mejor lectura de las plantillas que usan los medios españoles.",
+    ],
+  },
+  {
     version: "v138",
     fecha: "2026-08-03",
     titulo: "Tus plataformas mandan en el feed",

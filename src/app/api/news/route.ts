@@ -93,7 +93,10 @@ const FUENTES_ES: Fuente[] = [
   // servidores no responden, devuelven 404 o rechazan la petición desde
   // un servidor. Una fuente que no contesta solo suma segundos de espera.
   { urls: ["https://areajugones.sport.es/feed/"], platform: "Areajugones", label: "Ver en Areajugones", language: "es", tier: "oficial", soloAnime: true },
-  { urls: ["https://www.alfabetajuega.com/feed/"], platform: "AlfaBetaJuega", label: "Ver en AlfaBetaJuega", language: "es", tier: "oficial", soloAnime: true },
+  // AlfaBetaJuega agotaba el tiempo desde el servidor. En su lugar,
+  // dos medios más que sí responden.
+  { urls: ["https://www.mundodeportivo.com/rss/tecnologia.xml"], platform: "Mundo Deportivo", label: "Ver en Mundo Deportivo", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://as.com/rss/tikitakas/portada.xml"], platform: "Tikitakas", label: "Ver en AS", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://www.espinof.com/feedburner.xml"], platform: "Espinof", label: "Ver en Espinof", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://www.zonanegativa.com/feed/"], platform: "Zona Negativa", label: "Ver en Zona Negativa", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://latam.ign.com/feed.xml"], platform: "IGN Latinoamérica", label: "Ver en IGN Latinoamérica", language: "es", tier: "oficial", soloAnime: true },
