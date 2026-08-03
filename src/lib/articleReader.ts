@@ -33,7 +33,13 @@ const CONTENT_SELECTORS = [
 // con un selector de contenido (algunas plantillas anidan el menú de
 // navegación dentro de <main>, por ejemplo).
 const NOISE_SELECTOR =
-  "nav, footer, header, aside, script, style, noscript, form, .related, .newsletter, .comments, .comment, .share, .social, .forum, .forum-topic, .topic-list, .sidebar, .widget, .pagination, .breadcrumb";
+  "nav, footer, header, aside, script, style, noscript, form, .related, .newsletter, .comments, .comment, .share, .social, .forum, .forum-topic, .topic-list, .sidebar, .widget, .pagination, .breadcrumb, " +
+  // Bloques de comentarios y foro por nombre parcial: cada web los llama
+  // de una forma (#comment_list, .comment-container, .forum_boardrow1...)
+  // y acertar con el nombre exacto de cada una es imposible. Es lo que
+  // se colaba en las noticias de MyAnimeList y acababa enseñándose como
+  // si fuera el artículo.
+  '[id*="comment" i], [class*="comment" i], [id*="forum" i], [class*="forum" i], [class*="disqus" i], [id*="disqus" i]';
 
 /**
  * ¿Esta línea es una fila de un LISTADO en vez de una frase del artículo?
@@ -53,9 +59,22 @@ function looksLikeListRow(text: string): boolean {
   const conFecha = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s+(de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic|jan|apr|aug|dec)/i.test(text);
   const sinFraseCompleta = !/[.!?]\s|[.!?]$/.test(text);
 
-  // Dos señales fuertes ya bastan; con una sola se corre el riesgo de
-  // tirar una frase legítima que mencione una fecha.
   const señales = [conRecuento, conAutor, conFecha].filter(Boolean).length;
+
+  /*
+   * Con las TRES señales a la vez da igual la puntuación.
+   *
+   * Antes se exigía además que la línea no terminara en punto, y por ahí
+   * se colaban las filas de comentarios de MyAnimeList: llevan fecha,
+   * autor y recuento, pero también puntuación, así que pasaban el filtro
+   * y se enseñaban como si fueran el cuerpo de la noticia ("El 25 de
+   * julio a las 8:50, DatRandomDude11 comentó."). Una frase de verdad no
+   * junta fecha, "por fulanito" y un recuento de comentarios.
+   */
+  if (señales === 3) return true;
+
+  // Con dos señales sí se pide que no parezca una frase, para no tirar
+  // una línea legítima que mencione una fecha y a un autor.
   return señales >= 2 && sinFraseCompleta;
 }
 
