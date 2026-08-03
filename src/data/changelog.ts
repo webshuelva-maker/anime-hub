@@ -28,6 +28,7 @@ export const NOVEDADES: EntradaNovedades[] = [
     titulo: "Feed con más cabeza y artículos legibles",
     puntos: [
       "Si todavía no sabemos qué te gusta, ahora salen primero las series conocidas en vez de títulos que no reconoce nadie.",
+      "Y cuando dos noticias te encajan igual, gana la de la serie que reconoces.",
       "Los artículos traducidos llegan repartidos en párrafos, no en un bloque de texto.",
     ],
   },

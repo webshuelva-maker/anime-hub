@@ -260,7 +260,26 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
     prefs.likedNewsIds.length * 3 +
     prefs.favoriteTitles.length * 3;
   const COLD_START_THRESHOLD = 15; // a partir de aquí, la popularidad casi no pesa ya
-  const popularityWeight = Math.max(0, 1 - totalAffinitySignal / COLD_START_THRESHOLD);
+  /*
+   * El peso baja con el uso, pero NUNCA llega a cero.
+   *
+   * Antes sí llegaba: bastaba con marcar un favorito y un par de géneros
+   * para superar el umbral, y a partir de ahí la popularidad dejaba de
+   * contar por completo. El resultado era un feed lleno de series que el
+   * usuario no reconocía, porque un género como "Drama" encaja igual de
+   * bien con una obra famosísima que con una que no conoce nadie, y sin
+   * nada que los desempatara mandaba el azar.
+   *
+   * Con un suelo del 35%, lo que a ti te gusta sigue mandando —un
+   * favorito son 40 puntos y un "me gusta" 100, contra 8,75 como mucho
+   * por popularidad—, pero cuando dos noticias te encajan igual de bien,
+   * gana la que reconoces.
+   */
+  const SUELO_POPULARIDAD = 0.35;
+  const popularityWeight = Math.max(
+    SUELO_POPULARIDAD,
+    1 - totalAffinitySignal / COLD_START_THRESHOLD
+  );
   if (typeof item.popularity === "number" && item.popularity > 0 && popularityWeight > 0) {
     /*
      * Se normaliza en una escala de 0 a 1 (400.000 seguidores en AniList
