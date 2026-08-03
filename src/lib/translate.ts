@@ -1,3 +1,4 @@
+import { repartirEnParrafos } from "./parrafos";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export interface TranslationOutcome {
@@ -104,44 +105,10 @@ export async function translateNewsFields(
     result: {
       title: titleMatch[1].trim(),
       summary: summaryMatch?.[1]?.trim() || titleMatch[1].trim(),
-      body: asegurarParrafos(bodyMatch[1].trim()),
+      body: repartirEnParrafos(bodyMatch[1].trim()),
     },
     debug: "ok",
   };
 }
 
-/**
- * Red de seguridad para que el artículo nunca llegue como un muro de
- * texto.
- *
- * Al modelo se le pide que separe en párrafos, y casi siempre lo hace,
- * pero no siempre: unas veces el artículo salía bien repartido y otras
- * en un bloque enorme imposible de leer. Cuando eso pasa, se corta aquí
- * por frases, agrupando de tres en tres.
- *
- * El corte busca el punto seguido de espacio y mayúscula, para no partir
- * en abreviaturas ni en decimales. No es perfecto, pero un párrafo
- * cortado un poco antes de tiempo se lee mucho mejor que veinte líneas
- * sin respirar.
- */
-function asegurarParrafos(texto: string): string {
-  // Normaliza: como mucho una línea en blanco entre párrafos.
-  const limpio = texto.replace(/\n{3,}/g, "\n\n").trim();
 
-  // Si ya viene repartido, no se toca.
-  if (limpio.includes("\n\n") || limpio.length < 600) return limpio;
-
-  const frases = limpio.match(/[^.!?]+[.!?]+(?=\s+[A-ZÁÉÍÓÚÑ¡¿"«(]|\s*$)/g);
-  if (!frases || frases.length < 4) return limpio;
-
-  const parrafos: string[] = [];
-  for (let i = 0; i < frases.length; i += 3) {
-    parrafos.push(
-      frases
-        .slice(i, i + 3)
-        .map((f) => f.trim())
-        .join(" ")
-    );
-  }
-  return parrafos.join("\n\n");
-}

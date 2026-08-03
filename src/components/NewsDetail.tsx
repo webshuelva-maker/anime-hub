@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { vibrar } from "@/lib/haptics";
+import { repartirEnParrafos } from "@/lib/parrafos";
 import { NewsItem } from "@/types/news";
 import { NewsCover } from "./NewsCover";
 import { ReliabilityBadge } from "./ReliabilityBadge";
@@ -165,7 +166,14 @@ export function NewsDetail({
     if (item) runDetailFetch(item, true);
   }, [item, runDetailFetch]);
 
-  const shownBody = body || englishFallback || item?.summary || item?.body || "";
+  /*
+   * Se reparte en párrafos también AQUÍ, al pintarlo, y no solo al
+   * traducir. Las traducciones se guardan en el navegador, así que los
+   * artículos traducidos antes de este arreglo seguirían saliendo como
+   * un muro de texto por mucho que ahora se traduzca bien. Aplicarlo al
+   * mostrar arregla también los que ya estaban guardados.
+   */
+  const shownBody = repartirEnParrafos(body || englishFallback || item?.summary || item?.body || "");
 
   /*
    * En móvil el detalle deja de ser una ventana centrada y pasa a ser una

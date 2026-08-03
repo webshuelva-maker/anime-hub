@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v119",
+    fecha: "2026-08-02",
+    titulo: "El feed reconoce mejor de qué serie habla cada noticia",
+    puntos: [
+      "Antes se buscaba la serie usando el titular entero, así que casi ninguna noticia se identificaba bien. Ahora se extrae el nombre real de la obra.",
+      "Los artículos ya guardados también se reparten en párrafos al abrirlos.",
+    ],
+  },
+  {
     version: "v117",
     fecha: "2026-08-02",
     titulo: "Feed con más cabeza y artículos legibles",

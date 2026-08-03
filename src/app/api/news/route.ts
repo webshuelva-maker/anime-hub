@@ -76,8 +76,59 @@ function hashId(value: string): string {
   return Math.abs(hash).toString(36);
 }
 
-function shortenTitle(title: string): string {
-  return title.length > 64 ? `${title.slice(0, 61)}…` : title;
+/*
+ * Saca el NOMBRE DE LA SERIE de un titular de noticia.
+ *
+ * Antes esto se quedaba con el titular entero recortado a 64 caracteres,
+ * y ese texto es el que se usa para buscar la serie en AniList y saber su
+ * popularidad. Buscar "Chained Soldier TV Anime Gets 3rd Season" no
+ * encuentra nada útil, así que la mayoría de noticias se quedaban sin
+ * popularidad y sin géneros — y por eso la prioridad a lo conocido no se
+ * notaba.
+ *
+ * Los titulares de este tipo de medios tienen todos la misma forma:
+ * el nombre de la obra y luego qué le pasa ("... TV Anime Gets 3rd
+ * Season", "... Reveals More Cast", "... revela nuevo tráiler"). Basta
+ * con cortar en la primera de esas marcas.
+ */
+const MARCAS_TITULAR = [
+  // Inglés
+  "TV Anime", "Anime Film", "Anime Series", "Anime's", "Anime ", "Manga's", "Manga ",
+  "Franchise", "Season", "Episode", "Gets", "Reveals", "Announces", "Unveils", "Debuts",
+  "Premieres", "Launches", "Confirms", "Ends", "Returns", "Casts", "Adds", "Shares",
+  "Drops", "Teases", "Delayed", "Postponed", "Listed", "Slated", "Headed", "Review",
+  "Interview", "Trailer", "Visual", "Novel", "Game ", "Film ", "Movie ", "Live-Action",
+  // Español
+  "Serie de anime", "revela", "anuncia", "estrena", "confirma", "obtiene", "tendrá",
+  "lanza", "presenta", "Reseña", "Entrevista", "tráiler", "temporada", "película",
+];
+
+function extractSeriesName(title: string): string {
+  const limpio = title
+    .replace(/\s+/g, " ")
+    // Los titulares en español empiezan por "El anime X...", "El manga
+    // X...". Ese "El anime" sobra para buscar la obra en la base de datos.
+    .replace(/^(el|la|los|las)\s+(anime|manga|serie|pel[íi]cula|film|novela)\s+/i, "")
+    .trim();
+
+  let corte = limpio.length;
+  for (const marca of MARCAS_TITULAR) {
+    const i = limpio.indexOf(marca);
+    // Se exige que quede algo delante (al menos 3 caracteres): si el
+    // titular EMPIEZA por la marca, cortar ahí dejaría el nombre vacío.
+    if (i > 3 && i < corte) corte = i;
+  }
+
+  const nombre = limpio
+    .slice(0, corte)
+    .replace(/[\s,:;–—-]+$/, "")
+    .replace(/^['"«]|['"»]$/g, "")
+    .trim();
+
+  // Si el recorte deja algo demasiado corto, no era un titular con esta
+  // forma: mejor el titular entero que un fragmento sin sentido.
+  if (nombre.length < 3) return limpio.length > 64 ? `${limpio.slice(0, 61)}…` : limpio;
+  return nombre.length > 64 ? `${nombre.slice(0, 61)}…` : nombre;
 }
 
 /** Si el resumen empieza repitiendo el titular tal cual, quita esa repetición. */
@@ -123,7 +174,7 @@ async function fetchFeed(feed: { url: string; platform: string; label: string; l
       studios: [],
       publishedAt,
       source: { platform: feed.platform, url: link || feed.url, label: feed.label },
-      relatedTitle: shortenTitle(title),
+      relatedTitle: extractSeriesName(title),
       prominence: "mainstream",
       language: feed.language,
     };
