@@ -45,7 +45,9 @@ export interface NewsItem {
   relatedTitle: string; // anime al que se refiere la noticia
   crossConfirmedBy?: Platform[]; // si varias fuentes confirman lo mismo
   prominence: Prominence;
-  popularity?: number; // de AniList — cuánta gente tiene el título en su lista, usado para priorizar animes conocidos con usuarios nuevos
+  popularity?: number;
+  /** Id de la obra en AniList: sirve para detectar la misma noticia publicada con el título japonés y el internacional. */
+  anilistId?: number; // de AniList — cuánta gente tiene el título en su lista, usado para priorizar animes conocidos con usuarios nuevos
   language?: "en" | "es"; // "es" = ya viene en español (fuentes españolas), no hace falta traducirlo
 }
 

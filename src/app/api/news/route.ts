@@ -269,7 +269,7 @@ function quitarRepetidas(items: NewsItem[]): NewsItem[] {
 
 export async function GET() {
   const results = await Promise.allSettled(FEEDS.map(fetchFeed));
-  const items = quitarRepetidas(
+  const itemsBrutos = quitarRepetidas(
     results
       .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
       // Se ordena ANTES de quitar repetidas para que, de dos copias, se
@@ -277,7 +277,7 @@ export async function GET() {
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
   );
 
-  if (items.length === 0) {
+  if (itemsBrutos.length === 0) {
     return NextResponse.json({ items: [], error: "Ninguna fuente respondió." }, { status: 502 });
   }
 
@@ -294,6 +294,7 @@ export async function GET() {
    * Si AniList no responde, el feed sale igual: simplemente vuelve a
    * ordenarse solo por fecha, como antes.
    */
+  let items = itemsBrutos;
   try {
     const datos = await datosDeTitulos(items.map((i) => i.relatedTitle));
     for (const item of items) {
@@ -303,9 +304,35 @@ export async function GET() {
         item.popularity = d.popularity;
         item.prominence = d.popularity >= 20000 ? "mainstream" : "indie";
       }
+      if (typeof d.anilistId === "number") item.anilistId = d.anilistId;
       if (item.genres.length === 0 && d.genres.length > 0) item.genres = d.genres;
       if (item.studios.length === 0 && d.studios.length > 0) item.studios = d.studios;
     }
+
+    /*
+     * Segunda pasada de duplicados, ahora por obra y no por titular.
+     *
+     * La primera pasada (quitarRepetidas) compara titulares, y eso no
+     * detecta la misma noticia publicada con el título japonés en un
+     * medio y el internacional en otro: "Chained Soldier obtiene una 3ª
+     * temporada" y "'Mato Seihei no Slave' obtiene una tercera
+     * temporada" son la misma serie y la misma noticia, pero los textos
+     * no se parecen en nada.
+     *
+     * El identificador de AniList sí lo sabe. Se comparan también las
+     * fechas: dos noticias de la misma serie con días de diferencia son
+     * noticias distintas y las dos deben salir; lo que se quita es la
+     * misma historia contada por dos medios el mismo día.
+     */
+    const vistasPorObra = new Map<string, string>();
+    items = items.filter((item) => {
+      if (typeof item.anilistId !== "number") return true;
+      const dia = item.publishedAt.slice(0, 10);
+      const clave = `${item.anilistId}-${dia}`;
+      if (vistasPorObra.has(clave)) return false;
+      vistasPorObra.set(clave, item.id);
+      return true;
+    });
   } catch {
     // Mejor esfuerzo: sin estos datos el feed sigue funcionando.
   }
