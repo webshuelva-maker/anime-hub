@@ -11,6 +11,7 @@ import {
   desactivarPush,
   getEstadoPush,
   pushDisponible,
+  ultimoErrorPush,
 } from "@/lib/push";
 
 /**
@@ -60,7 +61,11 @@ export function AvisosPushToggle() {
       await desactivarPush();
       setEstado("sin-permiso");
     } else {
-      setEstado(await activarPush());
+      const nuevo = await activarPush();
+      setEstado(nuevo);
+      // Si no ha quedado activo, se enseña el motivo en vez de dejar el
+      // botón como si no hubiera pasado nada.
+      setDiagnostico(nuevo === "activo" ? null : ultimoErrorPush);
     }
     setOcupado(false);
   };

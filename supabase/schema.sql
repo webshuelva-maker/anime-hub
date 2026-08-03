@@ -386,3 +386,24 @@ create policy "Borrar suscripcion propia"
 -- salta las políticas — nunca desde el navegador. Si esto se pudiera
 -- leer desde el cliente, cualquiera podría mandar notificaciones a los
 -- dispositivos de otro.
+
+-- ============================================================
+--  v120 — Corrección: faltaba permiso de actualizar suscripciones push
+-- ============================================================
+-- Guardar un dispositivo se hace con "insertar o actualizar" (upsert),
+-- porque al reactivar los avisos en el mismo navegador llega el mismo
+-- endpoint y hay que refrescar sus claves en vez de duplicar la fila.
+-- Postgres exige política de UPDATE para la parte de "o actualizar",
+-- aunque en la práctica acabe insertando: sin ella rechaza la operación
+-- entera.
+--
+-- El resultado era el fallo que se veía: el navegador SÍ se suscribía
+-- (por eso el botón decía "activo"), pero la fila nunca llegaba a la base
+-- de datos, así que el servidor no tenía a dónde enviar y no llegaba
+-- ningún aviso. Y como el error del guardado se ignoraba, no había
+-- ninguna pista de que algo hubiera fallado.
+drop policy if exists "Actualizar suscripcion propia" on public.push_subscriptions;
+create policy "Actualizar suscripcion propia"
+  on public.push_subscriptions for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

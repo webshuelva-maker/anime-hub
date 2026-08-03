@@ -20,6 +20,9 @@ import { createClient } from "@/lib/supabase/client";
 
 export type EstadoPush = "no-disponible" | "sin-permiso" | "denegado" | "activo";
 
+/** Último motivo por el que falló activarPush, para poder enseñarlo. */
+export let ultimoErrorPush: string | null = null;
+
 function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -58,7 +61,23 @@ export async function getEstadoPush(): Promise<EstadoPush> {
 
   const registro = await navigator.serviceWorker.getRegistration();
   const suscripcion = await registro?.pushManager.getSubscription();
-  return suscripcion ? "activo" : "sin-permiso";
+  if (!suscripcion) return "sin-permiso";
+
+  // No basta con que el navegador esté suscrito: si esa suscripción no
+  // está guardada en la base de datos, el servidor no sabe a dónde
+  // enviar y no llega nada. Antes solo se miraba el navegador, así que
+  // el botón decía "activo" con el servidor completamente a ciegas.
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return "sin-permiso";
+
+  const { data } = await supabase
+    .from("push_subscriptions")
+    .select("id")
+    .eq("endpoint", suscripcion.endpoint)
+    .maybeSingle();
+
+  return data ? "activo" : "sin-permiso";
 }
 
 /**
@@ -90,9 +109,12 @@ export async function activarPush(): Promise<EstadoPush> {
   const datos = suscripcion.toJSON();
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user || !datos.keys) return "sin-permiso";
+  if (!userData.user || !datos.keys) {
+    ultimoErrorPush = "No hay sesión iniciada en este dispositivo.";
+    return "sin-permiso";
+  }
 
-  await supabase.from("push_subscriptions").upsert(
+  const { error } = await supabase.from("push_subscriptions").upsert(
     {
       user_id: userData.user.id,
       endpoint: suscripcion.endpoint,
@@ -102,6 +124,16 @@ export async function activarPush(): Promise<EstadoPush> {
     { onConflict: "endpoint" }
   );
 
+  // Este error NO se puede ignorar. El navegador ya se ha suscrito, así
+  // que sin esta comprobación el botón diría "activo" aunque el servidor
+  // no tenga ni idea de que este dispositivo existe — y los avisos no
+  // llegarían nunca, sin nada a la vista que lo explique. Pasó justo eso.
+  if (error) {
+    ultimoErrorPush = `El dispositivo no se pudo guardar: ${error.message} (código ${error.code ?? "?"})`;
+    return "sin-permiso";
+  }
+
+  ultimoErrorPush = null;
   return "activo";
 }
 
