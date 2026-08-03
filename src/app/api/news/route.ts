@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { datosDeTitulos } from "@/lib/popularity";
 import { NewsCategory, NewsItem, Reliability } from "@/types/news";
 
 export const runtime = "nodejs";
@@ -139,6 +140,35 @@ export async function GET() {
 
   if (items.length === 0) {
     return NextResponse.json({ items: [], error: "Ninguna fuente respondió." }, { status: 502 });
+  }
+
+  /*
+   * Popularidad, géneros y estudios ANTES de mandar el feed.
+   *
+   * Estos datos ya se pedían, pero uno por uno y después de pintar la
+   * lista, así que cuando el feed se ordenaba no los tenía. La regla de
+   * "si todavía no sé qué te gusta, primero lo conocido" no se aplicaba
+   * a nada, y por eso a alguien nuevo le salían puras series que no
+   * reconoce. Ahora llegan con la primera respuesta, en una sola
+   * consulta para todos los títulos y con caché de seis horas.
+   *
+   * Si AniList no responde, el feed sale igual: simplemente vuelve a
+   * ordenarse solo por fecha, como antes.
+   */
+  try {
+    const datos = await datosDeTitulos(items.map((i) => i.relatedTitle));
+    for (const item of items) {
+      const d = datos.get(item.relatedTitle.toLowerCase().trim());
+      if (!d) continue;
+      if (typeof d.popularity === "number") {
+        item.popularity = d.popularity;
+        item.prominence = d.popularity >= 20000 ? "mainstream" : "indie";
+      }
+      if (item.genres.length === 0 && d.genres.length > 0) item.genres = d.genres;
+      if (item.studios.length === 0 && d.studios.length > 0) item.studios = d.studios;
+    }
+  } catch {
+    // Mejor esfuerzo: sin estos datos el feed sigue funcionando.
   }
 
   return NextResponse.json({ items });

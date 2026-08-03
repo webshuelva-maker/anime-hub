@@ -38,7 +38,7 @@ async function callOnce(
           {
             role: "system",
             content:
-              "Traduces textos de noticias de anime del inglés al español de España, de forma natural, sin literalidades raras. MUY IMPORTANTE: los títulos de anime, manga, novelas ligeras, videojuegos o películas NUNCA se traducen, se dejan EXACTAMENTE como están en el texto original (en inglés o rōmaji), aunque el resto de la frase sí se traduzca. Por ejemplo, si el texto dice 'Smoking Behind the Supermarket with You Gets New Trailer', el título traducido debe ser algo como 'Smoking Behind the Supermarket with You revela nuevo tráiler' — el nombre de la obra no se toca. Tampoco traduces nombres propios de personas ni estudios. Respondes ÚNICAMENTE con este formato exacto, cada etiqueta en su PROPIA línea nueva, sin nada más antes ni después:\nTITULO: <traducción>\nRESUMEN: <traducción>\nCUERPO: <traducción>",
+              "Traduces textos de noticias de anime del inglés al español de España, de forma natural, sin literalidades raras. MUY IMPORTANTE: los títulos de anime, manga, novelas ligeras, videojuegos o películas NUNCA se traducen, se dejan EXACTAMENTE como están en el texto original (en inglés o rōmaji), aunque el resto de la frase sí se traduzca. Por ejemplo, si el texto dice 'Smoking Behind the Supermarket with You Gets New Trailer', el título traducido debe ser algo como 'Smoking Behind the Supermarket with You revela nuevo tráiler' — el nombre de la obra no se toca. Tampoco traduces nombres propios de personas ni estudios. Respondes ÚNICAMENTE con este formato exacto, cada etiqueta en su PROPIA línea nueva, sin nada más antes ni después:\nTITULO: <traducción>\nRESUMEN: <traducción>\nCUERPO: <traducción>\n\nSOBRE EL CUERPO, muy importante: es el ÚLTIMO campo, así que dentro de él SÍ puedes (y debes) usar saltos de línea. Separa el texto en párrafos con una LÍNEA EN BLANCO entre ellos. Si el original ya viene en párrafos, respétalos. Si el original viene todo seguido en un bloque, sepáralo tú por temas, en párrafos de dos a cuatro frases: un muro de texto de veinte líneas seguidas es ilegible. No añadas títulos, ni viñetas, ni numeración: solo párrafos.",
           },
           { role: "user", content: `TITULO: ${title}\nRESUMEN: ${summary}\nCUERPO: ${body}` },
         ],
@@ -104,8 +104,44 @@ export async function translateNewsFields(
     result: {
       title: titleMatch[1].trim(),
       summary: summaryMatch?.[1]?.trim() || titleMatch[1].trim(),
-      body: bodyMatch[1].trim(),
+      body: asegurarParrafos(bodyMatch[1].trim()),
     },
     debug: "ok",
   };
+}
+
+/**
+ * Red de seguridad para que el artículo nunca llegue como un muro de
+ * texto.
+ *
+ * Al modelo se le pide que separe en párrafos, y casi siempre lo hace,
+ * pero no siempre: unas veces el artículo salía bien repartido y otras
+ * en un bloque enorme imposible de leer. Cuando eso pasa, se corta aquí
+ * por frases, agrupando de tres en tres.
+ *
+ * El corte busca el punto seguido de espacio y mayúscula, para no partir
+ * en abreviaturas ni en decimales. No es perfecto, pero un párrafo
+ * cortado un poco antes de tiempo se lee mucho mejor que veinte líneas
+ * sin respirar.
+ */
+function asegurarParrafos(texto: string): string {
+  // Normaliza: como mucho una línea en blanco entre párrafos.
+  const limpio = texto.replace(/\n{3,}/g, "\n\n").trim();
+
+  // Si ya viene repartido, no se toca.
+  if (limpio.includes("\n\n") || limpio.length < 600) return limpio;
+
+  const frases = limpio.match(/[^.!?]+[.!?]+(?=\s+[A-ZÁÉÍÓÚÑ¡¿"«(]|\s*$)/g);
+  if (!frases || frases.length < 4) return limpio;
+
+  const parrafos: string[] = [];
+  for (let i = 0; i < frases.length; i += 3) {
+    parrafos.push(
+      frases
+        .slice(i, i + 3)
+        .map((f) => f.trim())
+        .join(" ")
+    );
+  }
+  return parrafos.join("\n\n");
 }

@@ -262,7 +262,27 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
   const COLD_START_THRESHOLD = 15; // a partir de aquí, la popularidad casi no pesa ya
   const popularityWeight = Math.max(0, 1 - totalAffinitySignal / COLD_START_THRESHOLD);
   if (typeof item.popularity === "number" && item.popularity > 0 && popularityWeight > 0) {
-    score += Math.log10(item.popularity + 1) * popularityWeight * 1.5;
+    /*
+     * Se normaliza en una escala de 0 a 1 (400.000 seguidores en AniList
+     * es aproximadamente el techo: One Piece, Attack on Titan) y se
+     * multiplica por 25.
+     *
+     * Antes esto valía como mucho 8 puntos, y encima el dato casi nunca
+     * llegaba a tiempo de ordenar. Con 25, sin ninguna preferencia
+     * todavía, las series conocidas suben claramente por encima de las
+     * desconocidas — que es lo que hace que el primer feed no sea una
+     * lista de títulos que nadie reconoce.
+     *
+     * Sigue por debajo de un favorito (40) y muy por debajo de un "me
+     * gusta" (100): en cuanto el usuario expresa un gusto, lo suyo manda
+     * sobre lo famoso, aunque sea una serie que no conoce nadie.
+     */
+    // Raíz cuadrada y no logaritmo: el logaritmo aplasta tanto la escala
+    // que una serie con 500 seguidores sacaba casi la mitad de puntos que
+    // One Piece, y entonces el orden apenas cambiaba. Con la raíz, lo
+    // desconocido saca migajas y lo muy conocido saca el máximo.
+    const escala = Math.min(1, Math.sqrt(item.popularity / 150000));
+    score += escala * popularityWeight * 25;
   }
 
   return score;

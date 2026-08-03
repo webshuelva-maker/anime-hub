@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ANIME_TRIVIA } from "@/lib/trivia";
 import { getPreferences } from "@/lib/storage";
@@ -187,7 +187,37 @@ export function FirstLoadOverlay({
   useEffect(() => {
     progressRef.current = progress;
   }, [progress]);
+  /*
+   * Cerrar la pantalla de carga.
+   *
+   * Lo importante es el ORDEN. La marca "arrancando" mantiene escondidos
+   * la barra superior, el orbe y el pie, y además pinta una manta opaca
+   * por debajo de esta pantalla. Antes esa marca se retiraba al
+   * desmontar el componente, o sea DESPUÉS del medio segundo de fundido:
+   * así que lo que se veía era esta pantalla disolviéndose sobre un
+   * fondo negro vacío, y al terminar, la app entera apareciendo de golpe.
+   * Ese salto brusco es justo lo que se notaba al pulsar "Omitir" y al
+   * llegar al 100%.
+   *
+   * Ahora la marca se quita ANTES de empezar el fundido. La app ya está
+   * pintada debajo (invisible tras esta pantalla, que sigue opaca), así
+   * que el fundido la va descubriendo: una transición de verdad en vez
+   * de un corte.
+   */
   const onCompleteRef = useRef(onComplete);
+
+  const cerrar = useCallback(() => {
+    document.documentElement.classList.remove("arrancando");
+    onCompleteRef.current();
+  }, []);
+
+  // La cuenta atrás de la barra vive en un efecto sin dependencias, así
+  // que necesita la función por referencia para no quedarse con una
+  // versión vieja.
+  const cerrarRef = useRef(cerrar);
+  useEffect(() => {
+    cerrarRef.current = cerrar;
+  }, [cerrar]);
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
@@ -226,7 +256,7 @@ export function FirstLoadOverlay({
       setDisplayPct((prev) => (value > prev ? value : prev));
       if (value >= 100) {
         finished = true;
-        onCompleteRef.current();
+        cerrarRef.current();
         return;
       }
       raf = requestAnimationFrame(tick);
@@ -274,7 +304,10 @@ export function FirstLoadOverlay({
       className="fixed inset-x-0 top-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6 text-center"
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.5 }}
+      // Un pelín más largo y con salida suave: ahora que el fundido
+      // descubre la app de verdad (y no un fondo negro), merece la pena
+      // que se vea.
+      transition={{ duration: 0.6, ease: "easeInOut" }}
     >
       {/* Resplandores ambientales — respiran solos (opacidad + deriva
           propia vía framer-motion) Y además reaccionan al ratón (el
@@ -388,7 +421,7 @@ export function FirstLoadOverlay({
             </AnimatePresence>
             <motion.button
               type="button"
-              onClick={onComplete}
+              onClick={cerrar}
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.2, ease: "easeOut" }}

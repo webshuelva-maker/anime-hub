@@ -23,6 +23,23 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v117",
+    fecha: "2026-08-02",
+    titulo: "Feed con más cabeza y artículos legibles",
+    puntos: [
+      "Si todavía no sabemos qué te gusta, ahora salen primero las series conocidas en vez de títulos que no reconoce nadie.",
+      "Los artículos traducidos llegan repartidos en párrafos, no en un bloque de texto.",
+    ],
+  },
+  {
+    version: "v116",
+    fecha: "2026-08-02",
+    titulo: "Salida limpia de la pantalla de carga",
+    puntos: [
+      "Al pulsar Omitir o al llegar al 100%, la pantalla de carga se disuelve sobre la app en vez de cortar de golpe.",
+    ],
+  },
+  {
     version: "v115",
     fecha: "2026-08-02",
     titulo: "Ajustes que se guardan solos",
