@@ -21,7 +21,8 @@ async function callOnce(
   body: string,
   apiKey: string,
   model: string,
-  maxTokens: number
+  maxTokens: number,
+  reintentosRestantes = 1
 ): Promise<{ ok: true; text: string } | { ok: false; debug: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
@@ -48,6 +49,27 @@ async function callOnce(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
+
+      /*
+       * 429 = cuota de tokens por minuto agotada. Groq dice cuántos
+       * segundos faltan para volver a tener cuota, así que se espera y
+       * se reintenta una vez en vez de dar la traducción por perdida:
+       * lo que el usuario veía era una noticia en inglés sin motivo
+       * aparente, cuando bastaba con esperar unos segundos.
+       */
+      if (res.status === 429 && reintentosRestantes > 0) {
+        const cabecera = Number(res.headers.get("retry-after"));
+        const delTexto = errBody.match(/try again in ([\d.]+)s/i);
+        const segundos = Number.isFinite(cabecera) && cabecera > 0
+          ? cabecera
+          : delTexto
+          ? parseFloat(delTexto[1])
+          : 8;
+        clearTimeout(timeout);
+        await new Promise((r) => setTimeout(r, Math.min(segundos + 0.5, 20) * 1000));
+        return callOnce(title, summary, body, apiKey, model, maxTokens, reintentosRestantes - 1);
+      }
+
       const debug = `Groq respondió ${res.status}: ${errBody.slice(0, 200)}`;
       console.error(`[translate-detail] ${debug}`);
       return { ok: false, debug };

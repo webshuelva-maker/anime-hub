@@ -58,8 +58,27 @@ export function runExclusive<T>(fn: () => Promise<T>, priority: Priority = "norm
 // en mitad de una conversación activa.
 let backgroundPaused = false;
 
+/*
+ * Cuándo se usó Iris por última vez.
+ *
+ * Sirve para mover el techo de la traducción de fondo (ver
+ * techoDeFondo() más abajo). Mientras nadie está hablando con
+ * ella no tiene sentido reservarle cuota: que la traducción aproveche
+ * todo lo que pueda.
+ */
+let ultimoUsoAsistente = 0;
+
 export function setBackgroundPaused(paused: boolean) {
   backgroundPaused = paused;
+  // Se marca al pausar Y al reanudar: la conversación sigue "reciente"
+  // justo después de responder, que es cuando más probable es que el
+  // usuario escriba otra vez.
+  ultimoUsoAsistente = Date.now();
+}
+
+/** ¿Se ha usado el asistente en los últimos dos minutos? */
+function asistenteEnUsoReciente(): boolean {
+  return Date.now() - ultimoUsoAsistente < 120_000;
 }
 
 export function waitWhileBackgroundPaused(): Promise<void> {
@@ -77,14 +96,33 @@ export function waitWhileBackgroundPaused(): Promise<void> {
 // ciegas" entre peticiones, se lleva un registro de cuánto se ha
 // consumido (estimado) en los últimos 60s, y antes de cada llamada se
 // espera lo justo para no pasarse de un límite prudente. El límite real
-// del plan gratuito de Groq no está documentado con precisión (varía
-// según fuentes entre 6.000 y 30.000 tokens/minuto) — 5.500 es un valor
-// conservador para no agotarlo aunque el real sea el más bajo.
-const SAFE_TPM_BUDGET = 5500;
-// La traducción de fondo (lista) NUNCA puede gastar más del 65% del
-// presupuesto — así siempre queda un margen reservado para Ren y para
-// el detalle, que no deberían depender de que la lista les "deje hueco".
-const BACKGROUND_TPM_CEILING = SAFE_TPM_BUDGET * 0.65;
+// El límite real del plan gratuito ya no es una suposición: lo dijo el
+// propio Groq en un error 429 —"tokens per minute (TPM): Limit 6000"—.
+// Se deja margen por debajo porque la cuenta es por ORGANIZACIÓN, no por
+// navegador: este contador solo ve lo que gasta esta pestaña, así que si
+// hay otra abierta (o el móvil a la vez) el gasto real es mayor.
+const SAFE_TPM_BUDGET = 5200;
+
+/*
+ * Cuánto puede gastar la traducción de fondo. NO es un porcentaje fijo:
+ * depende de si se ha usado el asistente hace poco.
+ *
+ * Sin conversación reciente, la traducción aprovecha casi todo el
+ * presupuesto (85%): no tiene sentido dejar cuota parada esperando a
+ * alguien que no está escribiendo.
+ *
+ * Con conversación reciente baja al 35%, y aquí está el motivo de que no
+ * pueda ser 100% siempre: el límite de Groq es una ventana MÓVIL de 60
+ * segundos, así que cuenta lo gastado en el último minuto. Si la
+ * traducción se lo hubiera comido todo justo antes de que el usuario
+ * escriba, Iris llegaría a un presupuesto ya agotado y tendría que
+ * esperar igual, aunque en ese instante no se estuviera traduciendo
+ * nada. Dejando margen mientras hay conversación, la respuesta sale al
+ * momento.
+ */
+function techoDeFondo(): number {
+  return SAFE_TPM_BUDGET * (asistenteEnUsoReciente() ? 0.35 : 0.85);
+}
 const tokenLog: { time: number; tokens: number }[] = [];
 
 function pruneOldUsage() {
@@ -106,7 +144,9 @@ export async function waitForTokenBudget(
   priority: Priority = "normal",
   maxWaitMs = Infinity
 ): Promise<void> {
-  const ceiling = priority === "high" ? SAFE_TPM_BUDGET : BACKGROUND_TPM_CEILING;
+  // Se calcula en cada llamada, no una vez al cargar: el techo del
+  // fondo cambia según se esté usando el asistente o no.
+  const ceiling = priority === "high" ? SAFE_TPM_BUDGET : techoDeFondo();
   const deadline = Date.now() + maxWaitMs;
 
   // Con tope de espera. Sin él, si el presupuesto estaba gastado por la

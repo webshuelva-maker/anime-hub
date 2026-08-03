@@ -24,7 +24,8 @@ async function callModel(
   model: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  maxTokens: number
+  maxTokens: number,
+  reintentosRestantes = 1
 ): Promise<{ ok: true; reply: string } | { ok: false; debug: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
@@ -44,6 +45,36 @@ async function callModel(
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => "");
+
+      /*
+       * 429 = se ha agotado la cuota de tokens por minuto del plan
+       * gratuito (6.000). Groq NO se limita a rechazar: dice exactamente
+       * cuántos segundos faltan para tener cuota otra vez ("Please try
+       * again in 6.97s", o la cabecera retry-after).
+       *
+       * Antes eso se ignoraba y se le decía al usuario que los
+       * servidores estaban llenos, cuando bastaba con esperar siete
+       * segundos. Ahora se espera y se reintenta una vez: para el
+       * usuario es una respuesta que tarda un poco más, en vez de un
+       * error.
+       */
+      if (response.status === 429 && reintentosRestantes > 0) {
+        const cabecera = Number(response.headers.get("retry-after"));
+        const delTexto = errBody.match(/try again in ([\d.]+)s/i);
+        const segundos = Number.isFinite(cabecera) && cabecera > 0
+          ? cabecera
+          : delTexto
+          ? parseFloat(delTexto[1])
+          : 8;
+        // Tope de 20s: por encima de eso ya no compensa hacer esperar a
+        // nadie mirando una pantalla.
+        const espera = Math.min(segundos + 0.5, 20);
+        console.warn(`[assistant] cuota agotada, reintentando en ${espera}s`);
+        clearTimeout(timeout);
+        await new Promise((r) => setTimeout(r, espera * 1000));
+        return callModel(apiKey, model, systemPrompt, messages, maxTokens, reintentosRestantes - 1);
+      }
+
       const debug = `Groq respondió ${response.status}: ${errBody.slice(0, 300)}`;
       console.error(`[assistant] ${debug}`);
       return { ok: false, debug };

@@ -818,6 +818,8 @@ export function NewsFeed() {
 
       <NewsDetail
         item={openItem}
+        liked={openItem ? prefs.likedNewsIds.includes(openItem.id) : false}
+        onToggleLike={openItem ? () => handleToggleLike(openItem.id) : undefined}
         onClose={() => {
           setOpenItemId(null);
           window.sessionStorage.removeItem("anime-hub:open-item");

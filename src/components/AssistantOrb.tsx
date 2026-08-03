@@ -529,8 +529,19 @@ export function AssistantOrb() {
       // pasos que le van llegando.
       setPhase("research");
 
+      /*
+       * El prompt de sistema de Iris ocupa unos 16.000 caracteres — unos
+       * 4.000 tokens — y se manda ENTERO en cada mensaje. Aquí se
+       * estimaba 1.200 y por eso el control de presupuesto dejaba pasar
+       * peticiones que se salían del límite: Groq devolvía 429 con
+       * "Limit 6000, Used 2677, Requested 4020" y el usuario veía un
+       * error sin motivo aparente.
+       *
+       * 4.200 es lo que de verdad cuesta la base; a eso se le suma la
+       * conversación (aprox. un token por cada 3 caracteres).
+       */
       const estimatedTokens =
-        1200 + nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
+        4200 + nextMessages.reduce((sum, m) => sum + m.content.length / 3, 0);
 
       // ---- VÍA PRINCIPAL: respuesta en directo -----------------------
       // Un único stream que va contando los pasos reales (buscar,

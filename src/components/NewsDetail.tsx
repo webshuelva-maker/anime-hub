@@ -6,6 +6,7 @@ import { vibrar } from "@/lib/haptics";
 import { repartirEnParrafos } from "@/lib/parrafos";
 import { NewsItem } from "@/types/news";
 import { NewsCover } from "./NewsCover";
+import { HeartButton } from "./NewsCard";
 import { ReliabilityBadge } from "./ReliabilityBadge";
 import { PlatformBadge } from "./PlatformBadge";
 import { formatRelativeDate } from "@/lib/date";
@@ -16,9 +17,20 @@ import { runExclusive, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQue
 export function NewsDetail({
   item,
   onClose,
+  liked,
+  onToggleLike,
 }: {
   item: NewsItem | null;
   onClose: () => void;
+  /*
+   * El me gusta también aquí, y no solo en las tarjetas grandes.
+   * Las noticias de "Más noticias" se dibujan con NewsThumb, que no
+   * tiene corazón, así que hasta ahora no había NINGUNA forma de marcar
+   * como favorita una noticia que no fuera de las destacadas — ni
+   * abriéndola. Desde el detalle se puede marcar cualquiera.
+   */
+  liked?: boolean;
+  onToggleLike?: () => void;
 }) {
   const [title, setTitle] = useState<string | null>(null);
   const [body, setBody] = useState<string | null>(null);
@@ -261,6 +273,9 @@ export function NewsDetail({
 
               <div className="p-6 sm:p-8">
                 <div className="mb-4 flex flex-wrap items-center gap-3">
+                  {onToggleLike && (
+                    <HeartButton liked={!!liked} onToggle={onToggleLike} />
+                  )}
                   <ReliabilityBadge reliability={item.reliability} />
                   <PlatformBadge platform={item.source.platform} />
                   <span className="text-xs text-muted">{formatRelativeDate(item.publishedAt)}</span>

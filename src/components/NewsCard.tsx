@@ -8,7 +8,9 @@ import { NewsCover } from "./NewsCover";
 import { formatRelativeDate } from "@/lib/date";
 import { recordNewsInteraction } from "@/lib/learning";
 
-function HeartButton({ liked, onToggle }: { liked: boolean; onToggle: () => void }) {
+// Exportado para reutilizarlo en el detalle de la noticia, que hasta
+// ahora no tenía ninguna forma de marcar como favorita.
+export function HeartButton({ liked, onToggle }: { liked: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
@@ -95,8 +97,12 @@ export function NewsCard({
           )}
         </div>
         {item.prominence === "indie" && (
+          // Debajo de la etiqueta de categoría, no encima. Las dos se
+          // dibujan en componentes distintos (esta aquí, "Estreno" dentro
+          // de NewsCover) y las dos iban a la esquina superior izquierda,
+          // así que se superponían y quedaban ilegibles.
           <span
-            className="absolute left-3 top-3 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/90"
+            className="absolute left-4 top-[2.15rem] flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/90"
             style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}
           >
             <span className="h-[5px] w-[5px] rounded-full bg-white/70" />

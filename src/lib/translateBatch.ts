@@ -23,7 +23,8 @@ Te llega un array JSON con varias noticias, cada una con "id", "title" y "summar
 async function callBatch(
   items: BatchTranslateItem[],
   apiKey: string,
-  model: string
+  model: string,
+  reintentosRestantes = 1
 ): Promise<{ ok: true; results: BatchTranslateResult[] } | { ok: false; debug: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
@@ -50,6 +51,27 @@ async function callBatch(
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
+
+      /*
+       * 429 = cuota de tokens por minuto agotada. Groq dice cuántos
+       * segundos faltan para volver a tener cuota, así que se espera y
+       * se reintenta una vez en vez de dar la traducción por perdida:
+       * lo que el usuario veía era una noticia en inglés sin motivo
+       * aparente, cuando bastaba con esperar unos segundos.
+       */
+      if (res.status === 429 && reintentosRestantes > 0) {
+        const cabecera = Number(res.headers.get("retry-after"));
+        const delTexto = errBody.match(/try again in ([\d.]+)s/i);
+        const segundos = Number.isFinite(cabecera) && cabecera > 0
+          ? cabecera
+          : delTexto
+          ? parseFloat(delTexto[1])
+          : 8;
+        clearTimeout(timeout);
+        await new Promise((r) => setTimeout(r, Math.min(segundos + 0.5, 20) * 1000));
+        return callBatch(items, apiKey, model, reintentosRestantes - 1);
+      }
+
       const debug = `Groq respondió ${res.status}: ${errBody.slice(0, 200)}`;
       console.error(`[translate-batch] ${debug}`);
       return { ok: false, debug };
