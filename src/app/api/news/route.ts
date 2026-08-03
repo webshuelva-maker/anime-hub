@@ -389,6 +389,19 @@ async function fetchFeed(feed: Fuente): Promise<NewsItem[]> {
     const pubDateRaw = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]
       ?? block.match(/<dc:date>([\s\S]*?)<\/dc:date>/)?.[1])?.trim();
     const rawDescription = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? "";
+
+    /*
+     * Muchos RSS (todos los WordPress, que son la mayoría de los medios
+     * españoles del feed) traen el ARTÍCULO ENTERO dentro de
+     * <content:encoded>. Aprovecharlo tiene tres ventajas sobre entrar
+     * luego en la web a leerlo: es instantáneo, no puede fallar, y no
+     * depende de que la plantilla del medio use unas etiquetas u otras
+     * — que es lo que hacía que en la mitad de las noticias saliera "no
+     * se pudo cargar el artículo".
+     */
+    const rawContent =
+      block.match(/<content:encoded>([\s\S]*?)<\/content:encoded>/)?.[1] ?? "";
+    const contenidoCompleto = stripHtml(rawContent);
     const description = dedupeAgainstTitle(stripHtml(rawDescription), title);
     const embeddedImage = extractEmbeddedImage(block, rawDescription);
     const publishedAt = pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw))
@@ -399,7 +412,9 @@ async function fetchFeed(feed: Fuente): Promise<NewsItem[]> {
       id: `${feed.platform.slice(0, 3).toLowerCase()}-${hashId(link || title)}`,
       title,
       summary: description ? description.slice(0, 200) : title,
-      body: description || title,
+      // Si el feed trae el artículo entero, ese es el cuerpo. Si no, el
+      // resumen, y ya se intentará leer la web al abrirlo.
+      body: contenidoCompleto.length > 400 ? contenidoCompleto : description || title,
       imageQuery: title,
       // Las fuentes marcadas como "rumor" lo son por origen, no por lo
       // que diga el titular: un agregador puede publicar una filtración

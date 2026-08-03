@@ -612,14 +612,36 @@ export function NewsFeed() {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-        {status === "loading" && (
-          <div className="panel flex flex-col items-center gap-3 rounded-2xl px-6 py-16 text-center">
-            <motion.span
-              className="h-3 w-3 rounded-full bg-ice"
-              animate={{ scale: [1, 1.6, 1], opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <p className="text-sm text-muted">Cargando noticias en directo…</p>
+        {/*
+          Este aviso ya NO aparece durante el arranque.
+          Antes salía justo después de la pantalla de carga, que es
+          precisamente lo que acabas de esperar: quedaba como si la app
+          no supiera que ya había cargado. Ahora solo se ve si vuelves a
+          pedir las noticias con el feed vacío (por ejemplo tras un
+          error), y en vez de un punto y una frase se enseñan tarjetas
+          fantasma con la forma real del contenido, que es lo que hace
+          que la espera se sienta corta.
+        */}
+        {status === "loading" && !showInitialLoader && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[0, 1, 2, 3].map((i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.08, ease: "easeOut" }}
+                className="panel overflow-hidden rounded-2xl"
+              >
+                <div className="animate-pulse">
+                  <div className="aspect-[16/9] w-full" style={{ background: "var(--panel-soft)" }} />
+                  <div className="flex flex-col gap-2 p-4">
+                    <div className="h-3 w-24 rounded" style={{ background: "var(--panel-border)" }} />
+                    <div className="h-4 w-full rounded" style={{ background: "var(--panel-border)" }} />
+                    <div className="h-4 w-3/4 rounded" style={{ background: "var(--panel-border)" }} />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
         )}
 

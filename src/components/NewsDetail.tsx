@@ -54,6 +54,18 @@ export function NewsDetail({
 
     if (cached?.body) return () => {}; // ya está todo, no hace falta pedir nada
 
+    /*
+     * Si el propio RSS ya trajo el artículo entero (la mayoría de los
+     * medios españoles lo incluyen), se enseña directamente y no se pide
+     * nada: ni descarga de la web, ni espera, ni posibilidad de que
+     * falle. Es lo que arregla el "no se pudo cargar el artículo" en la
+     * mayoría de las noticias.
+     */
+    if (targetItem.language === "es" && targetItem.body && targetItem.body.length > 400) {
+      setBody(targetItem.body);
+      return () => {};
+    }
+
     // Si ya se descargó el artículo antes (aunque la traducción fallara
     // en su momento), reabrir la noticia lo muestra al instante — nada de
     // spinner ni de repetir la descarga — y solo se reintenta la
@@ -317,9 +329,15 @@ export function NewsDetail({
                     </button>
                   </p>
                 )}
+                {/* Antes aquí ponía "No se pudo cargar el artículo", en
+                    rojo y a la vista. Para el lector eso es un fallo de la
+                    app, cuando la mayoría de las veces solo significa que
+                    ese medio no deja leer su web desde fuera. Se enseña lo
+                    que hay y se ofrece terminar de leerlo en la fuente,
+                    que es lo útil. */}
                 {!translatingBody && loadFailed && !body && !englishFallback && (
                   <p className="mt-3 text-xs text-muted">
-                    No se pudo cargar el artículo — se muestra el resumen.{" "}
+                    Este medio no permite leer el artículo completo aquí.{" "}
                     <button type="button" onClick={handleRetry} className="underline hover:text-foreground">
                       Reintentar
                     </button>

@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v140",
+    fecha: "2026-08-03",
+    titulo: "El artículo entero, al instante",
+    intro: "La mayoría de los medios ya mandan la noticia completa en su feed: ahora se aprovecha.",
+    puntos: [
+      "Las noticias se abren con el texto completo, sin esperas y sin el aviso de \"no se pudo cargar\".",
+      "Fuera el cartel de \"cargando noticias en directo\" nada más terminar la pantalla de carga.",
+      "Mientras cargan, se ven tarjetas con la forma real del contenido en vez de un punto parpadeando.",
+    ],
+  },
+  {
     version: "v139",
     fecha: "2026-08-03",
     titulo: "Las noticias se leen enteras",

@@ -1,4 +1,11 @@
-const CACHE_KEY = "anime-hub:translation-cache";
+/*
+ * La versión va en el nombre. Las traducciones guardadas antes de la
+ * v140 llevaban el artículo recortado a 1500 caracteres, y al estar en
+ * caché seguían saliendo cortadas por mucho que ahora se descargue
+ * entero. Cambiar el nombre las deja atrás sin tener que borrar nada a
+ * mano.
+ */
+const CACHE_KEY = "anime-hub:translation-cache:v2";
 const MAX_ENTRIES = 200; // límite razonable para no llenar localStorage
 
 interface CachedTranslation {
