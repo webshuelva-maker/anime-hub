@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v135",
+    fecha: "2026-08-03",
+    titulo: "Muchas más noticias en español",
+    puntos: [
+      "Arregladas las direcciones de Crunchyroll, Ramen Para Dos, Koi-Nya, Somos Kudasai, Misión Tokyo, Hobby Consolas y 3DJuegos.",
+      "Cada fuente prueba varias direcciones hasta dar con la buena, así que dejan de morirse en silencio cuando un medio cambia su feed.",
+    ],
+  },
+  {
     version: "v134",
     fecha: "2026-08-03",
     titulo: "Comprobador de fuentes",
