@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v138",
+    fecha: "2026-08-03",
+    titulo: "Tus plataformas mandan en el feed",
+    puntos: [
+      "Las noticias de series que puedes ver en tus plataformas suben en el feed.",
+      "Arreglados los títulos que salían cortados sobre la carátula (\"Suikoden: The\").",
+      "Cinco medios en español más y fuera las fuentes que no respondían.",
+    ],
+  },
+  {
     version: "v137",
     fecha: "2026-08-03",
     titulo: "Los artículos se leen enteros",

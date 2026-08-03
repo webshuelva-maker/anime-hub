@@ -280,6 +280,17 @@ export function scoreNewsItem(item: NewsItem, prefs: UserPreferences): number {
   // Géneros y estudios que ha pedido expresamente (en el cuestionario o
   // diciéndoselo al asistente). Antes valían 0,5 — tan poco que decir "me
   // encanta el romance" no cambiaba nada en el feed.
+  /*
+   * Plataformas donde el usuario ve anime. Una noticia de algo que puede
+   * ver esta misma tarde le sirve más que una de algo que no tiene
+   * contratado, aunque el género encaje igual.
+   *
+   * Pesa 8 por plataforma coincidente: por encima de un género elegido
+   * (3) y por debajo de un favorito (40). Si no hay coincidencia no
+   * penaliza — puede querer enterarse igual.
+   */
+  score += (item.platforms ?? []).filter((p) => prefs.platforms.includes(p)).length * 8;
+
   score += item.genres.filter((g) => prefs.genres.includes(g)).length * 3;
   score += item.studios.filter((s) => prefs.studios.includes(s)).length * 3;
 

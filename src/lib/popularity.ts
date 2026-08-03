@@ -48,6 +48,8 @@ export interface DatosTitulo {
   popularity: number | null;
   genres: string[];
   studios: string[];
+  /** Plataformas donde se puede ver, según AniList. */
+  platforms: string[];
 }
 
 const cache = new Map<string, { datos: DatosTitulo; expira: number }>();
@@ -75,6 +77,42 @@ function claveDe(titulo: string): string {
 /** Escapa el título para poder incrustarlo en la consulta GraphQL. */
 function escapar(t: string): string {
   return t.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Traduce los enlaces externos de AniList a los nombres de plataforma
+ * que usa la app.
+ *
+ * Sirve para poder priorizar en el feed las noticias de series que se
+ * pueden ver donde el usuario tiene cuenta: si solo tiene Crunchyroll,
+ * una noticia de algo exclusivo de otra plataforma le sirve de menos.
+ * AniList escribe los nombres a su manera ("Amazon Prime Video",
+ * "Netflix"), así que hay que emparejarlos.
+ */
+const EQUIVALENCIAS_PLATAFORMA: [RegExp, string][] = [
+  [/crunchyroll/i, "Crunchyroll"],
+  [/netflix/i, "Netflix"],
+  [/prime\s*video|amazon/i, "Prime Video"],
+  [/hbo|max\b/i, "HBO Max"],
+  [/disney/i, "Disney+"],
+  [/animebox|selecta/i, "AnimeBox"],
+  [/onegai/i, "Anime Onegai"],
+  [/wakanim/i, "Wakanim"],
+  [/bilibili/i, "Bilibili"],
+  [/muse/i, "Muse Asia"],
+  [/laftel/i, "Laftel"],
+];
+
+function plataformasDe(links: unknown): string[] {
+  if (!Array.isArray(links)) return [];
+  const salida = new Set<string>();
+  for (const l of links as { site?: string; type?: string }[]) {
+    if (!l?.site || l.type !== "STREAMING") continue;
+    for (const [patron, nombre] of EQUIVALENCIAS_PLATAFORMA) {
+      if (patron.test(l.site)) salida.add(nombre);
+    }
+  }
+  return [...salida];
 }
 
 async function pedirLote(titulos: string[]): Promise<Map<string, DatosTitulo>> {
@@ -111,6 +149,7 @@ ${titulos
       popularity
       genres
       studios(isMain: true) { nodes { name } }
+    externalLinks { site type }
     }
   }`
   )
@@ -162,6 +201,7 @@ ${titulos
         popularity: typeof m.popularity === "number" ? m.popularity : null,
         genres: Array.isArray(m.genres) ? m.genres : [],
         studios: (m.studios?.nodes ?? []).map((s: { name: string }) => s.name),
+        platforms: plataformasDe(m.externalLinks),
       });
     });
     return resultado;

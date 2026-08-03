@@ -38,6 +38,30 @@ export const TIER_COLOR: Record<SourceTier, string> = {
  * son prensa, no la fuente oficial de la obra.
  */
 const PRESS_DOMAINS = [
+  // Prensa española y latinoamericana de anime — son las fuentes del
+  // feed de la app, así que Iris tiene que reconocerlas como prensa
+  // especializada y no dejarlas en "sin verificar".
+  "ramenparados.com",
+  "somoskudasai.com",
+  "anmosugoi.com",
+  "otakufreaks.com",
+  "koi-nya.net",
+  "misiontokyo.com",
+  "deculture.es",
+  "anmtv.xyz",
+  "codigoespagueti.com",
+  "areajugones.sport.es",
+  "alfabetajuega.com",
+  "espinof.com",
+  "zonanegativa.com",
+  "hobbyconsolas.com",
+  "vandal.elespanol.com",
+  "as.com",
+  "vidaextra.com",
+  "es.ign.com",
+  "latam.ign.com",
+  "tarreo.com",
+  "atomix.vg",
   "animenewsnetwork.com",
   "myanimelist.net",
   "otakuusamagazine.com",

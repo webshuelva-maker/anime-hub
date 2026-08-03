@@ -43,6 +43,8 @@ export interface NewsItem {
   publishedAt: string; // ISO date
   source: NewsSource;
   relatedTitle: string; // anime al que se refiere la noticia
+  /** Plataformas donde se puede ver la serie (de AniList). Sirve para priorizar las que usa el usuario. */
+  platforms?: Platform[];
   crossConfirmedBy?: Platform[]; // si varias fuentes confirman lo mismo
   prominence: Prominence;
   popularity?: number;

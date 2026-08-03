@@ -89,26 +89,18 @@ const FUENTES_ES: Fuente[] = [
   { urls: ["https://somoskudasai.com/noticias/feed/", "https://somoskudasai.com/feed/"], platform: "Somos Kudasai", label: "Ver en Somos Kudasai", language: "es", tier: "oficial" },
   { urls: ["https://ramenparados.com/feed/", "https://ramenparados.com/feed/rss/"], platform: "Ramen Para Dos", label: "Ver en Ramen Para Dos", language: "es", tier: "oficial" },
   { urls: ["https://anmosugoi.com/feed/", "https://anmosugoi.com/?feed=rss2"], platform: "AnmoSugoi", label: "Ver en AnmoSugoi", language: "es", tier: "oficial" },
-  { urls: ["https://koi-nya.net/feed/", "https://koi-nya.net/?feed=rss2"], platform: "Koi-Nya", label: "Ver en Koi-Nya", language: "es", tier: "oficial" },
-  {
-    urls: [
-      "https://www.misiontokyo.com/feed/rss/",
-      "https://www.misiontokyo.com/?feed=rss2",
-      "https://misiontokyo.com/feed/",
-    ],
-    platform: "Misión Tokyo",
-    label: "Ver en Misión Tokyo",
-    language: "es",
-    tier: "oficial",
-  },
+  // Koi-Nya, Misión Tokyo, ANMTV, Tarreo y 3DJuegos se han quitado: sus
+  // servidores no responden, devuelven 404 o rechazan la petición desde
+  // un servidor. Una fuente que no contesta solo suma segundos de espera.
+  { urls: ["https://areajugones.sport.es/feed/"], platform: "Areajugones", label: "Ver en Areajugones", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://www.alfabetajuega.com/feed/"], platform: "AlfaBetaJuega", label: "Ver en AlfaBetaJuega", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://www.espinof.com/feedburner.xml"], platform: "Espinof", label: "Ver en Espinof", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://www.zonanegativa.com/feed/"], platform: "Zona Negativa", label: "Ver en Zona Negativa", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://latam.ign.com/feed.xml"], platform: "IGN Latinoamérica", label: "Ver en IGN Latinoamérica", language: "es", tier: "oficial", soloAnime: true },
 
   // ---------- Más medios en español (anime y manga) ----------
   { urls: ["https://otakufreaks.com/feed/"], platform: "Otaku Freaks", label: "Ver en Otaku Freaks", language: "es", tier: "oficial" },
-  { urls: ["https://www.deculture.es/feed/", "https://deculture.es/feed/"], platform: "Deculture", label: "Ver en Deculture", language: "es", tier: "oficial" },
-  { urls: ["https://www.anmtv.xyz/feeds/posts/default?alt=rss"], platform: "ANMTV", label: "Ver en ANMTV", language: "es", tier: "oficial" },
-  { urls: ["https://www.tarreo.com/rss/anime", "https://www.tarreo.com/rss"], platform: "Tarreo", label: "Ver en Tarreo", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://codigoespagueti.com/feed/"], platform: "Código Espagueti", label: "Ver en Código Espagueti", language: "es", tier: "oficial", soloAnime: true },
-  { urls: ["https://atomix.vg/feed/"], platform: "Atomix", label: "Ver en Atomix", language: "es", tier: "oficial", soloAnime: true },
 
   // ---------- Generalistas españoles, filtrados a anime ----------
   { urls: ["https://www.hobbyconsolas.com/rss"], platform: "Hobby Consolas", label: "Ver en Hobby Consolas", language: "es", tier: "oficial", soloAnime: true },
@@ -116,19 +108,6 @@ const FUENTES_ES: Fuente[] = [
   { urls: ["https://es.ign.com/feed.xml"], platform: "IGN España", label: "Ver en IGN España", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://vandal.elespanol.com/xml.cgi/noticias.xml"], platform: "Vandal", label: "Ver en Vandal", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://www.vidaextra.com/feedburner.xml"], platform: "Vida Extra", label: "Ver en Vida Extra", language: "es", tier: "oficial", soloAnime: true },
-  {
-    urls: [
-      "https://www.3djuegos.com/feeds/noticias/",
-      "https://www.3djuegos.com/rss/",
-      "https://www.3djuegos.com/noticias/rss/",
-      "https://www.3djuegos.com/feed/",
-    ],
-    platform: "3DJuegos",
-    label: "Ver en 3DJuegos",
-    language: "es",
-    tier: "oficial",
-    soloAnime: true,
-  },
 ];
 
 /** Desactivadas. Ver INCLUIR_INGLES arriba. */
@@ -310,11 +289,24 @@ function extractSeriesName(title: string): string {
     if (i > 3 && i < corte) corte = i;
   }
 
-  const nombre = limpio
+  let nombre = limpio
     .slice(0, corte)
     .replace(/[\s,:;–—-]+$/, "")
     .replace(/^['"«]|['"»]$/g, "")
     .trim();
+
+  /*
+   * Quita artículos y preposiciones que se quedan colgando al cortar.
+   *
+   * "Suikoden: The Anime revela imagen principal" cortaba en "Anime" y
+   * dejaba "Suikoden: The", que además de quedar feo en la tarjeta no
+   * encuentra nada al buscarlo en la base de datos. Se repite hasta que
+   * la última palabra sea de verdad parte del nombre.
+   */
+  const COLGANTES = /\s+(the|a|an|el|la|los|las|un|una|de|del|y|and|of|para|con|su|sus|nuevo|nueva)$/i;
+  while (COLGANTES.test(nombre)) {
+    nombre = nombre.replace(COLGANTES, "").replace(/[\s,:;–—-]+$/, "");
+  }
 
   // Si el recorte deja algo demasiado corto, o solo palabras de relleno,
   // no era un titular con esta forma: mejor el titular entero, que al
@@ -417,6 +409,7 @@ async function fetchFeed(feed: Fuente): Promise<NewsItem[]> {
       source: { platform: feed.platform, url: link || feed.urls[0], label: feed.label },
       relatedTitle: extractSeriesName(title),
       prominence: "mainstream",
+      platforms: [],
       language: feed.language,
     };
     if (embeddedImage) item.coverImageUrl = embeddedImage;
@@ -529,6 +522,10 @@ export async function GET() {
       // la portada de AniList es la de la obra.
       if (d.coverImageUrl) item.coverImageUrl = d.coverImageUrl;
       if (item.genres.length === 0 && d.genres.length > 0) item.genres = d.genres;
+      // Dónde se puede ver, para poder priorizar las plataformas del usuario.
+      if ((item.platforms ?? []).length === 0 && d.platforms.length > 0) {
+        item.platforms = d.platforms as NewsItem["platforms"];
+      }
       if (item.studios.length === 0 && d.studios.length > 0) item.studios = d.studios;
     }
 
