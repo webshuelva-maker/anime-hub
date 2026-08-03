@@ -185,6 +185,9 @@ export function NewsDetail({
    * un muro de texto por mucho que ahora se traduzca bien. Aplicarlo al
    * mostrar arregla también los que ya estaban guardados.
    */
+  /** ¿Esta noticia ya viene en español? Entonces no hay nada que traducir. */
+  const esEspanol = item?.language === "es";
+
   const shownBody = repartirEnParrafos(body || englishFallback || item?.summary || item?.body || "");
 
   /*
@@ -295,10 +298,13 @@ export function NewsDetail({
 
                 <p className="font-heading mt-3 text-sm text-muted">{item.relatedTitle}</p>
 
-                {translatingBody && !body && (
+                {/* Nada de mensajes de traducción cuando la noticia ya
+                    viene en español: no hay nada que traducir y el aviso
+                    solo confunde. */}
+                {esEspanol ? null : translatingBody && !body ? (
                   <p className="mt-3 text-xs text-muted">Traduciendo el artículo…</p>
-                )}
-                {!translatingBody && englishFallback && !body && (
+                ) : null}
+                {!esEspanol && !translatingBody && englishFallback && !body && (
                   <p className="mt-3 text-xs text-muted">
                     No se pudo traducir el artículo — se muestra en inglés.{" "}
                     <button type="button" onClick={handleRetry} className="underline hover:text-foreground">

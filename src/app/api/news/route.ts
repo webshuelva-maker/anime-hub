@@ -102,6 +102,14 @@ const FUENTES_ES: Fuente[] = [
     tier: "oficial",
   },
 
+  // ---------- Más medios en español (anime y manga) ----------
+  { urls: ["https://otakufreaks.com/feed/"], platform: "Otaku Freaks", label: "Ver en Otaku Freaks", language: "es", tier: "oficial" },
+  { urls: ["https://www.deculture.es/feed/", "https://deculture.es/feed/"], platform: "Deculture", label: "Ver en Deculture", language: "es", tier: "oficial" },
+  { urls: ["https://www.anmtv.xyz/feeds/posts/default?alt=rss"], platform: "ANMTV", label: "Ver en ANMTV", language: "es", tier: "oficial" },
+  { urls: ["https://www.tarreo.com/rss/anime", "https://www.tarreo.com/rss"], platform: "Tarreo", label: "Ver en Tarreo", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://codigoespagueti.com/feed/"], platform: "Código Espagueti", label: "Ver en Código Espagueti", language: "es", tier: "oficial", soloAnime: true },
+  { urls: ["https://atomix.vg/feed/"], platform: "Atomix", label: "Ver en Atomix", language: "es", tier: "oficial", soloAnime: true },
+
   // ---------- Generalistas españoles, filtrados a anime ----------
   { urls: ["https://www.hobbyconsolas.com/rss"], platform: "Hobby Consolas", label: "Ver en Hobby Consolas", language: "es", tier: "oficial", soloAnime: true },
   { urls: ["https://as.com/rss/meristation/portada.xml"], platform: "Meristation", label: "Ver en Meristation", language: "es", tier: "oficial", soloAnime: true },

@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v137",
+    fecha: "2026-08-03",
+    titulo: "Los artículos se leen enteros",
+    puntos: [
+      "Arreglado el fallo por el que al abrir una noticia solo salía el resumen.",
+      "Se acabaron los avisos de traducción en noticias que ya vienen en español.",
+      "Seis medios en español más: Otaku Freaks, Deculture, ANMTV, Tarreo, Código Espagueti y Atomix.",
+    ],
+  },
+  {
     version: "v136",
     fecha: "2026-08-03",
     titulo: "Todas las noticias en español",
