@@ -23,6 +23,14 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v152",
+    fecha: "2026-08-04",
+    titulo: "Ajustes del panel de moderación",
+    puntos: [
+      "Las animaciones del listado de miembros van finas: se acabaron los saltos al abrir y al buscar.",
+    ],
+  },
+  {
     version: "v151",
     fecha: "2026-08-04",
     titulo: "Moderación de verdad y avisos de actualización",

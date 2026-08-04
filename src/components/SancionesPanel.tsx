@@ -7,16 +7,28 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { playError, playSuccess, playToggle } from "@/lib/sound";
 
 /**
- * Sanciones sobre una persona concreta, dentro del panel de moderación.
+ * Sanciones sobre una persona concreta.
  *
  * Antes desde aquí solo se podía responder. Poder responder pero no
  * actuar no es moderar: si alguien está acosando a otra persona, hace
  * falta cortarlo, y hace falta que quede constancia.
  *
- * Hay tres castigos a propósito, de menos a más, en vez de solo
+ * Hay cuatro castigos a propósito, de menos a más, en vez de solo
  * "expulsar": la mayoría de los problemas se resuelven con un parón de
  * un día, y reservar la expulsión definitiva para lo grave hace que
  * signifique algo.
+ *
+ * ITERACIÓN — antes cada duración ERA su propio botón ("Suspender 1
+ * día", "Suspender 7 días"…). Parecían pastillas de selección y no
+ * acciones, y justo encima la sección de avisos sí tenía su botón claro
+ * de "Enviar aviso": el resultado era que no se encontraba dónde aplicar
+ * la sanción. Ahora la duración se ELIGE y hay un único botón, cuyo
+ * texto dice exactamente lo que va a pasar al pulsarlo.
+ *
+ * OJO al usarlo: hay que pasarle key={userId}. Al cambiar de persona,
+ * React reaprovecharía el componente y se quedaría dentro el motivo
+ * escrito para el anterior — es muy fácil redactar una sanción para uno
+ * y acabar aplicándosela al siguiente. Con la clave, se monta de cero.
  */
 
 interface SancionFila {
@@ -28,11 +40,16 @@ interface SancionFila {
   levantada_en: string | null;
 }
 
-const CASTIGOS = [
+type Castigo = { etiqueta: string; horas: number | null };
+
+const CASTIGOS: Castigo[] = [
   { etiqueta: "1 día", horas: 24 },
   { etiqueta: "7 días", horas: 24 * 7 },
   { etiqueta: "30 días", horas: 24 * 30 },
-] as const;
+  { etiqueta: "Para siempre", horas: null },
+];
+
+const SUAVE = [0.16, 1, 0.3, 1] as const;
 
 export function SancionesPanel({
   userId,
@@ -44,9 +61,13 @@ export function SancionesPanel({
 }) {
   const [historial, setHistorial] = useState<SancionFila[]>([]);
   const [motivo, setMotivo] = useState("");
+  // Arranca en lo más suave: para expulsar hay que elegirlo a mano.
+  const [castigo, setCastigo] = useState<Castigo>(CASTIGOS[0]);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [confirmandoExpulsion, setConfirmandoExpulsion] = useState(false);
+
+  const permanente = castigo.horas === null;
 
   const cargar = async () => {
     const supabase = createClient();
@@ -71,13 +92,20 @@ export function SancionesPanel({
     (s) => !s.levantada_en && (s.tipo === "permanente" || (s.hasta && new Date(s.hasta) > new Date()))
   );
 
-  const sancionar = async (tipo: "temporal" | "permanente", horas?: number) => {
+  const aplicar = async () => {
     if (motivo.trim().length < 5) {
       playError();
       setAviso("Escribe el motivo. Queda guardado y la persona lo va a leer.");
       return;
     }
+    if (permanente) {
+      setConfirmandoExpulsion(true);
+      return;
+    }
+    await ejecutar("temporal", castigo.horas!);
+  };
 
+  const ejecutar = async (tipo: "temporal" | "permanente", horas?: number) => {
     setOcupado(true);
     setAviso(null);
     try {
@@ -106,6 +134,7 @@ export function SancionesPanel({
       }).catch(() => {});
 
       setMotivo("");
+      setCastigo(CASTIGOS[0]);
       setConfirmandoExpulsion(false);
       await cargar();
       onCambio?.();
@@ -133,23 +162,19 @@ export function SancionesPanel({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.35, delay: 0.06, ease: SUAVE }}
       className="border-t border-panel-border px-5 py-4"
     >
       <div className="flex items-center gap-2">
         <h3 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-          Sanciones
+          Suspender o expulsar
         </h3>
         {activa && (
-          <motion.span
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-full border border-rumor/40 bg-rumor/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rumor"
-          >
+          <span className="rounded-full border border-rumor/40 bg-rumor/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rumor">
             {activa.tipo === "permanente" ? "Expulsada" : "Suspendida"}
-          </motion.span>
+          </span>
         )}
       </div>
 
@@ -166,14 +191,17 @@ export function SancionesPanel({
                   minute: "2-digit",
                 })}`}
           </p>
-          <button
+          <motion.button
             type="button"
             onClick={() => levantar(activa.id)}
             disabled={ocupado}
-            className="mt-3 rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground disabled:opacity-50"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.2, ease: SUAVE }}
+            className="mt-3 rounded-full border border-panel-border px-4 py-2 text-xs font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground disabled:opacity-50"
           >
             Levantar sanción
-          </button>
+          </motion.button>
         </div>
       ) : (
         <>
@@ -188,34 +216,73 @@ export function SancionesPanel({
             className="panel-elevated mt-3 w-full rounded-lg px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
           />
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {CASTIGOS.map((c) => (
-              <motion.button
-                key={c.etiqueta}
-                type="button"
-                onClick={() => sancionar("temporal", c.horas)}
-                disabled={ocupado}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 400, damping: 22 }}
-                className="rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground disabled:opacity-50"
-              >
-                Suspender {c.etiqueta}
-              </motion.button>
-            ))}
-
-            <motion.button
-              type="button"
-              onClick={() => setConfirmandoExpulsion(true)}
-              disabled={ocupado}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              transition={{ type: "spring", stiffness: 400, damping: 22 }}
-              className="rounded-full border border-rumor/40 px-3 py-1.5 text-xs font-semibold text-rumor transition-colors hover:bg-rumor/10 disabled:opacity-50"
-            >
-              Expulsar para siempre
-            </motion.button>
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Duración
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {CASTIGOS.map((c) => {
+              const elegido = c.etiqueta === castigo.etiqueta;
+              const color = c.horas === null ? "var(--rumor)" : "var(--ice)";
+              return (
+                <motion.button
+                  key={c.etiqueta}
+                  type="button"
+                  onClick={() => {
+                    setCastigo(c);
+                    playToggle();
+                  }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: 0.2, ease: SUAVE }}
+                  className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200"
+                  style={
+                    elegido
+                      ? {
+                          borderColor: color,
+                          color,
+                          background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                        }
+                      : { borderColor: "var(--panel-border)", color: "var(--muted)" }
+                  }
+                >
+                  {c.etiqueta}
+                </motion.button>
+              );
+            })}
           </div>
+
+          {/* Un solo botón, y su texto dice lo que va a pasar. */}
+          <motion.button
+            type="button"
+            onClick={aplicar}
+            disabled={ocupado}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.2, ease: SUAVE }}
+            className={`mt-4 w-full rounded-full py-2.5 text-sm font-semibold transition-colors duration-200 disabled:opacity-40 ${
+              permanente ? "border text-rumor" : "accent-gradient text-white"
+            }`}
+            style={
+              permanente
+                ? {
+                    borderColor: "color-mix(in srgb, var(--rumor) 50%, transparent)",
+                    background: "color-mix(in srgb, var(--rumor) 10%, transparent)",
+                  }
+                : undefined
+            }
+          >
+            {ocupado
+              ? "Aplicando…"
+              : permanente
+              ? "Expulsar para siempre"
+              : `Suspender ${castigo.etiqueta}`}
+          </motion.button>
+
+          <p className="mt-2 text-[11px] leading-snug text-muted">
+            {permanente
+              ? "Pedirá confirmación. Se puede levantar después, pero queda registrado."
+              : "Se le corta el acceso al momento y ve el motivo en pantalla."}
+          </p>
         </>
       )}
 
@@ -225,6 +292,7 @@ export function SancionesPanel({
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: SUAVE }}
             className="mt-2 text-xs text-rumor"
           >
             {aviso}
@@ -261,7 +329,7 @@ export function SancionesPanel({
         title="Expulsar para siempre"
         message="Esta persona no podrá volver a usar la app con esta cuenta. Queda registrado quién lo ha hecho y por qué, y se puede levantar después. Úsalo solo para cosas graves."
         confirmLabel="Sí, expulsar"
-        onConfirm={() => sancionar("permanente")}
+        onConfirm={() => ejecutar("permanente")}
         onCancel={() => setConfirmandoExpulsion(false)}
       />
     </motion.div>

@@ -22,11 +22,32 @@ import {
  * desde la conversación de soporte, así que la única gente moderable era
  * la que había pedido ayuda. Justo al revés de lo que hace falta.
  *
- * La sección va plegada por defecto y se abre con animación, como el
- * resto de la app: es una lista de personas reales con sus correos, y no
- * tiene por qué estar a la vista cada vez que se entra a contestar un
- * ticket.
+ * ---------------------------------------------------------------------
+ * NOTA SOBRE LAS ANIMACIONES (iteración tras verlo funcionando)
+ *
+ * La primera versión se veía a tirones, y no por una animación mal
+ * puesta sino por TRES peleándose por el mismo espacio a la vez:
+ *
+ *  1. El panel abriéndose de altura 0 a automática.
+ *  2. Cada miembro entrando con su propio retraso calculado.
+ *  3. La propiedad "layout" en cada fila, que además intenta interpolar
+ *     los cambios de posición — o sea, mover las filas mientras el
+ *     contenedor todavía está cambiando de tamaño y las filas están
+ *     apareciendo. De ahí el efecto de cosas dando saltos.
+ *
+ * Y encima la lista se rehacía entera con cada búsqueda, así que al
+ * teclear todo entraba y salía a la vez.
+ *
+ * Arreglo: una sola línea temporal. Primero se abre el panel; CUANDO
+ * termina, entran las filas escalonadas (y solo la primera vez, no en
+ * cada búsqueda); nada de "layout"; y una única curva y unas únicas
+ * duraciones para todo, en vez de mezclar muelles y easings distintos.
+ * ---------------------------------------------------------------------
  */
+
+/** La misma curva en todo el panel: es lo que hace que se sienta igual. */
+const SUAVE = [0.16, 1, 0.3, 1] as const;
+const APERTURA = 0.42;
 
 const GRAVEDADES: { valor: Gravedad; etiqueta: string; ayuda: string }[] = [
   { valor: "leve", etiqueta: "Leve", ayuda: "Un toque de atención, sin más." },
@@ -56,6 +77,11 @@ export function ModeracionMiembros() {
   const [fallo, setFallo] = useState<string | null>(null);
   const [elegido, setElegido] = useState<Miembro | null>(null);
   const yaCargadoRef = useRef(false);
+  // El escalonado es un detalle de bienvenida: está bien la primera vez
+  // que aparece la lista, pero repetirlo con cada letra que se teclea lo
+  // convierte en un temblor constante. A partir de la segunda carga, las
+  // filas simplemente aparecen.
+  const [escalonar, setEscalonar] = useState(true);
 
   const cargar = async (termino: string) => {
     setCargando(true);
@@ -69,23 +95,28 @@ export function ModeracionMiembros() {
       );
     } finally {
       setCargando(false);
+      setEscalonar(false);
     }
   };
 
   // La primera carga se hace al abrir la sección, no al montar el panel:
   // esto trae correos de gente real y no hay motivo para pedirlos si
   // solo se venía a contestar un ticket.
+  //
+  // El retraso no es decorativo: deja que el panel termine de abrirse
+  // antes de meter filas dentro. Sin él, la lista aparecía a mitad del
+  // despliegue y el contenedor daba un tirón.
   useEffect(() => {
     if (!abierta || yaCargadoRef.current) return;
     yaCargadoRef.current = true;
-    const id = setTimeout(() => void cargar(""), 0);
+    const id = setTimeout(() => void cargar(""), APERTURA * 1000);
     return () => clearTimeout(id);
   }, [abierta]);
 
   // Búsqueda con freno: se espera a que deje de teclear. Sin esto sale
   // una consulta por letra.
   useEffect(() => {
-    if (!abierta) return;
+    if (!abierta || !yaCargadoRef.current) return;
     const id = setTimeout(() => void cargar(busqueda), 350);
     return () => clearTimeout(id);
   }, [busqueda, abierta]);
@@ -94,7 +125,7 @@ export function ModeracionMiembros() {
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.35, ease: SUAVE }}
       className="panel mt-4 overflow-hidden rounded-2xl"
     >
       <button
@@ -103,7 +134,7 @@ export function ModeracionMiembros() {
           setAbierta((v) => !v);
           playToggle();
         }}
-        className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-panel-soft/50"
+        className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors duration-200 hover:bg-panel-soft/50"
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-panel-border text-sm"
@@ -119,7 +150,7 @@ export function ModeracionMiembros() {
         </span>
         <motion.span
           animate={{ rotate: abierta ? 180 : 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: APERTURA, ease: SUAVE }}
           className="shrink-0 text-muted"
         >
           ⌄
@@ -133,7 +164,14 @@ export function ModeracionMiembros() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            transition={{
+              height: { duration: APERTURA, ease: SUAVE },
+              // La opacidad va por delante y más corta: el contenido se
+              // ve nítido casi enseguida mientras el hueco termina de
+              // abrirse, en vez de quedarse medio traslúcido hasta el
+              // final.
+              opacity: { duration: 0.24, ease: "easeOut" },
+            }}
             className="overflow-hidden"
           >
             <div className="border-t border-panel-border px-5 py-4">
@@ -145,98 +183,102 @@ export function ModeracionMiembros() {
                 className="panel-elevated w-full rounded-lg px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
               />
 
-              <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
-                <AnimatePresence mode="wait">
-                  <motion.span
-                    key={cargando ? "buscando" : `n-${miembros.length}`}
-                    initial={{ opacity: 0, y: -3 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 3 }}
-                    transition={{ duration: 0.18 }}
-                  >
-                    {cargando
-                      ? "Buscando…"
-                      : `${miembros.length} ${miembros.length === 1 ? "miembro" : "miembros"}`}
-                  </motion.span>
-                </AnimatePresence>
-              </div>
+              {/* Sin cambio de elemento ni AnimatePresence: antes el
+                  contador se desmontaba y se volvía a montar en cada
+                  búsqueda, y ese parpadeo era parte de lo que se veía
+                  brusco. Ahora es el mismo texto atenuándose. */}
+              <motion.p
+                animate={{ opacity: cargando ? 0.45 : 1 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="mt-2 text-[11px] text-muted"
+              >
+                {cargando
+                  ? "Buscando…"
+                  : `${miembros.length} ${miembros.length === 1 ? "miembro" : "miembros"}`}
+              </motion.p>
 
               {fallo && <p className="mt-2 text-xs leading-snug text-rumor">{fallo}</p>}
 
               <div className="mt-3 flex max-h-[42vh] flex-col gap-1 overflow-y-auto pr-1">
-                <AnimatePresence initial={false}>
-                  {miembros.map((m, i) => {
-                    const sancionado = m.sancion_tipo !== null;
-                    return (
-                      <motion.button
-                        key={m.id}
-                        type="button"
-                        layout
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{
-                          duration: 0.28,
-                          delay: Math.min(i * 0.025, 0.3),
-                          ease: [0.16, 1, 0.3, 1],
-                        }}
-                        onClick={() => {
-                          playClick();
-                          setElegido(elegido?.id === m.id ? null : m);
-                        }}
-                        className={`rounded-xl px-3 py-2.5 text-left transition-colors ${
-                          elegido?.id === m.id ? "bg-panel-soft" : "hover:bg-panel-soft/60"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                            {nombreVisible(m)}
+                {miembros.map((m, i) => {
+                  const sancionado = m.sancion_tipo !== null;
+                  return (
+                    <motion.button
+                      key={m.id}
+                      type="button"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.34,
+                        // Tope bajo: con cuarenta miembros, un retraso
+                        // acumulado sin límite dejaba las últimas filas
+                        // apareciendo un segundo después que las
+                        // primeras, que es justo lo que se notaba raro.
+                        delay: escalonar ? Math.min(i * 0.028, 0.22) : 0,
+                        ease: SUAVE,
+                      }}
+                      onClick={() => {
+                        playClick();
+                        setElegido(elegido?.id === m.id ? null : m);
+                      }}
+                      className={`rounded-xl px-3 py-2.5 text-left transition-colors duration-200 ${
+                        elegido?.id === m.id ? "bg-panel-soft" : "hover:bg-panel-soft/60"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                          {nombreVisible(m)}
+                        </span>
+                        {m.es_administrador && (
+                          <span className="shrink-0 rounded-full border border-ice/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-ice">
+                            Moderación
                           </span>
-                          {m.es_administrador && (
-                            <span className="shrink-0 rounded-full border border-ice/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-ice">
-                              Moderación
-                            </span>
-                          )}
-                          {m.avisos > 0 && (
-                            <span className="shrink-0 text-[10px] text-muted">
-                              {m.avisos} {m.avisos === 1 ? "aviso" : "avisos"}
-                            </span>
-                          )}
-                          {sancionado && (
-                            <span className="shrink-0 rounded-full border border-rumor/40 bg-rumor/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rumor">
-                              {m.sancion_tipo === "permanente" ? "Expulsado" : "Suspendido"}
-                            </span>
-                          )}
-                        </span>
-                        <span className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
-                          <span className="min-w-0 flex-1 truncate">{m.email ?? "Sin correo"}</span>
-                          <span className="shrink-0">{haceCuanto(m.creado_en)}</span>
-                        </span>
-                      </motion.button>
-                    );
-                  })}
-                </AnimatePresence>
+                        )}
+                        {m.avisos > 0 && (
+                          <span className="shrink-0 text-[10px] text-muted">
+                            {m.avisos} {m.avisos === 1 ? "aviso" : "avisos"}
+                          </span>
+                        )}
+                        {sancionado && (
+                          <span className="shrink-0 rounded-full border border-rumor/40 bg-rumor/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rumor">
+                            {m.sancion_tipo === "permanente" ? "Expulsado" : "Suspendido"}
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
+                        <span className="min-w-0 flex-1 truncate">{m.email ?? "Sin correo"}</span>
+                        <span className="shrink-0">{haceCuanto(m.creado_en)}</span>
+                      </span>
+                    </motion.button>
+                  );
+                })}
               </div>
             </div>
 
-            <AnimatePresence>
-              {elegido && (
-                <motion.div
-                  key={elegido.id}
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                  className="overflow-hidden border-t border-panel-border"
-                >
-                  <FichaMiembro
-                    miembro={elegido}
-                    onCerrar={() => setElegido(null)}
-                    onCambio={() => void cargar(busqueda)}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/*
+              La ficha NO anima la altura, a diferencia del panel de
+              arriba. Dentro hay dos consultas (avisos y sanciones) que
+              llegan después de abrirse, así que animar hacia "altura
+              automática" medía un tamaño que dejaba de ser cierto medio
+              segundo más tarde: el panel daba un salto justo cuando
+              cargaban los datos. Un fundido con desplazamiento no depende
+              del tamaño y no puede descuadrarse.
+            */}
+            {elegido && (
+              <motion.div
+                key={elegido.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.34, ease: SUAVE }}
+                className="border-t border-panel-border"
+              >
+                <FichaMiembro
+                  miembro={elegido}
+                  onCerrar={() => setElegido(null)}
+                  onCambio={() => void cargar(busqueda)}
+                />
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -306,7 +348,7 @@ function FichaMiembro({
         <button
           type="button"
           onClick={onCerrar}
-          className="shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
+          className="shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-muted transition-colors duration-200 hover:border-ice/40 hover:text-foreground"
         >
           Cerrar
         </button>
@@ -329,7 +371,8 @@ function FichaMiembro({
           className="panel-elevated mt-3 w-full rounded-lg px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
         />
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-muted">Gravedad</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {GRAVEDADES.map((g) => (
             <motion.button
               key={g.valor}
@@ -338,10 +381,10 @@ function FichaMiembro({
                 setGravedad(g.valor);
                 playToggle();
               }}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              transition={{ type: "spring", stiffness: 400, damping: 22 }}
-              className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.2, ease: SUAVE }}
+              className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200"
               style={
                 gravedad === g.valor
                   ? {
@@ -355,19 +398,19 @@ function FichaMiembro({
               {g.etiqueta}
             </motion.button>
           ))}
-
-          <motion.button
-            type="button"
-            onClick={enviar}
-            disabled={enviando}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 400, damping: 22 }}
-            className="accent-gradient ml-auto rounded-full px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-          >
-            {enviando ? "Enviando…" : "Enviar aviso"}
-          </motion.button>
         </div>
+
+        <motion.button
+          type="button"
+          onClick={enviar}
+          disabled={enviando}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ duration: 0.2, ease: SUAVE }}
+          className="accent-gradient mt-4 w-full rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          {enviando ? "Enviando…" : "Enviar aviso"}
+        </motion.button>
 
         <p className="mt-2 text-[11px] leading-snug text-muted">
           {GRAVEDADES.find((g) => g.valor === gravedad)?.ayuda} Le aparece en pantalla al momento,
@@ -380,6 +423,7 @@ function FichaMiembro({
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: SUAVE }}
               className="mt-2 text-xs text-rumor"
             >
               {aviso}
@@ -390,6 +434,7 @@ function FichaMiembro({
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: SUAVE }}
               className="ice-text mt-2 text-xs"
             >
               Aviso entregado.
@@ -421,7 +466,7 @@ function FichaMiembro({
 
       {/* Suspender y expulsar: el mismo panel que ya se usaba desde la
           conversación de soporte, sin duplicar nada. */}
-      <SancionesPanel userId={miembro.id} onCambio={onCambio} />
+      <SancionesPanel key={miembro.id} userId={miembro.id} onCambio={onCambio} />
     </div>
   );
 }

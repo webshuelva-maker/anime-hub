@@ -235,7 +235,7 @@ export function AdminSupportPanel() {
 
           {/* Moderar no es solo contestar: desde aquí se puede suspender
               o expulsar a la persona de esta conversación. */}
-          <SancionesPanel userId={activo.user_id} />
+          <SancionesPanel key={activo.user_id} userId={activo.user_id} />
 
           <div className="flex max-h-[55vh] flex-col gap-3 overflow-y-auto px-5 py-4">
             <AnimatePresence initial={false}>

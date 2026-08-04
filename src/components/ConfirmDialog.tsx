@@ -1,5 +1,7 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 export function ConfirmDialog({
@@ -17,7 +19,28 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  return (
+  /*
+   * Va colgado del <body> y no de donde se use, a propósito.
+   *
+   * "position: fixed" solo se refiere a la ventana si no hay ningún
+   * antepasado con transform. Y framer-motion pone transform en todo lo
+   * que anima — así que dentro de un panel animado (por ejemplo la ficha
+   * de un miembro, que además recorta con overflow-hidden) este diálogo
+   * dejaba de cubrir la pantalla y se abría recortado dentro de esa caja,
+   * o directamente no se veía. Con el portal, esté donde esté puesto,
+   * siempre se dibuja arriba del todo.
+   */
+  // "¿estamos ya en el navegador?" sin efectos ni estado: en el servidor
+  // devuelve false y en el cliente true, que es justo lo que necesita
+  // createPortal (no existe document mientras se genera el HTML).
+  const enNavegador = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  if (!enNavegador) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -61,6 +84,7 @@ export function ConfirmDialog({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
