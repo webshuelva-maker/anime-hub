@@ -20,6 +20,17 @@ import { setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib
 interface Message {
   role: "user" | "assistant";
   content: string;
+  /*
+   * Marca los mensajes que el usuario YA ha visto aparecer letra a letra
+   * mientras se escribían en directo.
+   *
+   * Mientras Iris responde, el texto se pinta en una burbuja temporal. Al
+   * terminar, esa burbuja se sustituye por el mensaje definitivo, que es
+   * un elemento NUEVO y por tanto reproducía su animación de entrada: el
+   * mensaje ya escrito parpadeaba y volvía a entrar desde abajo. Con esta
+   * marca, el definitivo aparece sin animación y el relevo no se nota.
+   */
+  streamed?: boolean;
   actions?: AssistantAction[];
   /** Fuentes reales consultadas si esta respuesta salió de una investigación. */
   sources?: ResearchSource[];
@@ -390,13 +401,17 @@ export function AssistantOrb() {
   const commitAssistantReply = (
     rawReply: string,
     extras: { sources?: ResearchSource[]; confidence?: Confidence | null; steps?: Step[] },
-    boostedTitles: Set<string>
+    boostedTitles: Set<string>,
+    // true cuando el texto ya se ha visto escribirse en directo: entonces
+    // el mensaje definitivo no debe animarse otra vez.
+    yaVistoEnDirecto = false
   ) => {
     const boostedTitlesGlobal = boostedTitles;
     const { cleanText, actions, interests, links, follows } = parseAndRunActions(rawReply);
     const assistantMessage: Message = {
       role: "assistant",
       content: cleanText || rawReply,
+      streamed: yaVistoEnDirecto,
       actions,
       sources: extras.sources && extras.sources.length > 0 ? extras.sources : undefined,
       confidence: extras.confidence ?? undefined,
@@ -595,7 +610,8 @@ export function AssistantOrb() {
         commitAssistantReply(
           streamed.raw,
           { sources: streamed.sources, confidence: streamed.confidence, steps: streamed.steps },
-          boostedTitles
+          boostedTitles,
+          true
         );
         return;
       }
@@ -763,8 +779,13 @@ export function AssistantOrb() {
                 <div className="flex flex-col gap-3">
                   {messages.map((m, i) => (
                     <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 6 }}
+                      // Clave estable: con el índice, al añadir o quitar un
+                      // mensaje React reutilizaba el elemento de otro y las
+                      // animaciones se disparaban donde no tocaba.
+                      key={m.ts ? `${m.ts}-${m.role}` : `i-${i}`}
+                      // Sin animación de entrada si ya se vio escribirse en
+                      // directo (ver el comentario del campo "streamed").
+                      initial={m.streamed ? false : { opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2 }}
                       className={`flex items-end gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}

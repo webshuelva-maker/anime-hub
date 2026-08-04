@@ -11,6 +11,7 @@ import { siteConfig } from "@/config/site";
 import { SiteChrome } from "@/components/SiteChrome";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BanGate } from "@/components/BanGate";
+import { AvisoModeracion } from "@/components/AvisoModeracion";
 import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
 
@@ -111,6 +112,7 @@ try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias
       </head>
       <body className="min-h-full flex flex-col">
         <BanGate />
+        <AvisoModeracion />
         <CloudSyncGate />
         <AmbientGlow />
         <SiteChrome />

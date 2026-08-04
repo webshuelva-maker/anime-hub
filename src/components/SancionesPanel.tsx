@@ -34,7 +34,14 @@ const CASTIGOS = [
   { etiqueta: "30 días", horas: 24 * 30 },
 ] as const;
 
-export function SancionesPanel({ userId }: { userId: string }) {
+export function SancionesPanel({
+  userId,
+  onCambio,
+}: {
+  userId: string;
+  /** Para que la lista de miembros se entere y refresque su etiqueta. */
+  onCambio?: () => void;
+}) {
   const [historial, setHistorial] = useState<SancionFila[]>([]);
   const [motivo, setMotivo] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -89,9 +96,19 @@ export function SancionesPanel({ userId }: { userId: string }) {
         return;
       }
       playSuccess();
+
+      // Aviso al móvil. Si falla no importa: la sanción ya está aplicada
+      // y le aparecerá en pantalla en cuanto tenga la app delante.
+      void fetch("/api/push/moderacion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, tipo: "sancion", texto: motivo.trim() }),
+      }).catch(() => {});
+
       setMotivo("");
       setConfirmandoExpulsion(false);
       await cargar();
+      onCambio?.();
     } finally {
       setOcupado(false);
     }
@@ -108,6 +125,7 @@ export function SancionesPanel({ userId }: { userId: string }) {
         .eq("id", id);
       playToggle();
       await cargar();
+      onCambio?.();
     } finally {
       setOcupado(false);
     }

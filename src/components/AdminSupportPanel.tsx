@@ -7,6 +7,7 @@ import { legalConfig } from "@/config/legal";
 import { createClient } from "@/lib/supabase/client";
 import { AvisosPushToggle } from "./AvisosPushToggle";
 import { SancionesPanel } from "./SancionesPanel";
+import { ModeracionMiembros } from "./ModeracionMiembros";
 import { playReceive, playSend } from "@/lib/sound";
 import {
   Ticket,
@@ -171,6 +172,12 @@ export function AdminSupportPanel() {
   return (
     <>
       <AvisosPushToggle />
+
+      {/* Moderar a cualquiera, no solo a quien haya abierto un ticket.
+          Va plegado: la mayoría de las veces se entra aquí a contestar
+          consultas, no a buscar gente. */}
+      <ModeracionMiembros />
+
       <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
       {/* Lista de tickets */}
       <div className="panel h-fit rounded-2xl p-3">

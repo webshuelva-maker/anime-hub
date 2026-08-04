@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { NewsCard } from "./NewsCard";
 import { NewsThumb } from "./NewsThumb";
 import { NewsDetail } from "./NewsDetail";
 import { FirstLoadOverlay } from "./FirstLoadOverlay";
+import { ActualizandoOverlay } from "./ActualizandoOverlay";
 import { PullToRefresh } from "./PullToRefresh";
 import { SinNoticias } from "./SinNoticias";
 import { vibrar } from "@/lib/haptics";
@@ -120,6 +121,24 @@ export function NewsFeed() {
   // función de esto y del progreso real.
   const [estimatedDurationMs, setEstimatedDurationMs] = useState(6000);
 
+  /*
+   * Pantalla de "trayendo contenido nuevo" del refresco automático.
+   *
+   * null = no se enseña. El refresco cada 15 minutos cambiaba las
+   * tarjetas por debajo sin decir nada, y eso desconcierta: te movía lo
+   * que estabas mirando sin explicación. Ahora se avisa antes y se dice
+   * qué ha traído.
+   */
+  const [actualizacion, setActualizacion] = useState<{
+    fase: "buscando" | "listo";
+    nuevas: number;
+  } | null>(null);
+
+  // Estable, porque la pantalla la usa dentro de sus temporizadores: si
+  // cambiara en cada dibujado, los reiniciaría sin parar y no se cerraría
+  // nunca.
+  const cerrarActualizacion = useCallback(() => setActualizacion(null), []);
+
   useEffect(() => {
     if (!showInitialLoader) return;
     // Red de seguridad: si Groq está teniendo un mal día y la traducción
@@ -129,13 +148,44 @@ export function NewsFeed() {
     return () => clearTimeout(safety);
   }, [showInitialLoader]);
 
-  const loadNews = (silent = false) => {
+  const loadNews = (silent = false, conPantalla = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setStatus("offline");
       return;
     }
     if (!silent) setStatus("loading");
     if (silent) setRefreshing(true);
+
+    /*
+     * ¿Se enseña la pantalla de actualización?
+     *
+     * Solo la pide el refresco automático (conPantalla), y aun así se
+     * calla en tres casos, porque en los tres sería una interrupción y no
+     * un aviso:
+     *
+     *  - Con una noticia abierta: está leyendo. Taparle el artículo a
+     *    mitad de párrafo por un refresco de fondo sería absurdo.
+     *  - Con la pantalla de entrada todavía puesta: ya hay una pantalla
+     *    de carga, no se apilan dos.
+     *  - Con la pestaña en segundo plano: nadie está mirando, y al volver
+     *    se encontraría una pantalla de carga de algo que terminó hace
+     *    diez minutos.
+     *
+     * En esos casos el refresco sigue haciéndose, simplemente en silencio
+     * como hasta ahora.
+     */
+    const leyendoAlgo =
+      typeof window !== "undefined" && !!window.sessionStorage.getItem("anime-hub:open-item");
+    const pestanaVisible = typeof document === "undefined" || document.visibilityState === "visible";
+    const mostrarPantalla = conPantalla && !leyendoAlgo && !showInitialLoader && pestanaVisible;
+
+    // Los ids que había ANTES, para poder contar cuántas noticias trae de
+    // verdad este refresco. Se leen del almacén y no del estado porque
+    // esta función la llama un temporizador creado al montar, que
+    // conserva el estado de aquel primer dibujado y no el de ahora.
+    const idsPrevios = new Set(getNewsItems().map((i) => i.id));
+
+    if (mostrarPantalla) setActualizacion({ fase: "buscando", nuevas: 0 });
 
     /*
      * La primera carga NO vuelve a pedir las noticias: se aprovecha la
@@ -173,14 +223,27 @@ export function NewsFeed() {
           setItems(conCaratulas);
           setStatus("live");
           enrichItems(conCaratulas);
+
+          if (mostrarPantalla) {
+            const nuevas = conCaratulas.filter((i) => !idsPrevios.has(i.id)).length;
+            setActualizacion({ fase: "listo", nuevas });
+          }
         } else if (!silent) {
           setStatus("down");
+        } else if (mostrarPantalla) {
+          // Refresco silencioso que no devuelve nada: para el usuario es
+          // exactamente lo mismo que "no había nada nuevo".
+          setActualizacion({ fase: "listo", nuevas: 0 });
         }
       })
       .catch(() => {
         if (!silent) {
           setStatus(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "down");
         }
+        // La pantalla se retira sin dramas: el feed que ya se veía sigue
+        // ahí, y anunciar un fallo de red de un refresco de fondo no le
+        // sirve de nada a nadie.
+        if (mostrarPantalla) setActualizacion(null);
       })
       .finally(() => {
         if (silent) setRefreshing(false);
@@ -441,7 +504,10 @@ export function NewsFeed() {
 
     // Refresco silencioso cada 15 minutos: si ya estás viendo noticias, no se
     // interrumpe la vista ni aunque este refresco puntual falle.
-    const interval = setInterval(() => loadNews(true), 15 * 60 * 1000);
+    // El segundo parámetro es lo nuevo: este refresco (y solo este) pide
+    // la pantalla de "trayendo contenido nuevo". Tirar hacia abajo sigue
+    // sin enseñarla, porque ese gesto ya tiene su propia animación.
+    const interval = setInterval(() => loadNews(true, true), 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -518,6 +584,19 @@ export function NewsFeed() {
             }
             estimatedDurationMs={estimatedDurationMs}
             onComplete={() => setShowInitialLoader(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Refresco automático de cada 15 minutos: se avisa de que va a
+          cambiar el contenido, y luego de qué ha traído. */}
+      <AnimatePresence>
+        {actualizacion && (
+          <ActualizandoOverlay
+            key="actualizando"
+            fase={actualizacion.fase}
+            nuevas={actualizacion.nuevas}
+            onClose={cerrarActualizacion}
           />
         )}
       </AnimatePresence>

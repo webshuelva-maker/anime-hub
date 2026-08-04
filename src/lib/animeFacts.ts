@@ -13,9 +13,23 @@
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
+/*
+ * Se pregunta con Page(...) { media(...) } y NO con Media(...) directo,
+ * por el mismo motivo que en popularity.ts y anilist.ts (ya nos ha
+ * mordido tres veces): con Media, un título que AniList no reconoce hace
+ * que responda 404 y aquí se devolvía null — Iris se quedaba SIN ficha,
+ * sin fecha de emisión y sin saber por qué, y acababa diciendo que no lo
+ * sabía aunque la fecha existiera.
+ *
+ * Se piden además VARIOS candidatos, no uno: al buscar "Re:Zero" AniList
+ * devuelve la primera temporada de 2016, que obviamente no tiene fecha
+ * futura. Con varios en la mano se puede elegir el que de verdad está en
+ * emisión o por estrenarse (ver elegirMejorFicha más abajo).
+ */
 const FACTS_QUERY = `
 query ($search: String) {
-  Media(search: $search, type: ANIME) {
+  Page(perPage: 6) {
+   media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
     id
     title { romaji english native }
     format
@@ -47,6 +61,7 @@ query ($search: String) {
         }
       }
     }
+  }
   }
 }`;
 
@@ -139,7 +154,8 @@ interface RawRelationEdge {
  */
 const FACTS_QUERY_MINIMA = `
 query ($search: String) {
-  Media(search: $search, type: ANIME) {
+  Page(perPage: 6) {
+   media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
     id
     title { romaji english native }
     format
@@ -155,7 +171,32 @@ query ($search: String) {
     siteUrl
     studios(isMain: true) { nodes { name } }
   }
+  }
 }`;
+
+
+/*
+ * Elige la ficha correcta entre las que devuelve AniList.
+ *
+ * Coger la primera no vale. Buscando "Re:Zero" AniList devuelve la
+ * primera temporada, de 2016: sin fecha futura y sin próximo episodio.
+ * Así que a la pregunta "¿cuándo sale la parte 2?" la app se quedaba sin
+ * ningún dato de fecha y contestaba que no lo sabía, aunque la fecha
+ * existiera en otra ficha de la misma búsqueda.
+ *
+ * Criterio: si alguna candidata está EN EMISIÓN o SIN ESTRENAR, esa
+ * manda — es de la que se puede decir algo sobre fechas próximas. Si
+ * ninguna lo está, se queda la primera, que es la que mejor coincide de
+ * nombre.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function elegirMejorFicha(candidatas: any[]): any {
+  if (candidatas.length === 0) return null;
+  const conFechaFutura = candidatas.find(
+    (c) => c?.nextAiringEpisode || c?.status === "NOT_YET_RELEASED" || c?.status === "RELEASING"
+  );
+  return conFechaFutura ?? candidatas[0];
+}
 
 export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | null> {
   const clean = searchText.trim();
@@ -182,7 +223,7 @@ export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | nu
     // Si la consulta completa falla, se reintenta con la reducida antes
     // de darse por vencido. Un solo campo problemático no debe tumbar
     // toda la búsqueda de fichas.
-    if (data?.errors || !data?.data?.Media) {
+    if (data?.errors || !data?.data?.Page?.media?.length) {
       console.error(
         "[animeFacts] consulta completa rechazada:",
         JSON.stringify(data?.errors ?? "sin Media").slice(0, 300)
@@ -200,7 +241,7 @@ export async function getAnimeFacts(searchText: string): Promise<AnimeFacts | nu
       data = await resMin.json();
     }
 
-    const m = data?.data?.Media;
+    const m = elegirMejorFicha(data?.data?.Page?.media ?? []);
     if (!m) return null;
 
     const relations: AnimeRelation[] = (m.relations?.edges ?? [])

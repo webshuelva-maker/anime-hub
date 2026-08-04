@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { sancionActiva, tiempoRestante, Sancion } from "@/lib/bans";
+import { escucharMisSanciones } from "@/lib/moderacion";
 import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
 import { legalConfig, emailModeracion } from "@/config/legal";
@@ -26,11 +27,34 @@ export function BanGate() {
 
   useEffect(() => {
     let vivo = true;
+    let dejarDeEscuchar: (() => void) | null = null;
+
     const comprobar = async () => {
       const s = await sancionActiva();
       if (vivo) setSancion(s);
     };
     void comprobar();
+
+    /*
+     * En directo. Antes esto solo se miraba al montar el componente y al
+     * volver a la pestaña, así que expulsar a alguien que estaba usando
+     * la app no hacía nada visible hasta que recargara — podía seguir
+     * media hora dentro. Moderar sirve para cortar algo que está pasando
+     * ahora; si tarda en aplicarse, no ha cortado nada.
+     *
+     * Al recibir el aviso NO se cree lo que llega por el canal: se vuelve
+     * a preguntar a la base de datos con sancion_activa, que es la que
+     * decide de verdad. Así una sanción levantada retira la pantalla sola
+     * por el mismo camino, sin lógica duplicada aquí.
+     */
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      (async () => {
+        const { data } = await createClient().auth.getUser();
+        if (!data.user || !vivo) return;
+        dejarDeEscuchar = escucharMisSanciones(data.user.id, () => void comprobar());
+      })();
+    }
+
     // Se vuelve a comprobar al volver a la pestaña: así, cuando una
     // expulsión temporal caduca, se recupera el acceso sin recargar.
     const alVolver = () => {
@@ -39,6 +63,7 @@ export function BanGate() {
     document.addEventListener("visibilitychange", alVolver);
     return () => {
       vivo = false;
+      dejarDeEscuchar?.();
       document.removeEventListener("visibilitychange", alVolver);
     };
   }, []);

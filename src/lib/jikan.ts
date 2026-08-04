@@ -26,6 +26,14 @@ export interface JikanFacts {
   studios: string[];
   genres: string[];
   url: string | null;
+  /*
+   * Día y hora de emisión ("Fridays at 23:00 (JST)") y plataformas donde
+   * verlo. Son las dos preguntas más frecuentes ("¿qué día sale?",
+   * "¿dónde lo veo?") y MyAnimeList ya las trae en la misma respuesta,
+   * así que no cuesta ninguna petición extra: solo había que leerlas.
+   */
+  emision: string | null;
+  plataformas: { nombre: string; url: string }[];
 }
 
 export interface JikanNewsItem {
@@ -66,6 +74,8 @@ interface RawJikanAnime {
   studios?: { name: string }[];
   genres?: { name: string }[];
   url?: string;
+  broadcast?: { string?: string | null };
+  streaming?: { name?: string; url?: string }[];
 }
 
 /**
@@ -143,6 +153,10 @@ export async function searchJikanAnime(name: string): Promise<JikanFacts | null>
     studios: (m.studios ?? []).map((s) => s.name),
     genres: (m.genres ?? []).map((g) => g.name),
     url: m.url ?? null,
+    emision: m.broadcast?.string ?? null,
+    plataformas: (m.streaming ?? [])
+      .filter((s) => s?.name && s?.url)
+      .map((s) => ({ nombre: s.name as string, url: s.url as string })),
   };
 }
 
@@ -178,5 +192,13 @@ export function jikanFactsToPromptText(f: JikanFacts): string {
   if (f.from) lines.push(`- Empezó: ${f.from.slice(0, 10)}`);
   if (f.to) lines.push(`- Terminó: ${f.to.slice(0, 10)}`);
   if (f.studios.length) lines.push(`- Estudio: ${f.studios.join(", ")}`);
+  // Las dos preguntas más frecuentes, y hasta ahora no se le pasaban a
+  // Iris aunque MyAnimeList las devolvía en la misma respuesta.
+  if (f.emision) lines.push(`- Día y hora de emisión: ${f.emision}`);
+  if (f.plataformas.length) {
+    lines.push(
+      `- Dónde verlo (según MAL): ${f.plataformas.map((p) => `${p.nombre} (${p.url})`).join(", ")}`
+    );
+  }
   return lines.join("\n");
 }

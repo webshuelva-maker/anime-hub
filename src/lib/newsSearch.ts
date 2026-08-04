@@ -176,6 +176,35 @@ const TIER_WEIGHT = { oficial: 3, prensa: 2, "sin-verificar": 1 } as const;
  * Lanza todas las búsquedas EN PARALELO y devuelve los resultados
  * ordenados por fiabilidad de la fuente y, dentro de eso, por fecha.
  */
+
+/*
+ * Medios españoles de anime que se consultan por nombre, además de la
+ * búsqueda general.
+ *
+ * Por qué hace falta: la búsqueda de Google News en español devuelve lo
+ * que ella cree relevante, y para consultas de anime suele traer medios
+ * generalistas o traducciones tardías de la prensa estadounidense. Estos
+ * son los que de verdad cubren anime en español, y preguntándoles
+ * directamente aparecen cosas que la búsqueda amplia se salta — que era
+ * justo la queja: "dice que nadie ha dicho nada cuando sí lo han dicho".
+ *
+ * Se buscan con el operador site: dentro de Google News, sin claves ni
+ * cuentas. Si alguno cambia de dominio o cierra, simplemente devuelve
+ * cero resultados y los demás siguen: no rompe nada.
+ */
+const MEDIOS_ES = [
+  "ramenparados.com",
+  "somoskudasai.com",
+  "misiontokyo.com",
+  "crunchyroll.com/es",
+  "koi-nya.net",
+];
+
+function googleNewsSitioUrl(consulta: string, sitio: string): string {
+  const q = encodeURIComponent(`${consulta} site:${sitio}`);
+  return `https://news.google.com/rss/search?q=${q}&hl=es-419&gl=ES&ceid=ES:es`;
+}
+
 export async function searchNews(
   queries: string[],
   limit = 10
@@ -188,6 +217,16 @@ export async function searchNews(
     jobs.push({ label: "google-en", url: googleNewsUrl(q, "en") });
     jobs.push({ label: "google-es", url: googleNewsUrl(q, "es") });
     jobs.push({ label: "bing", url: bingNewsUrl(q) });
+  }
+
+  // Medios españoles de anime, preguntados uno a uno. Solo con la
+  // primera consulta: son cinco peticiones más y no compensa repetirlas
+  // por cada variante de la búsqueda.
+  const consultaPrincipal = queries.find((q) => q.trim());
+  if (consultaPrincipal) {
+    for (const sitio of MEDIOS_ES) {
+      jobs.push({ label: `es:${sitio}`, url: googleNewsSitioUrl(consultaPrincipal, sitio) });
+    }
   }
 
   const batches = await Promise.all(jobs.map((j) => fetchRss(j.url, 4500)));

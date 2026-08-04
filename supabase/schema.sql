@@ -469,3 +469,172 @@ as $$
   order by (b.tipo = 'permanente') desc, b.hasta desc nulls first
   limit 1;
 $$;
+
+-- ============================================================
+--  v151 — Corrección de idempotencia en las políticas de sanciones
+-- ============================================================
+-- Las dos políticas de v132 se crearon sin "drop policy if exists"
+-- delante, así que volver a ejecutar este archivo entero fallaba justo
+-- ahí ("policy already exists") y dejaba sin aplicar todo lo que viniera
+-- después. Se recrean bien para que este fichero se pueda pegar cuantas
+-- veces haga falta.
+drop policy if exists "Users read their own bans" on public.user_bans;
+create policy "Users read their own bans"
+  on public.user_bans for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Admins manage bans" on public.user_bans;
+create policy "Admins manage bans"
+  on public.user_bans for all
+  using (public.es_admin())
+  with check (public.es_admin());
+
+-- ============================================================
+--  v151 — Avisos de moderación (advertencias)
+-- ============================================================
+-- Entre "no hacer nada" y "expulsar" no había nada. Y la mayoría de los
+-- problemas reales de convivencia son de los que se arreglan diciéndolo
+-- una vez: un aviso con nombre, motivo y fecha, que la persona tiene que
+-- leer sí o sí antes de seguir usando la app.
+--
+-- Se guarda en su propia tabla y no como una sanción de tipo "aviso"
+-- porque no restringe nada: no bloquea el acceso, y mezclarlo con las
+-- expulsiones obligaría a comprobar el tipo en cada consulta de acceso,
+-- que es justo donde no se puede fallar.
+create table if not exists public.user_warnings (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  motivo text not null check (char_length(motivo) between 5 and 2000),
+  -- Cambia el color y el tono del aviso que ve la persona. Tres niveles
+  -- a propósito: si todos los avisos gritan igual, ninguno se toma en
+  -- serio.
+  gravedad text not null default 'normal' check (gravedad in ('leve', 'normal', 'grave')),
+  creado_por uuid references auth.users on delete set null,
+  creado_en timestamptz default now() not null,
+  -- Cuándo lo dio por leído. Sirve para dos cosas: no repetírselo cada
+  -- vez que abre la app, y poder demostrar que se le comunicó si más
+  -- adelante hay que expulsarlo por lo mismo.
+  leido_en timestamptz
+);
+
+create index if not exists user_warnings_user_idx
+  on public.user_warnings (user_id, creado_en desc);
+
+alter table public.user_warnings enable row level security;
+
+-- La persona LEE sus avisos (los tiene que ver), pero no puede crearlos,
+-- editarlos ni borrarlos. Ni siquiera marcarlos como leídos por la vía
+-- directa: eso va por la función de abajo, que solo toca esa columna.
+drop policy if exists "Ver avisos propios" on public.user_warnings;
+create policy "Ver avisos propios"
+  on public.user_warnings for select
+  using (auth.uid() = user_id or public.es_admin());
+
+drop policy if exists "Moderacion gestiona avisos" on public.user_warnings;
+create policy "Moderacion gestiona avisos"
+  on public.user_warnings for all
+  using (public.es_admin())
+  with check (public.es_admin());
+
+-- Marcar un aviso como leído. Va como función y no como política de
+-- UPDATE porque una política de actualización sobre la propia fila
+-- dejaría reescribir también el motivo — y un registro de moderación que
+-- el sancionado puede reescribir no vale como registro de nada.
+create or replace function public.marcar_aviso_leido(aviso_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.user_warnings
+     set leido_en = now()
+   where id = aviso_id
+     and user_id = auth.uid()
+     and leido_en is null;
+$$;
+
+-- ============================================================
+--  v151 — Listado de miembros para moderación
+-- ============================================================
+-- Hasta ahora solo se podía moderar a quien tuviera un ticket abierto,
+-- que es tanto como decir que solo se podía sancionar a quien pedía
+-- ayuda. Los problemas de convivencia no vienen con ticket adjunto.
+--
+-- Va como función "security definer" porque hace falta cruzar profiles
+-- con auth.users (el correo, que suele ser el único identificador
+-- fiable) y con social_profiles, y esas tablas no son legibles desde el
+-- navegador ni deben serlo. La comprobación de administrador es lo
+-- primero que se hace: si quien llama no lo es, la función corta ahí y
+-- no devuelve una sola fila.
+create or replace function public.listar_miembros(
+  busqueda text default '',
+  limite int default 40
+)
+returns table (
+  id uuid,
+  nombre text,
+  alias text,
+  email text,
+  creado_en timestamptz,
+  es_administrador boolean,
+  sancion_tipo text,
+  sancion_motivo text,
+  sancion_hasta timestamptz,
+  avisos int
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.es_admin() then
+    raise exception 'Solo el equipo de moderación puede consultar los miembros'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return query
+  select
+    p.id,
+    p.display_name,
+    sp.alias,
+    u.email::text,
+    p.created_at,
+    p.is_admin,
+    s.tipo,
+    s.motivo,
+    s.hasta,
+    (select count(*)::int from public.user_warnings w where w.user_id = p.id)
+  from public.profiles p
+  left join auth.users u on u.id = p.id
+  left join public.social_profiles sp on sp.user_id = p.id
+  -- La sanción activa se pide a la misma función que usa la app para
+  -- decidir si deja entrar: si algún día cambia la regla, cambia en un
+  -- sitio y el panel no se queda diciendo otra cosa.
+  left join lateral public.sancion_activa(p.id) s on true
+  where
+    coalesce(busqueda, '') = ''
+    or p.display_name ilike '%' || busqueda || '%'
+    or sp.alias ilike '%' || busqueda || '%'
+    or u.email ilike '%' || busqueda || '%'
+  order by (s.tipo is not null) desc, p.created_at desc
+  limit greatest(1, least(coalesce(limite, 40), 100));
+end;
+$$;
+
+-- ============================================================
+--  v151 — Realtime para que la moderación se note al instante
+-- ============================================================
+-- Sin esto, una expulsión no se veía hasta que la persona recargaba o
+-- volvía a la pestaña. Moderar sirve para cortar algo que está pasando
+-- AHORA: si tarda cinco minutos en aplicarse, no ha cortado nada.
+do $$
+begin
+  alter publication supabase_realtime add table public.user_bans;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.user_warnings;
+exception when duplicate_object then null;
+end $$;

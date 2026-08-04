@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v151",
+    fecha: "2026-08-04",
+    titulo: "Moderación de verdad y avisos de actualización",
+    puntos: [
+      "El equipo de moderación puede avisar, suspender o expulsar a cualquier miembro, no solo a quien tuviera una consulta abierta.",
+      "Los avisos y las sanciones llegan al instante: aparecen en pantalla sin tener que recargar nada.",
+      "Cuando el feed busca noticias nuevas, ahora te lo dice y te cuenta cuántas ha traído, en vez de cambiarte las tarjetas por sorpresa.",
+    ],
+  },
+  {
     version: "v146",
     fecha: "2026-08-03",
     titulo: "Iris a prueba de cambios",
