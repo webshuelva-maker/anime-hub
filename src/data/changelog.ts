@@ -23,7 +23,19 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
-    version: "v152",
+    version: "v154",
+    fecha: "2026-08-04",
+    titulo: "Conectar empieza a funcionar",
+    intro: "Ya se puede descubrir gente. El chat es lo siguiente.",
+    puntos: [
+      "Te aparecen personas ordenadas por lo que compartís: primero quien más gustos tiene en común contigo.",
+      "Cada ficha te enseña lo que compartís antes que nada, para que sepas por qué te ha salido.",
+      "Me interesa o Paso. Si los dos os marcáis, aparece la coincidencia.",
+      "Bloquear y denunciar están a la vista desde el primer perfil, no escondidos en un menú.",
+    ],
+  },
+  {
+    version: "v153",
     fecha: "2026-08-04",
     titulo: "Ajustes del panel de moderación",
     puntos: [

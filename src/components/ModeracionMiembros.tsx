@@ -199,12 +199,22 @@ export function ModeracionMiembros() {
 
               {fallo && <p className="mt-2 text-xs leading-snug text-rumor">{fallo}</p>}
 
-              <div className="mt-3 flex max-h-[42vh] flex-col gap-1 overflow-y-auto pr-1">
+              {/*
+                El tope de altura se quita cuando hay alguien elegido:
+                la ficha se despliega DENTRO de la lista, justo debajo de
+                su fila, y encerrarla en 42vh la dejaría dentro de un
+                cajoncito con su propia barra de desplazamiento.
+              */}
+              <div
+                className={`mt-3 flex flex-col gap-1 pr-1 ${
+                  elegido ? "" : "max-h-[42vh] overflow-y-auto"
+                }`}
+              >
                 {miembros.map((m, i) => {
                   const sancionado = m.sancion_tipo !== null;
                   return (
+                    <div key={m.id} className="flex flex-col">
                     <motion.button
-                      key={m.id}
                       type="button"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -250,35 +260,54 @@ export function ModeracionMiembros() {
                         <span className="shrink-0">{haceCuanto(m.creado_en)}</span>
                       </span>
                     </motion.button>
+
+                    {/*
+                      La ficha, colgando de su propia fila.
+
+                      Antes iba al final del panel, y como repetía nombre
+                      y correo justo debajo de la fila que acababas de
+                      pulsar, salía el mismo nombre dos veces seguidas y
+                      no quedaba claro cuál era cuál. Puesta aquí no hace
+                      falta repetir nada: ya se sabe de quién es porque
+                      sale pegada a su nombre.
+
+                      Entra con fundido y desplazamiento (nada de altura:
+                      dentro hay dos consultas que llegan después y
+                      descuadraban la medida), pero SALE cerrando la
+                      altura — al cerrar el contenido ya está cargado y la
+                      medida es de fiar, así que se puede plegar de verdad
+                      en vez de desaparecer de golpe.
+                    */}
+                    <AnimatePresence initial={false}>
+                      {elegido?.id === m.id && (
+                        <motion.div
+                          key={`ficha-${m.id}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{
+                            opacity: { duration: 0.28, ease: SUAVE },
+                            y: { duration: 0.34, ease: SUAVE },
+                            height: { duration: APERTURA, ease: SUAVE },
+                          }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-1 rounded-xl border border-panel-border bg-panel-soft/40">
+                            <FichaMiembro
+                              miembro={m}
+                              onCerrar={() => setElegido(null)}
+                              onCambio={() => void cargar(busqueda)}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    </div>
                   );
                 })}
               </div>
             </div>
 
-            {/*
-              La ficha NO anima la altura, a diferencia del panel de
-              arriba. Dentro hay dos consultas (avisos y sanciones) que
-              llegan después de abrirse, así que animar hacia "altura
-              automática" medía un tamaño que dejaba de ser cierto medio
-              segundo más tarde: el panel daba un salto justo cuando
-              cargaban los datos. Un fundido con desplazamiento no depende
-              del tamaño y no puede descuadrarse.
-            */}
-            {elegido && (
-              <motion.div
-                key={elegido.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.34, ease: SUAVE }}
-                className="border-t border-panel-border"
-              >
-                <FichaMiembro
-                  miembro={elegido}
-                  onCerrar={() => setElegido(null)}
-                  onCambio={() => void cargar(busqueda)}
-                />
-              </motion.div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -340,25 +369,24 @@ function FichaMiembro({
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 px-5 py-4">
-        <div className="min-w-0">
-          <p className="font-heading text-sm font-semibold">{nombreVisible(miembro)}</p>
-          <p className="truncate text-xs text-muted">{miembro.email ?? "Sin correo"}</p>
+      {/*
+        Sin cabecera con el nombre: la fila de arriba, que es de esta
+        misma persona y se queda resaltada, ya lo dice. Repetirlo aquí
+        hacía que el mismo nombre saliera dos veces seguidas.
+      */}
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
+            Enviar un aviso
+          </h3>
+          <button
+            type="button"
+            onClick={onCerrar}
+            className="shrink-0 rounded-full border border-panel-border px-3 py-1 text-[11px] font-medium text-muted transition-colors duration-200 hover:border-ice/40 hover:text-foreground"
+          >
+            Cerrar
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onCerrar}
-          className="shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-muted transition-colors duration-200 hover:border-ice/40 hover:text-foreground"
-        >
-          Cerrar
-        </button>
-      </div>
-
-      {/* Aviso: el escalón que faltaba entre no hacer nada y expulsar. */}
-      <div className="border-t border-panel-border px-5 py-4">
-        <h3 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-          Enviar un aviso
-        </h3>
 
         <input
           type="text"

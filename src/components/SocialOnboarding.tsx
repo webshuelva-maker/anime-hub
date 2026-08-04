@@ -10,6 +10,7 @@ import { SelectableChip } from "./SelectableChip";
 import { DateOfBirthPicker } from "./DateOfBirthPicker";
 import { CheckBox } from "./CheckBox";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DescubrirPerfiles } from "./DescubrirPerfiles";
 import { playError, playSuccess } from "@/lib/sound";
 
 /**
@@ -291,28 +292,14 @@ export function SocialOnboarding() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="mx-auto max-w-2xl px-4 py-10 sm:px-6"
+        className="pb-10"
       >
-        <h1 className="font-heading text-2xl font-bold">Conectar</h1>
-        <p className="mt-1 text-sm text-muted">
-          Tu perfil está listo, {profile.alias}. El emparejamiento todavía se está construyendo.
-        </p>
+        {/* El descubrimiento es lo que se viene a hacer aquí, así que va
+            primero. Los datos del perfil y la salida quedan debajo. */}
+        <DescubrirPerfiles />
 
-        <div className="panel mt-6 rounded-2xl p-6">
-          <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-            Qué va a pasar
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-foreground/90">
-            Cuando esté en marcha, {siteConfig.assistantName} te propondrá personas con gustos
-            parecidos a los tuyos. Empezaréis hablando sin foto y sin nombre: el perfil se va
-            descubriendo poco a poco según habléis, y solo si los dos queréis.
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
-            Podrás bloquear y denunciar desde el primer mensaje, siempre.
-          </p>
-        </div>
-
-        <div className="panel mt-6 rounded-2xl p-6">
+        <div className="mx-auto max-w-2xl px-4 sm:px-6">
+        <div className="panel mt-2 rounded-2xl p-6">
           <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
             Tu perfil
           </h2>
@@ -351,6 +338,7 @@ export function SocialOnboarding() {
           onConfirm={handleLeave}
           onCancel={() => setConfirmingLeave(false)}
         />
+        </div>
       </motion.div>
     );
   }

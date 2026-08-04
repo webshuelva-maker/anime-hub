@@ -638,3 +638,559 @@ begin
   alter publication supabase_realtime add table public.user_warnings;
 exception when duplicate_object then null;
 end $$;
+
+-- ============================================================
+--  v154 — Conectar: descubrir perfiles
+-- ============================================================
+-- Primera pieza de verdad del apartado social. Hasta ahora solo se
+-- podía crear el perfil; aquí empieza a servir para algo.
+--
+-- Cómo funciona el emparejamiento: la app decide automáticamente A QUIÉN
+-- ves y en qué orden (por gustos en común), y la persona solo dice
+-- "me interesa" o "paso". Hay coincidencia cuando los dos dicen que sí.
+--
+-- Todo pasa por funciones "security definer" y NINGUNA abre la tabla de
+-- perfiles sociales a la lectura ajena. Es importante: si se relajaran
+-- las políticas de social_profiles para poder enseñar candidatos, se
+-- estaría exponiendo también la fecha de nacimiento exacta de todo el
+-- mundo. Así solo sale lo que estas funciones deciden devolver (alias,
+-- edad en años, cómo se identifica y la biografía) y nunca el correo ni
+-- la fecha.
+
+-- Ayuda: pasar un campo JSON a lista de textos sin reventar si no es una
+-- lista o si no existe. Las preferencias se guardan en JSON precisamente
+-- para poder cambiar de versión sin migrar, así que aquí hay que asumir
+-- que cualquier cosa puede faltar.
+create or replace function public.jsonb_texto_array(j jsonb)
+returns text[]
+language sql
+immutable
+as $$
+  select case
+    when jsonb_typeof(j) = 'array'
+      then coalesce((select array_agg(x) from jsonb_array_elements_text(j) x), '{}')
+    else '{}'::text[]
+  end;
+$$;
+
+-- ¿La persona que busca aceptaría a esta otra, según con quién quiere
+-- coincidir? Se aplica en LOS DOS SENTIDOS más abajo: que a mí me
+-- encajes no significa que yo te encaje a ti, y enseñar a alguien
+-- perfiles que nunca le van a devolver el sí es hacerle perder el tiempo.
+--
+-- Consecuencia a tener en cuenta: quien elige "Prefiero no decirlo" solo
+-- aparece ante quien haya marcado "Me da igual". No hay forma de evitarlo
+-- sin ignorar lo que la otra persona ha pedido.
+create or replace function public.encaja_busqueda(busca text[], genero text)
+returns boolean
+language sql
+immutable
+as $$
+  select
+    coalesce(array_length(busca, 1), 0) = 0
+    or 'Me da igual' = any(busca)
+    or (genero = 'Mujer' and 'Mujeres' = any(busca))
+    or (genero = 'Hombre' and 'Hombres' = any(busca))
+    or (genero = 'No binario' and 'Personas no binarias' = any(busca));
+$$;
+
+-- Una fila por decisión tomada. Se guardan también los "paso": es lo que
+-- evita que la misma persona vuelva a salir una y otra vez, y sin eso la
+-- pila de perfiles sería un bucle.
+create table if not exists public.social_decisions (
+  decisor_id uuid references auth.users on delete cascade not null,
+  objetivo_id uuid references auth.users on delete cascade not null,
+  decision text not null check (decision in ('interesa', 'paso')),
+  creado_en timestamptz default now() not null,
+  primary key (decisor_id, objetivo_id)
+);
+
+create index if not exists social_decisions_objetivo_idx
+  on public.social_decisions (objetivo_id, decision);
+
+alter table public.social_decisions enable row level security;
+
+-- Cada uno ve y crea SOLO sus propias decisiones. Muy a propósito: si se
+-- pudieran leer las ajenas, cualquiera podría consultar quién le ha dado
+-- a "me interesa" antes de decidir, y eso convierte el gusto mutuo en un
+-- juego de información. Saber si el otro dijo que sí es justo lo que la
+-- coincidencia revela, y solo cuando toca.
+drop policy if exists "Ver decisiones propias" on public.social_decisions;
+create policy "Ver decisiones propias"
+  on public.social_decisions for select
+  using (auth.uid() = decisor_id);
+
+drop policy if exists "Tomar decisiones propias" on public.social_decisions;
+create policy "Tomar decisiones propias"
+  on public.social_decisions for insert
+  with check (auth.uid() = decisor_id);
+
+-- A quién enseñarle. Ordenado por gustos comunes: títulos favoritos
+-- valen más que géneros, porque compartir "Vinland Saga" dice bastante
+-- más que compartir "Acción".
+create or replace function public.descubrir_perfiles(limite int default 20)
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  genero text,
+  bio text,
+  afinidad int,
+  titulos_comunes text[],
+  generos_comunes text[]
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  yo uuid := auth.uid();
+  mis_titulos text[];
+  mis_generos text[];
+  mi_busqueda text[];
+  mi_genero text;
+begin
+  if yo is null then
+    raise exception 'Hace falta iniciar sesión' using errcode = 'insufficient_privilege';
+  end if;
+
+  -- Sin perfil social no se descubre a nadie: es la puerta de entrada
+  -- donde se comprobó la edad y se aceptaron las normas.
+  select sp.looking_for, sp.gender into mi_busqueda, mi_genero
+  from public.social_profiles sp
+  where sp.user_id = yo and sp.is_active;
+
+  if mi_genero is null then
+    return;
+  end if;
+
+  -- Una cuenta sancionada no se pasea por el apartado social.
+  if exists (
+    select 1 from public.user_bans b
+    where b.user_id = yo and b.levantada_en is null
+      and (b.tipo = 'permanente' or b.hasta > now())
+  ) then
+    return;
+  end if;
+
+  select
+    array(select lower(t) from unnest(public.jsonb_texto_array(us.preferences -> 'favoriteTitles')) t),
+    array(select lower(g) from unnest(public.jsonb_texto_array(us.preferences -> 'genres')) g)
+  into mis_titulos, mis_generos
+  from public.user_state us
+  where us.user_id = yo;
+
+  mis_titulos := coalesce(mis_titulos, '{}');
+  mis_generos := coalesce(mis_generos, '{}');
+
+  return query
+  select
+    sp.user_id,
+    sp.alias,
+    extract(year from age(sp.birthdate))::int,
+    sp.gender,
+    sp.bio,
+    (cardinality(c.tc) * 10 + cardinality(c.gc) * 3)::int,
+    c.tc,
+    c.gc
+  from public.social_profiles sp
+  left join public.user_state us on us.user_id = sp.user_id
+  cross join lateral (
+    select
+      coalesce((
+        select array_agg(t) from unnest(public.jsonb_texto_array(us.preferences -> 'favoriteTitles')) t
+        where lower(t) = any(mis_titulos)
+      ), '{}') as tc,
+      coalesce((
+        select array_agg(g) from unnest(public.jsonb_texto_array(us.preferences -> 'genres')) g
+        where lower(g) = any(mis_generos)
+      ), '{}') as gc
+  ) c
+  where sp.user_id <> yo
+    and sp.is_active
+    -- Ya decidido antes: no vuelve a salir.
+    and not exists (
+      select 1 from public.social_decisions d
+      where d.decisor_id = yo and d.objetivo_id = sp.user_id
+    )
+    -- Bloqueos, en los dos sentidos.
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = yo and b.blocked_id = sp.user_id)
+         or (b.blocker_id = sp.user_id and b.blocked_id = yo)
+    )
+    -- Quien está sancionado desaparece del apartado mientras lo esté.
+    and not exists (
+      select 1 from public.user_bans ub
+      where ub.user_id = sp.user_id and ub.levantada_en is null
+        and (ub.tipo = 'permanente' or ub.hasta > now())
+    )
+    -- Que encaje en los dos sentidos.
+    and public.encaja_busqueda(mi_busqueda, sp.gender)
+    and public.encaja_busqueda(sp.looking_for, mi_genero)
+  order by (cardinality(c.tc) * 10 + cardinality(c.gc) * 3) desc, random()
+  limit greatest(1, least(coalesce(limite, 20), 50));
+end;
+$$;
+
+-- Decidir sobre alguien. Devuelve si ha salido coincidencia, que es lo
+-- único que la app necesita saber — y lo único que se puede contar sin
+-- filtrar quién dijo que sí antes.
+create or replace function public.decidir_perfil(objetivo uuid, decision text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  yo uuid := auth.uid();
+  hay_match boolean := false;
+begin
+  if yo is null or objetivo = yo then
+    return false;
+  end if;
+  if decision not in ('interesa', 'paso') then
+    raise exception 'Decisión no válida';
+  end if;
+  if not exists (select 1 from public.social_profiles where user_id = yo and is_active) then
+    raise exception 'Hace falta tener perfil social';
+  end if;
+
+  -- Si ya se había decidido, se respeta la primera: sin esto, un doble
+  -- toque por error reescribiría la decisión.
+  insert into public.social_decisions (decisor_id, objetivo_id, decision)
+  values (yo, objetivo, decision)
+  on conflict (decisor_id, objetivo_id) do nothing;
+
+  if decision = 'interesa' then
+    select exists (
+      select 1 from public.social_decisions d
+      where d.decisor_id = objetivo and d.objetivo_id = yo and d.decision = 'interesa'
+    ) into hay_match;
+  end if;
+
+  return hay_match;
+end;
+$$;
+
+-- Las coincidencias: gente a la que le dijiste que sí y te dijo que sí.
+create or replace function public.mis_coincidencias()
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  genero text,
+  bio text,
+  desde timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  yo uuid := auth.uid();
+begin
+  if yo is null then
+    return;
+  end if;
+
+  return query
+  select
+    sp.user_id,
+    sp.alias,
+    extract(year from age(sp.birthdate))::int,
+    sp.gender,
+    sp.bio,
+    greatest(mia.creado_en, suya.creado_en)
+  from public.social_decisions mia
+  join public.social_decisions suya
+    on suya.decisor_id = mia.objetivo_id
+   and suya.objetivo_id = yo
+   and suya.decision = 'interesa'
+  join public.social_profiles sp on sp.user_id = mia.objetivo_id and sp.is_active
+  where mia.decisor_id = yo
+    and mia.decision = 'interesa'
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = yo and b.blocked_id = sp.user_id)
+         or (b.blocker_id = sp.user_id and b.blocked_id = yo)
+    )
+  order by greatest(mia.creado_en, suya.creado_en) desc;
+end;
+$$;
+
+-- ============================================================
+--  v154 — Conectar, fase 1: descubrir perfiles
+-- ============================================================
+-- Los gustos que la app ya conoce (favoritos, géneros, estudios) vivían
+-- solo del lado de las noticias. Para poder ordenar a quién enseñar
+-- primero hacen falta EN LA BASE DE DATOS: la afinidad se calcula ahí,
+-- no en el navegador, porque para compararte con otra persona harían
+-- falta los gustos de esa otra persona — y eso es justo lo que no se le
+-- puede dar a nadie.
+alter table public.social_profiles
+  add column if not exists generos text[] not null default '{}',
+  add column if not exists estudios text[] not null default '{}',
+  add column if not exists favoritos text[] not null default '{}',
+  add column if not exists avatar_id text,
+  add column if not exists gustos_en timestamptz;
+
+-- Lo que has decidido sobre cada persona que te ha salido. Se guarda
+-- también el "paso" y no solo el "me interesa": sin eso, la misma
+-- persona volvería a salir en la siguiente tanda para siempre.
+create table if not exists public.social_decisions (
+  user_id uuid references auth.users on delete cascade not null,
+  target_id uuid references auth.users on delete cascade not null,
+  decision text not null check (decision in ('interesa', 'paso')),
+  created_at timestamptz default now() not null,
+  primary key (user_id, target_id),
+  constraint social_decisions_no_self check (user_id <> target_id)
+);
+
+alter table public.social_decisions enable row level security;
+
+-- Cada uno ve y escribe SOLO sus propias decisiones. Que no se puedan
+-- leer las ajenas es lo que impide saber si le gustas a alguien antes de
+-- que haya coincidencia.
+drop policy if exists "Decisiones propias" on public.social_decisions;
+create policy "Decisiones propias"
+  on public.social_decisions for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- Coincidencias. Se guardan con los dos identificadores ORDENADOS
+-- (menor primero) para que una pareja no pueda existir dos veces según
+-- quién dijera que sí primero.
+create table if not exists public.social_matches (
+  usuario_a uuid references auth.users on delete cascade not null,
+  usuario_b uuid references auth.users on delete cascade not null,
+  created_at timestamptz default now() not null,
+  primary key (usuario_a, usuario_b),
+  constraint social_matches_orden check (usuario_a < usuario_b)
+);
+
+alter table public.social_matches enable row level security;
+
+drop policy if exists "Ver coincidencias propias" on public.social_matches;
+create policy "Ver coincidencias propias"
+  on public.social_matches for select
+  using (auth.uid() = usuario_a or auth.uid() = usuario_b);
+
+-- Nadie inserta coincidencias a mano: las crea la función de decidir.
+
+-- Afinidad entre dos listas de gustos. Los favoritos pesan más que un
+-- género: compartir "Acción" no dice casi nada (lo tiene medio mundo),
+-- compartir un título concreto sí.
+create or replace function public.afinidad_gustos(
+  a_favoritos text[], a_generos text[], a_estudios text[],
+  b_favoritos text[], b_generos text[], b_estudios text[]
+)
+returns int
+language sql
+immutable
+as $$
+  select
+    -- Los favoritos los escribe cada uno a mano, así que se comparan en
+    -- minúsculas: "One Piece" y "one piece" son el mismo anime.
+    5 * coalesce(cardinality(array(
+      select lower(trim(x)) from unnest(a_favoritos) x
+      intersect
+      select lower(trim(y)) from unnest(b_favoritos) y
+    )), 0)
+    + 2 * coalesce(cardinality(array(
+      select unnest(a_generos) intersect select unnest(b_generos)
+    )), 0)
+    + 2 * coalesce(cardinality(array(
+      select unnest(a_estudios) intersect select unnest(b_estudios)
+    )), 0);
+$$;
+
+-- ¿Encajan las preferencias de los dos? Tiene que cuadrar en AMBOS
+-- sentidos: que el otro entre en lo que tú buscas no basta si tú no
+-- entras en lo que busca él.
+create or replace function public.encaja_busqueda(
+  a_genero text, a_busca text[], b_genero text, b_busca text[]
+)
+returns boolean
+language sql
+immutable
+as $$
+  select
+    ('Me da igual' = any(a_busca) or
+      case b_genero
+        when 'Mujer' then 'Mujeres' = any(a_busca)
+        when 'Hombre' then 'Hombres' = any(a_busca)
+        when 'No binario' then 'Personas no binarias' = any(a_busca)
+        else true
+      end)
+    and
+    ('Me da igual' = any(b_busca) or
+      case a_genero
+        when 'Mujer' then 'Mujeres' = any(b_busca)
+        when 'Hombre' then 'Hombres' = any(b_busca)
+        when 'No binario' then 'Personas no binarias' = any(b_busca)
+        else true
+      end);
+$$;
+
+-- A quién enseñar, y en qué orden.
+--
+-- Es una función y no una política de lectura sobre social_profiles a
+-- propósito: así se devuelve SOLO lo que hay que enseñar (alias, edad,
+-- bio, gustos en común) y nunca la fecha de nacimiento exacta ni el
+-- correo. Una política abierta sobre la tabla habría dejado leerlo todo
+-- desde la consola del navegador.
+create or replace function public.descubrir_perfiles(limite int default 12)
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  gender text,
+  bio text,
+  avatar_id text,
+  afinidad int,
+  generos_comunes text[],
+  estudios_comunes text[],
+  favoritos_comunes text[]
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  yo public.social_profiles%rowtype;
+begin
+  select * into yo from public.social_profiles where social_profiles.user_id = auth.uid();
+  if not found or not yo.is_active then
+    return;
+  end if;
+
+  -- Quien está sancionado no busca a nadie.
+  if exists (select 1 from public.sancion_activa(auth.uid())) then
+    return;
+  end if;
+
+  return query
+  select
+    p.user_id,
+    p.alias,
+    extract(year from age(p.birthdate))::int,
+    p.gender,
+    p.bio,
+    p.avatar_id,
+    public.afinidad_gustos(
+      yo.favoritos, yo.generos, yo.estudios,
+      p.favoritos, p.generos, p.estudios
+    ),
+    array(select unnest(yo.generos) intersect select unnest(p.generos)),
+    array(select unnest(yo.estudios) intersect select unnest(p.estudios)),
+    array(select unnest(yo.favoritos) intersect select unnest(p.favoritos))
+  from public.social_profiles p
+  where p.user_id <> auth.uid()
+    and p.is_active
+    -- Ya decidido (que sí o que no): no vuelve a salir.
+    and not exists (
+      select 1 from public.social_decisions d
+      where d.user_id = auth.uid() and d.target_id = p.user_id
+    )
+    -- Bloqueos, en los dos sentidos. Si alguien te ha bloqueado, no
+    -- vuelves a aparecerle — y él tampoco a ti, para que el bloqueo no
+    -- se note desde el otro lado.
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = p.user_id)
+         or (b.blocker_id = p.user_id and b.blocked_id = auth.uid())
+    )
+    -- Sancionados fuera del circuito mientras dure la sanción.
+    and not exists (select 1 from public.sancion_activa(p.user_id))
+    and public.encaja_busqueda(yo.gender, yo.looking_for, p.gender, p.looking_for)
+  order by
+    public.afinidad_gustos(
+      yo.favoritos, yo.generos, yo.estudios,
+      p.favoritos, p.generos, p.estudios
+    ) desc,
+    -- A igualdad de afinidad, primero quien lleva menos tiempo: reparte
+    -- las visitas en vez de enseñar siempre a los mismos.
+    p.created_at desc
+  limit greatest(1, least(coalesce(limite, 12), 30));
+end;
+$$;
+
+-- Decidir sobre una persona. Devuelve true si ha habido coincidencia.
+--
+-- La coincidencia se calcula AQUÍ y no en el navegador porque hace falta
+-- mirar la decisión del otro, que nadie puede leer. Es la única forma de
+-- que "¿le intereso?" solo se pueda responder cuando la respuesta es que
+-- sí y es mutua.
+create or replace function public.decidir_perfil(objetivo uuid, decision text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  reciproco boolean;
+begin
+  if auth.uid() is null or objetivo = auth.uid() then
+    raise exception 'Decisión no válida';
+  end if;
+  if decision not in ('interesa', 'paso') then
+    raise exception 'Decisión no válida';
+  end if;
+
+  insert into public.social_decisions (user_id, target_id, decision)
+  values (auth.uid(), objetivo, decision)
+  on conflict (user_id, target_id) do update set decision = excluded.decision;
+
+  if decision <> 'interesa' then
+    return false;
+  end if;
+
+  select exists (
+    select 1 from public.social_decisions d
+    where d.user_id = objetivo
+      and d.target_id = auth.uid()
+      and d.decision = 'interesa'
+  ) into reciproco;
+
+  if reciproco then
+    insert into public.social_matches (usuario_a, usuario_b)
+    values (least(auth.uid(), objetivo), greatest(auth.uid(), objetivo))
+    on conflict do nothing;
+  end if;
+
+  return reciproco;
+end;
+$$;
+
+-- Tus coincidencias, con lo justo para enseñarlas en una lista.
+create or replace function public.mis_coincidencias()
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  avatar_id text,
+  desde timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.user_id,
+    p.alias,
+    extract(year from age(p.birthdate))::int,
+    p.avatar_id,
+    m.created_at
+  from public.social_matches m
+  join public.social_profiles p
+    on p.user_id = case when m.usuario_a = auth.uid() then m.usuario_b else m.usuario_a end
+  where auth.uid() in (m.usuario_a, m.usuario_b)
+    and p.is_active
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = p.user_id)
+         or (b.blocker_id = p.user_id and b.blocked_id = auth.uid())
+    )
+  order by m.created_at desc;
+$$;
