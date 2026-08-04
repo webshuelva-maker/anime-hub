@@ -46,25 +46,28 @@ export function urlIA(): string {
  */
 export function modeloPotente(): string {
   if (process.env.IA_MODELO_POTENTE) return process.env.IA_MODELO_POTENTE;
-  return proveedorIA() === "gemini" ? "gemini-2.5-flash" : "llama-3.3-70b-versatile";
+  // "gemini-flash-latest" es un alias que Google mantiene apuntando
+  // siempre a su Flash más reciente. Se usa a propósito en vez de un
+  // número concreto: fijar "gemini-2.5-flash-lite" fue justo lo que
+  // rompió la app cuando Google lo retiró. Con el alias, las retiradas
+  // dejan de ser un problema.
+  return proveedorIA() === "gemini" ? "gemini-flash-latest" : "llama-3.3-70b-versatile";
 }
 
 /**
  * Modelo rápido y barato: charla, clasificar, traducir, trivias.
  *
- * En Gemini apunta al MISMO modelo que el potente a propósito. La
- * versión "lite" que se usaba antes dejó de estar disponible para claves
- * nuevas (Google retira modelos cada pocos meses), y poner a dedo el
- * nombre del siguiente es garantía de volver a romperse. Flash ya es
- * rápido, así que mientras tanto sirve para las dos cosas.
+ * En Gemini se usa el alias "gemini-flash-lite-latest", que Google
+ * mantiene apuntando a su modelo ligero más reciente. El ligero admite
+ * bastantes más peticiones por minuto que el normal, y es el que se
+ * lleva todo el trabajo repetitivo: clasificar, traducir y las trivias.
  *
- * Si en /api/ia ves un modelo ligero disponible en tu clave, ponlo en la
- * variable IA_MODELO_RAPIDO y se usará ese: no hace falta tocar código
- * ni desplegar nada nuevo.
+ * Si algún día un alias empieza a portarse raro, se puede fijar un
+ * modelo concreto con la variable IA_MODELO_RAPIDO, sin tocar código.
  */
 export function modeloRapido(): string {
   if (process.env.IA_MODELO_RAPIDO) return process.env.IA_MODELO_RAPIDO;
-  return proveedorIA() === "gemini" ? "gemini-2.5-flash" : "llama-3.1-8b-instant";
+  return proveedorIA() === "gemini" ? "gemini-flash-lite-latest" : "llama-3.1-8b-instant";
 }
 
 /** Lista los modelos que la clave puede usar de verdad (solo Gemini). */

@@ -23,6 +23,14 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v146",
+    fecha: "2026-08-03",
+    titulo: "Iris a prueba de cambios",
+    puntos: [
+      "El motor de Iris se actualiza solo cuando salen modelos nuevos, en vez de romperse cuando retiran los viejos.",
+    ],
+  },
+  {
     version: "v145",
     fecha: "2026-08-03",
     titulo: "Ajuste del motor de Iris",
