@@ -1,4 +1,4 @@
-import { urlIA, modeloPotente, modeloRapido, claveIA } from "@/lib/ia";
+import { urlIA, modeloPotente, modeloRapido, claveIA, ajustesRazonamiento, tokensConMargen } from "@/lib/ia";
 import { NextRequest } from "next/server";
 import {
   ChatMessage,
@@ -248,7 +248,8 @@ export async function POST(req: NextRequest) {
              * con calma y separar bien lo confirmado de lo que se rumorea
              * sin quedarse a media frase.
              */
-            max_tokens: researchText ? 1100 : 700,
+            max_tokens: tokensConMargen(researchText ? 1100 : 700),
+            ...ajustesRazonamiento(),
             stream: true,
           }),
         });

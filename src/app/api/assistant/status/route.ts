@@ -1,4 +1,4 @@
-import { urlIA, claveIA } from "@/lib/ia";
+import { urlIA, claveIA, ajustesRazonamiento, tokensConMargen } from "@/lib/ia";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -35,7 +35,8 @@ export async function GET() {
         body: JSON.stringify({
           model: MODEL,
           messages: [{ role: "user", content: "hola" }],
-          max_tokens: 5,
+          max_tokens: tokensConMargen(5),
+          ...ajustesRazonamiento(),
         }),
       });
 
@@ -62,7 +63,8 @@ export async function GET() {
           body: JSON.stringify({
             model: MODEL,
             temperature: 0.2,
-            max_tokens: 2200,
+            max_tokens: tokensConMargen(2200),
+            ...ajustesRazonamiento(),
             response_format: { type: "json_object" },
             messages: [
               {

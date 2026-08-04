@@ -1,4 +1,4 @@
-import { urlIA, modeloPotente, modeloRapido, claveIA } from "@/lib/ia";
+import { urlIA, modeloPotente, modeloRapido, claveIA, ajustesRazonamiento, tokensConMargen } from "@/lib/ia";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ChatMessage,
@@ -37,7 +37,8 @@ async function callModel(
         model,
         messages: [{ role: "system", content: systemPrompt }, ...messages],
         temperature: 0.7,
-        max_tokens: maxTokens,
+        max_tokens: tokensConMargen(maxTokens),
+        ...ajustesRazonamiento(),
       }),
     });
 

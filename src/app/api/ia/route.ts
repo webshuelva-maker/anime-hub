@@ -1,13 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  claveIA,
-  modeloPotente,
-  modeloRapido,
-  modelosDisponibles,
-  proveedorIA,
-  urlIA,
-  cabecerasIA,
-} from "@/lib/ia";
+import { claveIA, modeloPotente, modeloRapido, modelosDisponibles, proveedorIA, urlIA, cabecerasIA, ajustesRazonamiento, tokensConMargen } from "@/lib/ia";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -39,7 +31,15 @@ export async function GET() {
         body: JSON.stringify({
           model: modelo,
           messages: [{ role: "user", content: "Responde solo con: ok" }],
-          max_tokens: 5,
+          // Margen generoso a propósito, aunque la respuesta esperada sea
+          // de dos letras: los modelos Flash de Gemini gastan tokens
+          // "pensando" antes de escribir, y esos tokens descuentan del
+          // mismo límite. Con max_tokens: 5 se lo gastaba entero pensando
+          // y devolvía vacío — la prueba decía "estado: ok, respuesta:
+          // (vacía)" y parecía que el modelo estuviera roto cuando lo que
+          // estaba mal era la propia prueba.
+          max_tokens: tokensConMargen(5),
+          ...ajustesRazonamiento(),
         }),
         signal: AbortSignal.timeout(20000),
       });
@@ -49,10 +49,17 @@ export async function GET() {
         return { modelo, estado: `HTTP ${res.status}`, detalle: cuerpo.slice(0, 200), ms: Date.now() - inicio };
       }
       const json = JSON.parse(cuerpo);
+      const contenido = json?.choices?.[0]?.message?.content ?? "";
+      const uso = json?.usage;
       return {
         modelo,
-        estado: "ok",
-        respuesta: json?.choices?.[0]?.message?.content?.slice(0, 40) ?? "(vacía)",
+        estado: contenido ? "ok" : "vacía",
+        respuesta: contenido.slice(0, 40) || "(vacía)",
+        // Si vuelve a salir vacía, esto dice por qué: "length" con
+        // tokens de razonamiento altos significa que se los ha comido
+        // pensando; cualquier otra cosa es un problema distinto.
+        motivoFin: json?.choices?.[0]?.finish_reason ?? null,
+        tokensRazonamiento: uso?.completion_tokens_details?.reasoning_tokens ?? null,
         ms: Date.now() - inicio,
       };
     } catch (e) {

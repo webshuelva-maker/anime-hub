@@ -1,4 +1,4 @@
-import { urlIA, modeloPotente, modeloRapido, claveIA } from "./ia";
+import { urlIA, modeloPotente, modeloRapido, claveIA, ajustesRazonamiento, tokensConMargen } from "./ia";
 import { repartirEnParrafos } from "./parrafos";
 
 
@@ -36,7 +36,8 @@ async function callOnce(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: maxTokens,
+        max_tokens: tokensConMargen(maxTokens),
+        ...ajustesRazonamiento(),
         messages: [
           {
             role: "system",

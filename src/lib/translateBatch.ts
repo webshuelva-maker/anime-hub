@@ -1,4 +1,4 @@
-import { urlIA, modeloPotente, modeloRapido, claveIA } from "./ia";
+import { urlIA, modeloPotente, modeloRapido, claveIA, ajustesRazonamiento, tokensConMargen } from "./ia";
 
 
 
@@ -38,7 +38,8 @@ async function callBatch(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 2200,
+        max_tokens: tokensConMargen(2200),
+        ...ajustesRazonamiento(),
         response_format: { type: "json_object" },
         messages: [
           {

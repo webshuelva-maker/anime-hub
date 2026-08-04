@@ -1,4 +1,4 @@
-import { urlIA, claveIA } from "@/lib/ia";
+import { urlIA, claveIA, ajustesRazonamiento, tokensConMargen } from "@/lib/ia";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -57,7 +57,8 @@ Devuelve ÚNICAMENTE un array JSON de ${BATCH_SIZE} strings, sin numerar, sin te
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.9,
-        max_tokens: 1200,
+        max_tokens: tokensConMargen(1200),
+        ...ajustesRazonamiento(),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: `${systemPrompt}\n\nResponde como {"facts": [...]}` },

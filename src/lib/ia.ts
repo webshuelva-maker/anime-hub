@@ -100,3 +100,37 @@ export function cabecerasIA(clave: string): Record<string, string> {
     Authorization: `Bearer ${clave}`,
   };
 }
+
+/**
+ * Ajustes extra que hay que colar en el cuerpo de la petición.
+ *
+ * EL PROBLEMA QUE RESUELVE (costó localizarlo):
+ * los Flash actuales de Gemini "piensan" antes de responder, y esos
+ * tokens de razonamiento NO salen en la respuesta pero SÍ descuentan del
+ * max_tokens que pides. Si el margen es corto, el modelo se lo gasta
+ * entero pensando y devuelve texto VACÍO — sin error, sin aviso, solo
+ * una respuesta en blanco después de varios segundos. Es justo lo que se
+ * vio al probar: el modelo potente contestaba "(vacía)" en 6 segundos
+ * mientras el ligero respondía bien en 600 ms.
+ *
+ * Se pide el mínimo esfuerzo de razonamiento, no "none", a propósito: en
+ * los modelos Gemini 3 el razonamiento NO se puede apagar del todo y
+ * mandar "none" da error. "low" vale para 2.5 y para 3.
+ *
+ * En Groq no existe este parámetro, así que devuelve un objeto vacío.
+ */
+export function ajustesRazonamiento(): Record<string, unknown> {
+  return proveedorIA() === "gemini" ? { reasoning_effort: "low" } : {};
+}
+
+/**
+ * Margen de tokens mínimo cuando el proveedor es Gemini.
+ *
+ * Aunque se pida poco esfuerzo de razonamiento, el modelo sigue gastando
+ * algo antes de escribir. Si la tarea pide 200 tokens y el modelo gasta
+ * 300 pensando, la respuesta llega vacía. Este suelo garantiza que
+ * siempre quede sitio para pensar Y para contestar.
+ */
+export function tokensConMargen(deseados: number): number {
+  return proveedorIA() === "gemini" ? Math.max(deseados, 800) : deseados;
+}

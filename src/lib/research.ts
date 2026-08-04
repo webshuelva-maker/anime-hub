@@ -1,4 +1,4 @@
-import { urlIA } from "./ia";
+import { urlIA, ajustesRazonamiento, tokensConMargen } from "./ia";
 import { ResearchSource, classifySource } from "./sourceTiers";
 import { searchNews, searchWeb, hitsToPromptText, newestDate, NewsHit } from "./newsSearch";
 import { searchReddit, redditToPromptText, RedditHit } from "./redditSearch";
@@ -90,7 +90,8 @@ ${transcript}`;
         model: INTENT_MODEL,
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
-        max_tokens: 200,
+        max_tokens: tokensConMargen(200),
+        ...ajustesRazonamiento(),
         response_format: { type: "json_object" },
       }),
     });
