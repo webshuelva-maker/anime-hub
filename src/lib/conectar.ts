@@ -53,6 +53,13 @@ export interface Mensaje {
   texto: string;
   creado_en: string;
   leido_en: string | null;
+  responde_a: string | null;
+}
+
+export interface Reaccion {
+  mensaje_id: string;
+  usuario_id: string;
+  emoji: string;
 }
 
 /**
@@ -216,7 +223,7 @@ export async function mensajesCon(otro: string): Promise<Mensaje[]> {
 
   const { data } = await supabase
     .from("social_messages")
-    .select("id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en")
+    .select("id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a")
     .eq("usuario_a", a)
     .eq("usuario_b", b)
     .order("creado_en", { ascending: true });
@@ -224,7 +231,11 @@ export async function mensajesCon(otro: string): Promise<Mensaje[]> {
 }
 
 /** Devuelve el error en texto, o null si se envió. */
-export async function enviarMensaje(otro: string, texto: string): Promise<string | null> {
+export async function enviarMensaje(
+  otro: string,
+  texto: string,
+  respondeA?: string | null
+): Promise<string | null> {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return "No hay sesión iniciada.";
@@ -235,6 +246,7 @@ export async function enviarMensaje(otro: string, texto: string): Promise<string
     usuario_b: b,
     autor_id: auth.user.id,
     texto: texto.trim(),
+    responde_a: respondeA ?? null,
   });
   if (!error) return null;
 
@@ -374,4 +386,51 @@ export async function caratulasDe(titulos: string[]): Promise<Record<string, str
     // Sin carátulas, las etiquetas de texto siguen ahí.
   }
   return salida;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Reacciones                                                        */
+/* ------------------------------------------------------------------ */
+
+/** Las cuatro que se ofrecen al vuelo. Pocas y claras a propósito: una
+ *  fila de veinte emojis no se usa, se mira. */
+export const REACCIONES_RAPIDAS = ["❤️", "😂", "🔥", "😮"] as const;
+
+export async function reaccionesDe(mensajeIds: string[]): Promise<Reaccion[]> {
+  if (mensajeIds.length === 0) return [];
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("social_message_reactions")
+    .select("mensaje_id, usuario_id, emoji")
+    .in("mensaje_id", mensajeIds);
+  return (data as Reaccion[]) ?? [];
+}
+
+/**
+ * Pone la reacción o la quita si ya estaba. Devuelve cómo queda, para
+ * que la pantalla se actualice sin esperar a que vuelva por el canal.
+ */
+export async function alternarReaccion(
+  mensajeId: string,
+  emoji: string,
+  yaEstaba: boolean
+): Promise<boolean> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return yaEstaba;
+
+  if (yaEstaba) {
+    await supabase
+      .from("social_message_reactions")
+      .delete()
+      .eq("mensaje_id", mensajeId)
+      .eq("usuario_id", auth.user.id)
+      .eq("emoji", emoji);
+    return false;
+  }
+
+  const { error } = await supabase
+    .from("social_message_reactions")
+    .insert({ mensaje_id: mensajeId, usuario_id: auth.user.id, emoji });
+  return !error;
 }

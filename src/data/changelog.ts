@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v163",
+    fecha: "2026-08-05",
+    titulo: "Un chat de verdad, y tu perfil como lo ven",
+    puntos: [
+      "Reacciona a un mensaje, respóndele citándolo y mete emojis sin salir del teclado.",
+      "Sabes cuándo han leído tu último mensaje.",
+      "Tu perfil deja de ser una lista de datos: ves exactamente la ficha que le sale a los demás, y puedes cambiar tu descripción ahí mismo.",
+    ],
+  },
+  {
     version: "v162",
     fecha: "2026-08-05",
     titulo: "Conectar con cara",

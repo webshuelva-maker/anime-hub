@@ -11,6 +11,10 @@ import {
   Coincidencia,
   MOTIVOS_DENUNCIA,
   Mensaje,
+  REACCIONES_RAPIDAS,
+  Reaccion,
+  alternarReaccion,
+  reaccionesDe,
   bloquear,
   denunciar,
   enviarMensaje,
@@ -45,6 +49,14 @@ import {
  */
 
 const SUAVE = [0.16, 1, 0.3, 1] as const;
+
+/** Los de siempre. No hace falta un catálogo entero: para lo demás está
+ *  el teclado de emojis del propio sistema. */
+const EMOJIS = [
+  "😀","😂","🥹","😍","😎","🤔","😴","🥲",
+  "😭","😱","🤯","🙃","😤","🥳","🫠","😳",
+  "❤️","🔥","✨","🎉","👍","👀","🙏","💀",
+];
 /** Dos mensajes seguidos del mismo autor en menos de esto van juntos. */
 const MARGEN_AGRUPAR_MS = 5 * 60 * 1000;
 
@@ -79,6 +91,10 @@ export function ChatConversacion({
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [enLinea, setEnLinea] = useState(false);
   const [escribiendo, setEscribiendo] = useState(false);
+  const [reacciones, setReacciones] = useState<Reaccion[]>([]);
+  /** El mensaje al que se está respondiendo, si hay alguno. */
+  const [respondiendoA, setRespondiendoA] = useState<Mensaje | null>(null);
+  const [emojisAbiertos, setEmojisAbiertos] = useState(false);
   const engancheRef = useRef<{ avisarQueEscribo: () => void; cerrar: () => void } | null>(null);
   const finEscribirRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
@@ -99,6 +115,7 @@ export function ChatConversacion({
       const historial = await mensajesCon(con.user_id);
       if (!vivo) return;
       setMensajes(historial);
+      setReacciones(await reaccionesDe(historial.map((m) => m.id)));
       setCargando(false);
       void marcarConversacionLeida(con.user_id);
 
@@ -149,7 +166,7 @@ export function ChatConversacion({
     setEnviando(true);
     setFallo(null);
     try {
-      const error = await enviarMensaje(con.user_id, limpio);
+      const error = await enviarMensaje(con.user_id, limpio, respondiendoA?.id ?? null);
       if (error) {
         playError();
         setFallo(error);
@@ -157,8 +174,33 @@ export function ChatConversacion({
       }
       playClick();
       setTexto("");
+      setRespondiendoA(null);
     } finally {
       setEnviando(false);
+    }
+  };
+
+  /** Alterna una reacción y refleja el cambio al momento. */
+  const reaccionar = async (mensajeId: string, emoji: string) => {
+    if (!yo) return;
+    const yaEstaba = reacciones.some(
+      (r) => r.mensaje_id === mensajeId && r.usuario_id === yo && r.emoji === emoji
+    );
+    // Se pinta antes de que responda el servidor: una reacción que tarda
+    // medio segundo en aparecer se pulsa dos veces.
+    setReacciones((prev) =>
+      yaEstaba
+        ? prev.filter(
+            (r) => !(r.mensaje_id === mensajeId && r.usuario_id === yo && r.emoji === emoji)
+          )
+        : [...prev, { mensaje_id: mensajeId, usuario_id: yo, emoji }]
+    );
+    playToggle();
+    const quedaPuesta = await alternarReaccion(mensajeId, emoji, yaEstaba);
+    // Si el servidor dice otra cosa (te acaban de bloquear, por ejemplo),
+    // se deshace lo pintado.
+    if (quedaPuesta === yaEstaba) {
+      setReacciones(await reaccionesDe(mensajes.map((m) => m.id)));
     }
   };
 
@@ -335,7 +377,7 @@ export function ChatConversacion({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.22, ease: SUAVE }}
-                    className={`group flex gap-3 rounded-lg px-2 transition-colors duration-150 hover:bg-panel-soft/40 ${
+                    className={`group relative flex gap-3 rounded-lg px-2 transition-colors duration-150 hover:bg-panel-soft/40 ${
                       agrupado ? "py-0.5" : "mt-3 py-1"
                     }`}
                   >
@@ -357,6 +399,21 @@ export function ChatConversacion({
                     </div>
 
                     <div className="min-w-0 flex-1">
+                      {/* La cita de a qué se responde, encima del mensaje. */}
+                      {m.responde_a &&
+                        (() => {
+                          const citado = mensajes.find((x) => x.id === m.responde_a);
+                          if (!citado) return null;
+                          return (
+                            <p className="mb-0.5 flex items-center gap-1.5 border-l-2 border-panel-border pl-2 text-[11px] text-muted">
+                              <span className="shrink-0 font-medium">
+                                {citado.autor_id === yo ? "Tú" : con.alias}
+                              </span>
+                              <span className="truncate opacity-80">{citado.texto}</span>
+                            </p>
+                          );
+                        })()}
+
                       {!agrupado && (
                         <p className="flex items-baseline gap-2">
                           <span
@@ -372,6 +429,79 @@ export function ChatConversacion({
                       <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
                         {m.texto}
                       </p>
+
+                      {/* Reacciones puestas. Las tuyas van marcadas, y
+                          volver a pulsar las quita. */}
+                      {(() => {
+                        const suyas = reacciones.filter((r) => r.mensaje_id === m.id);
+                        if (suyas.length === 0) return null;
+                        const porEmoji = new Map<string, { total: number; mia: boolean }>();
+                        for (const r of suyas) {
+                          const actualCuenta = porEmoji.get(r.emoji) ?? { total: 0, mia: false };
+                          porEmoji.set(r.emoji, {
+                            total: actualCuenta.total + 1,
+                            mia: actualCuenta.mia || r.usuario_id === yo,
+                          });
+                        }
+                        return (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {[...porEmoji.entries()].map(([emoji, info]) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => reaccionar(m.id, emoji)}
+                                className="pulsable flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+                                style={
+                                  info.mia
+                                    ? {
+                                        borderColor:
+                                          "color-mix(in srgb, var(--ice) 50%, transparent)",
+                                        background:
+                                          "color-mix(in srgb, var(--ice) 12%, transparent)",
+                                      }
+                                    : { borderColor: "var(--panel-border)" }
+                                }
+                              >
+                                <span>{emoji}</span>
+                                <span className="text-muted">{info.total}</span>
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* "Visto": solo bajo TU último mensaje, y solo si
+                          lo ha leído. Puesto en cada mensaje sería ruido. */}
+                      {mio && i === mensajes.length - 1 && m.leido_en && (
+                        <p className="mt-0.5 text-[10px] text-muted">Visto</p>
+                      )}
+                    </div>
+
+                    {/* Barra que aparece al pasar por encima, como en
+                        Discord: reaccionar rápido o responder. */}
+                    <div className="pointer-events-none absolute right-2 top-0 flex -translate-y-1/2 items-center gap-0.5 rounded-full border border-panel-border bg-panel p-0.5 opacity-0 shadow-lg transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+                      {REACCIONES_RAPIDAS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => reaccionar(m.id, emoji)}
+                          className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-sm hover:bg-panel-soft"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRespondiendoA(m);
+                          cajaRef.current?.focus();
+                          playToggle();
+                        }}
+                        aria-label="Responder a este mensaje"
+                        className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-xs text-muted hover:bg-panel-soft hover:text-foreground"
+                      >
+                        ↩
+                      </button>
                     </div>
                   </motion.div>
                 </div>
@@ -426,7 +556,76 @@ export function ChatConversacion({
           )}
         </AnimatePresence>
 
-        <div className="flex items-end gap-2 rounded-2xl border border-panel-border bg-panel-soft/60 px-3 py-2 transition-colors duration-200 focus-within:border-ice/40">
+        <AnimatePresence>
+          {respondiendoA && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: SUAVE }}
+              className="overflow-hidden"
+            >
+              <div className="mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-ice/60 bg-panel-soft/50 px-3 py-2">
+                <span className="min-w-0 flex-1 text-[11px] leading-snug">
+                  <span className="ice-text font-medium">
+                    Respondiendo a {respondiendoA.autor_id === yo ? "ti mismo" : con.alias}
+                  </span>
+                  <span className="block truncate text-muted">{respondiendoA.texto}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRespondiendoA(null)}
+                  aria-label="Cancelar la respuesta"
+                  className="pulsable shrink-0 rounded-full px-2 py-1 text-xs text-muted hover:text-foreground"
+                >
+                  ✕
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="relative flex items-end gap-2 rounded-2xl border border-panel-border bg-panel-soft/60 px-3 py-2 transition-colors duration-200 focus-within:border-ice/40">
+          <AnimatePresence>
+            {emojisAbiertos && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setEmojisAbiertos(false)} />
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.18, ease: SUAVE }}
+                  className="panel absolute bottom-full left-0 z-20 mb-2 grid w-64 grid-cols-8 gap-0.5 rounded-xl p-2 shadow-2xl shadow-black/50"
+                >
+                  {EMOJIS.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => {
+                        setTexto((t) => t + e);
+                        cajaRef.current?.focus();
+                      }}
+                      className="pulsable flex h-7 items-center justify-center rounded text-lg hover:bg-panel-soft"
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEmojisAbiertos((v) => !v);
+              playToggle();
+            }}
+            aria-label="Insertar un emoji"
+            className="pulsable mb-0.5 flex h-9 w-8 shrink-0 items-center justify-center rounded-full text-lg text-muted hover:text-foreground"
+          >
+            ☺
+          </button>
           <textarea
             ref={cajaRef}
             value={texto}

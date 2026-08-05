@@ -1477,3 +1477,80 @@ begin
   alter publication supabase_realtime add table public.social_messages;
 exception when duplicate_object then null;
 end $$;
+
+-- ============================================================
+--  v163 — Chat: reacciones y respuestas
+-- ============================================================
+
+-- Responder a un mensaje concreto.
+--
+-- En una conversación de dos no parece imprescindible, pero sí lo es en
+-- cuanto pasan unas horas: se contesta a algo dicho esta mañana y sin la
+-- cita no se entiende a qué. Va como columna y no como tabla aparte
+-- porque una respuesta es parte del mensaje, no una relación suya.
+--
+-- "on delete set null": si el mensaje citado desapareciera (solo puede
+-- pasar al borrarse una cuenta entera), la respuesta se queda y
+-- simplemente deja de citar. Perder la conversación por eso sería peor.
+alter table public.social_messages
+  add column if not exists responde_a uuid references public.social_messages on delete set null;
+
+-- Reacciones.
+--
+-- La clave primaria es (mensaje, usuario, emoji): cada persona pone cada
+-- emoji una vez como mucho, y volver a pulsarlo lo quita. Eso hace
+-- imposible por construcción que alguien infle un contador pulsando
+-- rápido, sin necesidad de comprobar nada en la app.
+create table if not exists public.social_message_reactions (
+  mensaje_id uuid references public.social_messages on delete cascade not null,
+  usuario_id uuid references auth.users on delete cascade not null,
+  emoji text not null check (char_length(emoji) between 1 and 8),
+  creado_en timestamptz default now() not null,
+  primary key (mensaje_id, usuario_id, emoji)
+);
+
+create index if not exists social_reactions_mensaje_idx
+  on public.social_message_reactions (mensaje_id);
+
+alter table public.social_message_reactions enable row level security;
+
+-- Se ven las reacciones de los mensajes de tus conversaciones, y solo de
+-- esos: la pertenencia se comprueba contra el mensaje, no se confía en
+-- lo que mande el navegador.
+drop policy if exists "Ver reacciones de mis conversaciones" on public.social_message_reactions;
+create policy "Ver reacciones de mis conversaciones"
+  on public.social_message_reactions for select
+  using (
+    exists (
+      select 1 from public.social_messages m
+      where m.id = mensaje_id
+        and auth.uid() in (m.usuario_a, m.usuario_b)
+    )
+  );
+
+-- Reaccionar exige poder escribir en esa conversación. Si te han
+-- bloqueado, tampoco puedes seguir reaccionando a lo antiguo: reaccionar
+-- es hablar.
+drop policy if exists "Reaccionar en mis conversaciones" on public.social_message_reactions;
+create policy "Reaccionar en mis conversaciones"
+  on public.social_message_reactions for insert
+  with check (
+    auth.uid() = usuario_id
+    and exists (
+      select 1 from public.social_messages m
+      where m.id = mensaje_id
+        and public.puede_escribir(m.usuario_a, m.usuario_b)
+    )
+  );
+
+-- Quitar SOLO las tuyas.
+drop policy if exists "Quitar mis reacciones" on public.social_message_reactions;
+create policy "Quitar mis reacciones"
+  on public.social_message_reactions for delete
+  using (auth.uid() = usuario_id);
+
+do $$
+begin
+  alter publication supabase_realtime add table public.social_message_reactions;
+exception when duplicate_object then null;
+end $$;

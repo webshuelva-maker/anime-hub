@@ -11,6 +11,7 @@ import { DateOfBirthPicker } from "./DateOfBirthPicker";
 import { CheckBox } from "./CheckBox";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ConectarShell } from "./ConectarShell";
+import { PerfilSocialVista } from "./PerfilSocialVista";
 import { playError, playSuccess } from "@/lib/sound";
 
 /**
@@ -316,35 +317,8 @@ export function SocialOnboarding() {
         */}
         <ConectarShell
           perfil={
-            <div>
-        <div className="panel rounded-2xl p-6">
-          <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-            Cómo te ven
-          </h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted">Alias</dt>
-              <dd>{profile.alias}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted">Te identificas como</dt>
-              <dd>{profile.gender}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted">Quieres coincidir con</dt>
-              <dd className="text-right">{profile.looking_for.join(", ")}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setConfirmingLeave(true)}
-          className="pulsable mt-6 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted hover:border-rumor/50 hover:text-rumor"
-        >
-          Salir de Conectar y borrar este perfil
-        </button>
-
+            <>
+              <PerfilSocialVista perfil={profile} onSalir={() => setConfirmingLeave(true)} />
         <ConfirmDialog
           open={confirmingLeave}
           title="¿Seguro que quieres salir?"
@@ -353,7 +327,7 @@ export function SocialOnboarding() {
           onConfirm={handleLeave}
           onCancel={() => setConfirmingLeave(false)}
         />
-            </div>
+            </>
           }
         />
       </motion.div>
