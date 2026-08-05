@@ -64,6 +64,7 @@ export function DescubrirPerfiles() {
   /** Gente que ya te ha marcado y a la que aún no has contestado. */
   const [teEsperan, setTeEsperan] = useState(0);
   const [chatCon, setChatCon] = useState<Coincidencia | null>(null);
+  const [menuSeguridad, setMenuSeguridad] = useState(false);
   const [vistos, setVistos] = useState(0);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
   const [denunciando, setDenunciando] = useState(false);
@@ -107,6 +108,7 @@ export function DescubrirPerfiles() {
     if (!actual || decidiendo) return;
     setDecidiendo(true);
     setUltimaAccion(null);
+    setMenuSeguridad(false);
     const objetivo = actual;
     try {
       const hayCoincidencia = await decidir(objetivo.user_id, decision);
@@ -429,28 +431,74 @@ export function DescubrirPerfiles() {
               </div>
 
               {/* A la vista, no escondido en un menú. */}
-              <div className="mt-5 flex items-center justify-center gap-3 text-[11px]">
+              {/* Las herramientas de seguridad, en un menú discreto.
+                  Antes estaban permanentemente en pantalla con su párrafo
+                  de explicación debajo: a quien solo está mirando
+                  perfiles, eso le dice todo el rato que el sitio es
+                  peligroso. Siguen a un toque, y lo que hacen se explica
+                  al abrirlas, que es cuando hace falta leerlo. */}
+              <div className="relative mt-5 flex justify-center">
                 <button
                   type="button"
-                  onClick={() => setConfirmandoBloqueo(true)}
-                  title="No volveréis a apareceros. No se le avisa."
-                  className="pulsable pulsable-riesgo rounded-full border border-panel-border px-3 py-1.5 font-medium text-muted"
+                  onClick={() => {
+                    setMenuSeguridad((v) => !v);
+                    playToggle();
+                  }}
+                  aria-label="Más opciones sobre este perfil"
+                  className={`pulsable flex h-8 w-8 items-center justify-center rounded-full text-base ${
+                    menuSeguridad ? "bg-panel-soft text-foreground" : "text-muted hover:bg-panel-soft"
+                  }`}
                 >
-                  Bloquear
+                  ⋯
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setDenunciando(true)}
-                  title="Avisas al equipo de moderación y además le bloqueas"
-                  className="pulsable pulsable-riesgo rounded-full border border-panel-border px-3 py-1.5 font-medium text-muted"
-                >
-                  Denunciar
-                </button>
+
+                <AnimatePresence>
+                  {menuSeguridad && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setMenuSeguridad(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: SUAVE }}
+                        className="panel absolute bottom-full z-20 mb-2 w-72 rounded-xl p-1.5 shadow-2xl shadow-black/50"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuSeguridad(false);
+                            setConfirmandoBloqueo(true);
+                          }}
+                          className="pulsable w-full rounded-lg px-3 py-2.5 text-left hover:bg-panel-soft"
+                        >
+                          <span className="block text-sm font-medium text-foreground">
+                            Bloquear a {actual.alias}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] leading-snug text-muted">
+                            No volveréis a apareceros el uno al otro. No se le avisa.
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuSeguridad(false);
+                            setDenunciando(true);
+                          }}
+                          className="pulsable w-full rounded-lg px-3 py-2.5 text-left hover:bg-panel-soft"
+                        >
+                          <span className="block text-sm font-medium text-rumor">Denunciar</span>
+                          <span className="mt-0.5 block text-[11px] leading-snug text-muted">
+                            Lo revisa el equipo de moderación. También le bloquea.
+                          </span>
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
-              <p className="mt-2 text-center text-[10px] leading-snug text-muted">
-                Bloquear os hace invisibles el uno para el otro. Denunciar avisa al equipo y
-                bloquea también.
-              </p>
               </div>
             </motion.div>
           ) : (
@@ -631,7 +679,7 @@ export function DescubrirPerfiles() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4"
             onClick={() => setDenunciando(false)}
           >
             <motion.div

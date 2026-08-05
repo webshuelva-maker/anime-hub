@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v160",
+    fecha: "2026-08-05",
+    titulo: "Conectar, con otra cara",
+    puntos: [
+      "El chat pasa a pantalla completa, con los mensajes agrupados por persona.",
+      "Bloquear y denunciar dejan de estar en pantalla todo el rato: viven en el menú de la conversación y explican qué hacen al abrirlos.",
+      "Las confirmaciones ya no se abren por detrás de lo que estás confirmando.",
+    ],
+  },
+  {
     version: "v159",
     fecha: "2026-08-05",
     titulo: "Va suave",

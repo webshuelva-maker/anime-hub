@@ -22,28 +22,34 @@ import {
 /**
  * La conversación con una coincidencia.
  *
- * Es la parte de la app donde dos desconocidos hablan a solas, así que
- * las decisiones aquí no son de diseño sino de seguridad:
+ * ---------------------------------------------------------------------
+ * REDISEÑO v160
  *
- *  - Bloquear y denunciar están en la cabecera, siempre visibles. No
- *    dentro de un menú de tres puntos: cuando alguien necesita esto,
- *    necesita encontrarlo en un segundo y sin pensar.
- *  - Los mensajes no se pueden borrar, ni los propios. Poder retirar lo
- *    que acabas de escribir es poder acosar y hacer desaparecer la
- *    prueba después.
- *  - El permiso para escribir lo comprueba la base de datos EN CADA
- *    mensaje, no al abrir. Si te bloquean a mitad de conversación, el
- *    siguiente mensaje ya no sale.
+ * La versión anterior eran burbujas de mensajería genérica con dos
+ * botones rojos de "Bloquear" y "Denunciar" clavados en la cabecera y un
+ * párrafo fijo explicando lo que hacían. Lo describió bien: parecía una
+ * app hecha por alguien inseguro. Y es que ESO ES lo que comunica una
+ * advertencia permanente — que el sitio es peligroso, todo el rato, a
+ * quien solo está hablando con alguien.
+ *
+ * Las herramientas siguen estando a un toque y en el mismo sitio de
+ * siempre, pero dentro de un menú, y la explicación aparece EN EL
+ * MOMENTO en que se abre: que es cuando de verdad hace falta leerla, no
+ * cinco días antes.
+ *
+ * La forma es de lista, no de burbujas: mensajes seguidos de la misma
+ * persona se agrupan bajo un solo nombre y una sola hora, como en
+ * Discord. Además de reconocible, cabe mucho más texto por pantalla, que
+ * es de lo que va una conversación.
+ * ---------------------------------------------------------------------
  */
 
 const SUAVE = [0.16, 1, 0.3, 1] as const;
+/** Dos mensajes seguidos del mismo autor en menos de esto van juntos. */
+const MARGEN_AGRUPAR_MS = 5 * 60 * 1000;
 
 function hora(iso: string): string {
   return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-}
-
-function mismoDia(a: string, b: string): boolean {
-  return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
 function etiquetaDia(iso: string): string {
@@ -52,7 +58,7 @@ function etiquetaDia(iso: string): string {
   const ayer = new Date(Date.now() - 86_400_000);
   if (d.toDateString() === hoy.toDateString()) return "Hoy";
   if (d.toDateString() === ayer.toDateString()) return "Ayer";
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+  return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function ChatConversacion({
@@ -62,7 +68,6 @@ export function ChatConversacion({
 }: {
   con: Coincidencia;
   onCerrar: () => void;
-  /** Cuando se bloquea o denuncia, la conversación desaparece de la lista. */
   onSalirDeLaLista: () => void;
 }) {
   const [yo, setYo] = useState<string | null>(null);
@@ -71,10 +76,12 @@ export function ChatConversacion({
   const [enviando, setEnviando] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
   const [denunciando, setDenunciando] = useState(false);
   const [motivoDenuncia, setMotivoDenuncia] = useState<string | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
+  const cajaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -107,10 +114,17 @@ export function ChatConversacion({
     };
   }, [con.user_id]);
 
-  // Al fondo con cada mensaje nuevo, que es donde está la conversación.
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: mensajes.length > 1 ? "smooth" : "auto" });
   }, [mensajes.length]);
+
+  // La caja crece con el texto en vez de tener una barra propia.
+  useEffect(() => {
+    const caja = cajaRef.current;
+    if (!caja) return;
+    caja.style.height = "auto";
+    caja.style.height = `${Math.min(caja.scrollHeight, 140)}px`;
+  }, [texto]);
 
   const enviar = async () => {
     const limpio = texto.trim();
@@ -126,9 +140,6 @@ export function ChatConversacion({
       }
       playClick();
       setTexto("");
-      // El mensaje propio se pinta cuando vuelve por el canal, igual que
-      // el del otro: así no hay dos caminos distintos que puedan
-      // desincronizarse ni mensajes fantasma si el envío falla a medias.
     } finally {
       setEnviando(false);
     }
@@ -150,103 +161,174 @@ export function ChatConversacion({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 16 }}
-      transition={{ duration: 0.32, ease: SUAVE }}
-      className="panel flex h-[70vh] flex-col overflow-hidden rounded-2xl"
-    >
-      {/* Cabecera */}
-      <div className="flex items-center gap-3 border-b border-panel-border px-4 py-3">
+    <div className="flex h-full flex-col bg-background">
+      {/* ---------- Cabecera ---------- */}
+      <header className="relative flex shrink-0 items-center gap-3 border-b border-panel-border px-4 py-3">
         <button
           type="button"
           onClick={onCerrar}
-          className="pulsable shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs text-muted"
+          aria-label="Volver a las coincidencias"
+          className="pulsable -ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-muted hover:bg-panel-soft hover:text-foreground"
         >
-          Volver
+          ‹
         </button>
+
         <Avatar avatarId={con.avatar_id ?? ""} size="sm" rounded="full" />
+
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{con.alias}</p>
+          <p className="truncate font-heading text-[15px] font-semibold leading-tight">
+            {con.alias}
+          </p>
           <p className="text-[11px] text-muted">{con.edad} años</p>
         </div>
-        {/* A la vista, no en un menú, y con forma de botón: antes eran
-            dos palabras sueltas que no parecían pulsables. */}
+
+        {/* Las herramientas de seguridad viven aquí dentro: a un toque y
+            siempre en el mismo sitio, pero sin gritar. */}
         <button
           type="button"
-          onClick={() => setConfirmandoBloqueo(true)}
-          title="Dejáis de veros y se acaba la conversación"
-          className="pulsable pulsable-riesgo shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-[11px] font-medium text-muted"
+          onClick={() => {
+            setMenuAbierto((v) => !v);
+            playToggle();
+          }}
+          aria-label="Opciones de la conversación"
+          className={`pulsable flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg ${
+            menuAbierto ? "bg-panel-soft text-foreground" : "text-muted hover:bg-panel-soft"
+          }`}
         >
-          Bloquear
+          ⋯
         </button>
-        <button
-          type="button"
-          onClick={() => setDenunciando(true)}
-          title="Avisas al equipo de moderación y además le bloqueas"
-          className="pulsable pulsable-riesgo shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-[11px] font-medium text-muted"
-        >
-          Denunciar
-        </button>
-      </div>
 
-      {/* Qué hacen esos dos botones. Antes no lo decía nadie, y son
-          justo los dos que hay que entender ANTES de necesitarlos. */}
-      <p className="border-b border-panel-border px-4 pb-2.5 text-[11px] leading-snug text-muted">
-        <span className="text-foreground/80">Bloquear</span> corta la conversación y dejáis de
-        veros; no se le avisa. <span className="text-foreground/80">Denunciar</span> se lo pasa al
-        equipo de moderación, que podrá leer lo que os habéis escrito, y le bloquea también.
-      </p>
+        <AnimatePresence>
+          {menuAbierto && (
+            <>
+              {/* Capa para cerrar tocando fuera. */}
+              <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.18, ease: SUAVE }}
+                className="panel absolute right-3 top-full z-20 w-72 origin-top-right rounded-xl p-1.5 shadow-2xl shadow-black/50"
+              >
+                {/* La explicación va AQUÍ, en el momento de usarlo. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAbierto(false);
+                    setConfirmandoBloqueo(true);
+                  }}
+                  className="pulsable w-full rounded-lg px-3 py-2.5 text-left hover:bg-panel-soft"
+                >
+                  <span className="block text-sm font-medium text-foreground">
+                    Bloquear a {con.alias}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted">
+                    Se acaba la conversación y dejáis de veros. No se le avisa.
+                  </span>
+                </button>
 
-      {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAbierto(false);
+                    setDenunciando(true);
+                  }}
+                  className="pulsable w-full rounded-lg px-3 py-2.5 text-left hover:bg-panel-soft"
+                >
+                  <span className="block text-sm font-medium text-rumor">Denunciar</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted">
+                    Lo revisa el equipo de moderación, que podrá leer esta conversación. También
+                    le bloquea.
+                  </span>
+                </button>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </header>
+
+      {/* ---------- Mensajes ---------- */}
+      <div className="flex-1 overflow-y-auto">
         {cargando ? (
-          <p className="text-center text-xs text-muted">Cargando…</p>
+          <div className="flex h-full items-center justify-center">
+            <p className="text-xs text-muted">Cargando conversación…</p>
+          </div>
         ) : mensajes.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-            <Avatar avatarId={con.avatar_id ?? ""} size="lg" rounded="full" />
-            <p className="mt-4 font-heading text-base font-semibold">
-              Habéis coincidido con {con.alias}
-            </p>
-            <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted">
-              Los dos os habéis marcado, así que aquí no hay que romper ningún hielo raro: os
-              gustan cosas parecidas. Pregunta por algo que compartáis.
+          <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+            <Avatar avatarId={con.avatar_id ?? ""} size="xl" rounded="full" />
+            <h2 className="mt-5 font-heading text-xl font-bold">{con.alias}</h2>
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">
+              Este es el principio. Os habéis marcado los dos, así que no hace falta romper ningún
+              hielo raro: preguntad por algo que compartáis.
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="px-2 py-4">
             {mensajes.map((m, i) => {
-              const mio = m.autor_id === yo;
               const anterior = mensajes[i - 1];
-              const cambioDeDia = !anterior || !mismoDia(anterior.creado_en, m.creado_en);
+              const mio = m.autor_id === yo;
+              const cambioDeDia =
+                !anterior ||
+                new Date(anterior.creado_en).toDateString() !==
+                  new Date(m.creado_en).toDateString();
+              const agrupado =
+                !cambioDeDia &&
+                anterior?.autor_id === m.autor_id &&
+                new Date(m.creado_en).getTime() - new Date(anterior.creado_en).getTime() <
+                  MARGEN_AGRUPAR_MS;
+
               return (
                 <div key={m.id}>
                   {cambioDeDia && (
-                    <p className="my-3 text-center text-[10px] uppercase tracking-wide text-muted">
-                      {etiquetaDia(m.creado_en)}
-                    </p>
+                    <div className="my-4 flex items-center gap-3 px-2">
+                      <span className="h-px flex-1 bg-panel-border" />
+                      <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
+                        {etiquetaDia(m.creado_en)}
+                      </span>
+                      <span className="h-px flex-1 bg-panel-border" />
+                    </div>
                   )}
+
                   <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, ease: SUAVE }}
-                    className={`flex ${mio ? "justify-end" : "justify-start"}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.22, ease: SUAVE }}
+                    className={`group flex gap-3 rounded-lg px-2 transition-colors duration-150 hover:bg-panel-soft/40 ${
+                      agrupado ? "py-0.5" : "mt-3 py-1"
+                    }`}
                   >
-                    <div
-                      className={`max-w-[78%] rounded-2xl px-3.5 py-2 ${
-                        mio ? "accent-gradient text-white" : "bg-panel-soft text-foreground"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap break-words text-sm leading-snug">
+                    {/* El avatar solo encabeza el grupo; en los mensajes
+                        siguientes su hueco lo ocupa la hora, que aparece
+                        al pasar por encima. */}
+                    <div className="w-9 shrink-0 pt-0.5">
+                      {agrupado ? (
+                        <span className="hidden pt-1 text-right text-[10px] leading-5 text-muted group-hover:block">
+                          {hora(m.creado_en)}
+                        </span>
+                      ) : (
+                        <Avatar
+                          avatarId={(mio ? undefined : con.avatar_id) ?? ""}
+                          size="sm"
+                          rounded="full"
+                        />
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      {!agrupado && (
+                        <p className="flex items-baseline gap-2">
+                          <span
+                            className={`font-heading text-sm font-semibold ${
+                              mio ? "ice-text" : "text-foreground"
+                            }`}
+                          >
+                            {mio ? "Tú" : con.alias}
+                          </span>
+                          <span className="text-[10px] text-muted">{hora(m.creado_en)}</span>
+                        </p>
+                      )}
+                      <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
                         {m.texto}
-                      </p>
-                      <p
-                        className={`mt-0.5 text-right text-[10px] ${
-                          mio ? "text-white/60" : "text-muted"
-                        }`}
-                      >
-                        {hora(m.creado_en)}
                       </p>
                     </div>
                   </motion.div>
@@ -258,27 +340,27 @@ export function ChatConversacion({
         <div ref={finRef} />
       </div>
 
-      {/* Escribir */}
-      <div className="border-t border-panel-border px-4 py-3">
+      {/* ---------- Escribir ---------- */}
+      <div className="shrink-0 px-3 pb-4 pt-1">
         <AnimatePresence>
           {fallo && (
             <motion.p
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="mb-2 text-xs text-rumor"
+              className="mb-2 px-1 text-xs text-rumor"
             >
               {fallo}
             </motion.p>
           )}
         </AnimatePresence>
 
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 rounded-2xl border border-panel-border bg-panel-soft/60 px-3 py-2 transition-colors duration-200 focus-within:border-ice/40">
           <textarea
+            ref={cajaRef}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => {
-              // Enter envía; Mayúsculas+Enter hace un salto de línea.
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void enviar();
@@ -286,24 +368,28 @@ export function ChatConversacion({
             }}
             rows={1}
             maxLength={2000}
-            placeholder="Escribe un mensaje…"
-            className="panel-elevated max-h-28 min-h-[42px] flex-1 resize-none rounded-2xl px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
+            placeholder={`Escribe a ${con.alias}`}
+            className="max-h-36 flex-1 resize-none bg-transparent py-1 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted"
           />
           <button
             type="button"
             onClick={enviar}
             disabled={enviando || !texto.trim()}
-            className="accent-gradient pulsable shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-30"
+            aria-label="Enviar mensaje"
+            className="accent-gradient pulsable mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-25"
           >
-            {enviando ? "Enviando…" : "Enviar"}
+            ↑
           </button>
         </div>
+        <p className="mt-1.5 px-1 text-[10px] text-muted">
+          Enter envía · Mayús + Enter salta de línea
+        </p>
       </div>
 
       <ConfirmDialog
         open={confirmandoBloqueo}
-        title={`Bloquear a ${con.alias}`}
-        message="Se acaba la conversación y dejaréis de veros. No se le avisa de nada. Los mensajes que ya os habéis escrito se conservan por si hace falta revisarlos."
+        title={`¿Bloquear a ${con.alias}?`}
+        message="Se acaba la conversación y dejaréis de veros en Conectar. No se le avisa de nada. Lo que ya os habéis escrito se conserva por si hiciera falta revisarlo."
         confirmLabel="Bloquear"
         onConfirm={confirmarBloqueo}
         onCancel={() => setConfirmandoBloqueo(false)}
@@ -316,23 +402,27 @@ export function ChatConversacion({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4"
             onClick={() => setDenunciando(false)}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.97 }}
+              exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.22, ease: SUAVE }}
               onClick={(e) => e.stopPropagation()}
               className="panel w-full max-w-sm rounded-2xl p-6"
             >
               <h3 className="font-heading text-lg font-semibold">Denunciar a {con.alias}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                Lo revisa una persona del equipo, que podrá leer esta conversación. Al denunciar
-                también dejaréis de veros.
+                Lo revisa una persona del equipo de moderación, que podrá leer esta conversación.
+                Al denunciar también dejaréis de veros.
               </p>
-              <div className="mt-4 flex flex-col gap-1.5">
+
+              <p className="mt-5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Qué ha pasado
+              </p>
+              <div className="mt-2 flex flex-col gap-1.5">
                 {MOTIVOS_DENUNCIA.map((m) => (
                   <button
                     key={m}
@@ -356,6 +446,7 @@ export function ChatConversacion({
                   </button>
                 ))}
               </div>
+
               <div className="mt-5 flex gap-3">
                 <button
                   type="button"
@@ -374,13 +465,13 @@ export function ChatConversacion({
                     background: "color-mix(in srgb, var(--rumor) 10%, transparent)",
                   }}
                 >
-                  Denunciar
+                  Enviar denuncia
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
