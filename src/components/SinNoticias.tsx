@@ -28,17 +28,48 @@ interface Caso {
   sugerencia: string;
 }
 
+/**
+ * De todas las entregas de la franquicia, cuál manda para decidir el
+ * mensaje.
+ *
+ * ---------------------------------------------------------------------
+ * EL FALLO QUE ARREGLA ESTO (v179)
+ *
+ * Antes se miraba solo la PRIMERA ficha, que casi siempre es la serie
+ * original. Buscando Mushoku Tensei, esa es la de 2021, que figura como
+ * terminada — y la app soltaba que "después de cinco años lo normal es
+ * que ya no se publique nada nuevo". Falso: la serie tiene temporada
+ * nueva en producción ahora mismo, y esa información estaba en la propia
+ * lista de resultados, dos entradas más abajo.
+ *
+ * Decir algo falso con seguridad es peor que no decir nada. Así que
+ * ahora manda lo que esté vivo: si alguna entrega se está emitiendo o
+ * está por estrenar, esa es la que habla. Solo cuando TODA la franquicia
+ * está terminada se da por cerrada.
+ * ---------------------------------------------------------------------
+ */
+function fichaQueManda(fichas: AnimeSearchResult[]): AnimeSearchResult | undefined {
+  if (fichas.length === 0) return undefined;
+  return (
+    fichas.find((f) => f.status === "RELEASING") ??
+    fichas.find((f) => f.status === "NOT_YET_RELEASED") ??
+    // Si están todas acabadas, manda la más reciente.
+    [...fichas].sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0))[0]
+  );
+}
+
 function analizar(termino: string, ficha: AnimeSearchResult | undefined): Caso {
   if (ficha?.status === "FINISHED" && ficha.endYear) {
-    const anios = new Date().getFullYear() - ficha.endYear;
     return {
-      titulo: "Está todo contado",
-      explicacion:
-        anios >= 2
-          ? `${ficha.title} terminó en ${ficha.endYear}. Después de ${anios} años, lo normal es que ya no se publique nada nuevo.`
-          : `${ficha.title} terminó en ${ficha.endYear}, así que las noticias han ido apagándose.`,
+      titulo: "Sin noticias recientes",
+      /*
+       * Se dice lo que se sabe —cuándo terminó— y NADA sobre el futuro.
+       * Que una serie haya acabado no significa que no vaya a anunciarse
+       * nada: pasa continuamente con secuelas, películas y refritos.
+       */
+      explicacion: `${ficha.title} terminó en ${ficha.endYear} y los medios que seguimos no han publicado nada suyo estos días.`,
       sugerencia:
-        "Si algún día anuncian una continuación, será lo primero que aparezca en tu feed.",
+        "Si anuncian una continuación será lo primero que te aparezca. Y si quieres saber si hay algo en marcha ahora mismo, pregúntaselo a Iris: sale a buscarlo.",
     };
   }
 
@@ -67,12 +98,18 @@ function analizar(termino: string, ficha: AnimeSearchResult | undefined): Caso {
 
 export function SinNoticias({
   termino,
+  fichas = [],
   ficha,
 }: {
   termino: string;
+  /** Todas las entregas encontradas de la franquicia. */
+  fichas?: AnimeSearchResult[];
   ficha: AnimeSearchResult | undefined;
 }) {
-  const caso = analizar(termino, ficha);
+  // La que manda para el mensaje puede no ser la primera de la lista.
+  const mandante = fichaQueManda(fichas.length > 0 ? fichas : ficha ? [ficha] : []);
+  const caso = analizar(termino, mandante);
+  // Para seguir sí vale la principal: es la obra que se ha buscado.
   const tituloReal = ficha?.title ?? termino;
 
   /*
@@ -173,19 +210,79 @@ export function SinNoticias({
             {/* Se puede dejar de seguir: antes el botón se quedaba
                 deshabilitado para siempre y no había vuelta atrás desde
                 aquí. */}
-            <button
+            {/*
+              Antes era una pastilla de texto sin más. Ahora lleva icono
+              y el texto va en dos alturas: arriba la acción y abajo lo
+              que consigue, que es lo que de verdad decide si se pulsa.
+              El título largo deja de ir dentro del botón — cabía mal y
+              lo desbordaba en cuanto la serie tenía nombre oficial.
+            */}
+            <motion.button
               type="button"
               onClick={alternarSeguir}
-              className={`pulsable rounded-full px-4 py-2 text-sm font-semibold ${
-                seguida ? "border border-ice/30 bg-ice/10 text-ice" : "accent-gradient text-white"
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className={`pulsable group mx-auto flex items-center gap-3 rounded-full py-2.5 pl-3 pr-5 text-left ${
+                seguida
+                  ? "border border-ice/40 bg-ice/10"
+                  : "accent-gradient text-white shadow-lg shadow-black/30"
               }`}
             >
-              {seguida ? `Siguiendo ${tituloReal}` : `Seguir ${tituloReal}`}
-            </button>
-            <p className="mx-auto mt-2 max-w-sm text-[11px] leading-snug text-muted">
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                  seguida ? "bg-ice/15" : "bg-white/15"
+                }`}
+              >
+                <motion.svg
+                  key={seguida ? "si" : "no"}
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                  width="15"
+                  height="15"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                >
+                  {seguida ? (
+                    <path
+                      d="M3.5 8.5L6.5 11.5L12.5 5"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ) : (
+                    <path
+                      d="M8 3.5V12.5M3.5 8H12.5"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  )}
+                </motion.svg>
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={`block text-sm font-semibold leading-tight ${
+                    seguida ? "text-ice" : "text-white"
+                  }`}
+                >
+                  {seguida ? "La estás siguiendo" : "Seguir esta serie"}
+                </span>
+                <span
+                  className={`block text-[11px] leading-tight ${
+                    seguida ? "text-ice/70" : "text-white/70"
+                  }`}
+                >
+                  {seguida ? "Toca para dejar de seguirla" : "Sus noticias, las primeras"}
+                </span>
+              </span>
+            </motion.button>
+            <p className="mx-auto mt-2.5 max-w-sm text-[11px] leading-snug text-muted">
               {seguida
-                ? "Sus noticias te saldrán las primeras en cuanto salga alguna, y te avisamos si tienes los avisos activados."
-                : "Sus noticias te saldrán las primeras en cuanto salga alguna."}
+                ? `Sigues «${tituloReal}». Te avisamos en cuanto salga algo, si tienes los avisos activados.`
+                : `Se guardará «${tituloReal}» en tus favoritos.`}
             </p>
           </div>
         )}

@@ -64,8 +64,48 @@ function subtitulo(a: AnimeSearchResult): string {
     .join(" · ");
 }
 
-export function FichaDeContenido({ resultados }: { resultados: AnimeSearchResult[] }) {
+export function FichaDeContenido({
+  resultados,
+  cargando = false,
+}: {
+  resultados: AnimeSearchResult[];
+  /** Mientras se pregunta a las bases de datos. */
+  cargando?: boolean;
+}) {
   const [verTodas, setVerTodas] = useState(false);
+
+  /*
+   * El HUECO SE RESERVA DESDE EL PRIMER MOMENTO.
+   *
+   * Las noticias del feed están ya en el navegador y se pintan al
+   * instante; la ficha viene de tres bases de datos externas y tarda un
+   * segundo largo. Como esta ficha va ARRIBA, al llegar empujaba hacia
+   * abajo todo lo que ya estabas leyendo. Ese salto es de las cosas que
+   * peor sientan de una interfaz, y no se arregla haciéndolo más rápido:
+   * se arregla no moviendo nada.
+   *
+   * Así que mientras se busca se dibuja una silueta del mismo tamaño que
+   * la ficha real. Cuando llega, ocupa ese hueco y no se mueve nada de
+   * su sitio.
+   */
+  if (cargando && resultados.length === 0) {
+    return (
+      <div className="mb-8" aria-hidden>
+        <div className="panel flex gap-4 rounded-2xl p-5">
+          <div className="h-36 w-24 flex-shrink-0 animate-pulse rounded-xl bg-panel-soft" />
+          <div className="min-w-0 flex-1 space-y-2.5 py-1">
+            <div className="h-5 w-2/3 animate-pulse rounded bg-panel-soft" />
+            <div className="h-3 w-24 animate-pulse rounded bg-panel-soft" />
+            <div className="h-3 w-full animate-pulse rounded bg-panel-soft/70" />
+            <div className="h-3 w-full animate-pulse rounded bg-panel-soft/70" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-panel-soft/70" />
+          </div>
+        </div>
+        <div className="mt-2 h-[42px] animate-pulse rounded-xl border border-panel-border" />
+      </div>
+    );
+  }
+
   if (resultados.length === 0) return null;
 
   const principal = resultados[0];
@@ -116,22 +156,56 @@ export function FichaDeContenido({ resultados }: { resultados: AnimeSearchResult
               Hay {otras.length} {otras.length === 1 ? "entrega más" : "entregas más"} de esta
               franquicia
             </span>
-            <motion.span
+            {/*
+              Antes era el carácter "⌄", y por eso te bailaba: los signos
+              de una tipografía se dibujan dentro de su propia caja, con
+              su hueco arriba y abajo, así que centrarlo a ojo nunca
+              cuadra del todo — y encima cada tipografía lo coloca a su
+              manera. Un dibujo vectorial no tiene ese hueco: ocupa
+              exactamente lo que ocupa y se centra solo.
+            */}
+            <motion.svg
               animate={{ rotate: verTodas ? 180 : 0 }}
-              transition={{ duration: 0.3, ease: SUAVE }}
-              className="text-muted"
+              transition={{ duration: 0.32, ease: SUAVE }}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+              className="shrink-0 text-muted"
             >
-              ⌄
-            </motion.span>
+              <path
+                d="M4 6.5L8 10.5L12 6.5"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </motion.svg>
           </button>
 
           <AnimatePresence initial={false}>
             {verTodas && (
+              /*
+                La CLAVE es lo que faltaba para que el cierre se animara.
+                AnimatePresence necesita una clave en su hijo directo para
+                seguirle la pista mientras se va; sin ella lo daba por
+                desmontado al instante y el bloque desaparecía de golpe.
+                Por eso abrir se veía bien y cerrar no.
+
+                Y la opacidad se apaga más deprisa que la altura, para que
+                el texto no se quede visible aplastándose contra el borde
+                mientras el hueco se cierra.
+              */
               <motion.div
+                key="otras-entregas"
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.32, ease: SUAVE }}
+                transition={{
+                  height: { duration: 0.34, ease: SUAVE },
+                  opacity: { duration: verTodas ? 0.26 : 0.15, ease: "easeOut" },
+                }}
                 className="overflow-hidden"
               >
                 <div className="mt-2 flex flex-col gap-1">

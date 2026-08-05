@@ -814,24 +814,14 @@ export function NewsFeed() {
               </button>
             </div>
 
-            {searchingAnime && (
-              <motion.p
-                animate={{ opacity: [0.45, 1, 0.45] }}
-                transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-                className="mb-4 text-xs text-muted"
-              >
-                Buscando la ficha de la serie…
-              </motion.p>
-            )}
-
-            <FichaDeContenido resultados={animeResults} />
+            <FichaDeContenido resultados={animeResults} cargando={searchingAnime} />
 
             <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
               Noticias recientes
             </p>
             {searchResults.length === 0 ? (
               <>
-                <SinNoticias termino={searchTerm} ficha={animeResults[0]} />
+                <SinNoticias termino={searchTerm} ficha={animeResults[0]} fichas={animeResults} />
 
                 {/* Se va a buscar fuera SOLO aquí: cuando el feed no ha
                     encontrado nada. Mientras haya noticias propias no se

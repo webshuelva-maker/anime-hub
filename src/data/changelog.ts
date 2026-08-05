@@ -23,6 +23,25 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v179",
+    fecha: "2026-08-05",
+    titulo: "La búsqueda deja de dar saltos",
+    puntos: [
+      "La ficha de la serie ya no empuja las noticias hacia abajo al aparecer: su hueco está reservado desde el principio.",
+      "Se acabó el «ya no se publicará nada nuevo» en series que sí tienen temporada en marcha.",
+      "El botón de seguir una serie, rehecho.",
+    ],
+  },
+  {
+    version: "v178",
+    fecha: "2026-08-05",
+    titulo: "Detalles de la búsqueda",
+    puntos: [
+      "El desplegable de entregas se cierra con animación, y su flecha está donde tiene que estar.",
+      "La ficha de la serie aparece antes al buscar desde una noticia.",
+    ],
+  },
+  {
     version: "v177",
     fecha: "2026-08-05",
     titulo: "La ficha vuelve al pulsar una noticia",

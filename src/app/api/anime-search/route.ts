@@ -47,14 +47,36 @@ async function buscarEn(term: string): Promise<{ resultados: Resultado[]; debug:
       searchKitsu(consulta).catch(() => []),
     ]);
 
-  let [anilist, mal, kitsu] = await preguntar(term);
+  /*
+   * Qué se pregunta primero, y por qué importa para el tiempo de espera.
+   *
+   * Si lo escrito ya PARECE un título (corto y sin palabras de noticia),
+   * se pregunta por ello directamente. Pero si es un titular entero
+   * —cuando se llega aquí pulsando una noticia—, se va DE PRIMERAS con la
+   * versión recortada: preguntar por la frase completa ya se sabe que va
+   * a devolver cero, y hacerlo igualmente significaba esperar dos rondas
+   * a tres bases de datos antes de enseñar nada. Justo el caso donde se
+   * notaba la tardanza.
+   *
+   * Se sigue guardando el otro intento como respaldo, por si el recorte
+   * se pasa de tijera.
+   */
+  const pareceTitular =
+    corta.length >= 3 &&
+    corta.toLowerCase() !== term.trim().toLowerCase() &&
+    (term.length > 40 || term.trim().split(/\s+/).length > 6);
+
+  const primera = pareceTitular ? corta : term;
+  const segunda = pareceTitular ? term : corta;
+
+  let [anilist, mal, kitsu] = await preguntar(primera);
 
   if (
     anilist.results.length + mal.length + kitsu.length === 0 &&
-    corta.length >= 3 &&
-    corta.toLowerCase() !== term.trim().toLowerCase()
+    segunda.length >= 3 &&
+    segunda.toLowerCase() !== primera.toLowerCase()
   ) {
-    [anilist, mal, kitsu] = await preguntar(corta);
+    [anilist, mal, kitsu] = await preguntar(segunda);
   }
 
   /*
