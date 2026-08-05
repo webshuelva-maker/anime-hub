@@ -117,7 +117,16 @@ function IconoEnviar({ className = "" }: { className?: string }) {
 /* ================= Onda ================= */
 
 /** Cuántas barras tiene la onda. Las mismas al grabar y al revisar. */
-const BARRAS = 40;
+/*
+ * Más barras y más finas.
+ *
+ * Con 40 barras a lo ancho de la burbuja, cada una salía gruesa y la
+ * onda parecía un ecualizador de reproductor de música. Las apps de
+ * mensajería usan muchas más y muy delgadas: se lee como una forma de
+ * onda continua, no como bloques sueltos. Es lo que le daba ese aire de
+ * "gamer" en vez de discreto.
+ */
+const BARRAS = 64;
 
 /**
  * Reparte los niveles medidos en el número de barras que se pintan.
@@ -223,7 +232,7 @@ function Onda({
   className?: string;
 }) {
   const barras = (color: string, opacidad: number) => (
-    <div className="absolute inset-0 flex items-center gap-[2px]">
+    <div className="absolute inset-0 flex items-center gap-[1.5px]">
       {niveles.map((n, i) => (
         <span
           key={i}
@@ -232,7 +241,11 @@ function Onda({
             height: "100%",
             background: color,
             opacity: opacidad,
-            transform: `scaleY(${Math.max(0.14, Math.min(1, n))})`,
+            // Suelo un poco más alto (0,22): las barras de las pausas se
+            // ven como una línea fina continua en vez de desaparecer,
+            // que es lo que hace que se lea como una onda y no como
+            // dientes sueltos.
+            transform: `scaleY(${Math.max(0.22, Math.min(1, n))})`,
             transformOrigin: "center",
           }}
         />
@@ -243,19 +256,37 @@ function Onda({
   const recorte = `inset(0 ${Math.max(0, 100 - progreso * 100)}% 0 0)`;
 
   return (
-    <div className={`relative h-6 w-full ${className}`}>
-      {barras("var(--muted)", 0.38)}
+    // Más baja (h-5 en vez de h-6): una onda alta llama la atención por
+    // encima del propio mensaje, y aquí es un detalle, no el asunto.
+    <div className={`relative h-5 w-full ${className}`}>
+      {barras("var(--muted)", 0.3)}
       <div
         className="absolute inset-0"
         style={{
           clipPath: recorte,
           WebkitClipPath: recorte,
-          // Muy corto y lineal: solo suaviza el hueco entre avisos del
-          // reproductor, sin llegar a arrastrarse por detrás del sonido.
-          transition: "clip-path 80ms linear",
+          /*
+           * SIN transición, y esto era el fallo de "solo avanza al
+           * pausar".
+           *
+           * Había una transición de 80 ms sobre el recorte. Se puso
+           * cuando el progreso llegaba cuatro veces por segundo, para
+           * disimular los saltos. Pero ahora se actualiza en CADA
+           * fotograma (cada ~16 ms): el navegador arrancaba una
+           * transición nueva antes de terminar la anterior, una y otra
+           * vez, así que el recorte no llegaba nunca a moverse. Al
+           * pausar dejaban de llegar cambios, la última transición sí
+           * podía completarse y la barra pegaba el salto de golpe —
+           * justo lo que se veía.
+           *
+           * Actualizando cada fotograma la transición sobra: el
+           * movimiento ya es continuo por sí solo.
+           */
         }}
       >
-        {barras("var(--ice)", 1)}
+        {/* Lo ya escuchado: platino en vez de azul hielo saturado, que
+            es lo que daba el aire de aplicación de videojuegos. */}
+        {barras("var(--platinum)", 0.92)}
       </div>
     </div>
   );
@@ -532,16 +563,20 @@ export function GrabadorDeVoz({
           a la derecha era lo que le daba el aire de ecualizador. El
           degradado de opacidad hacia la izquierda basta para dar la
           sensación de cinta que avanza. */}
-      <span className="flex h-6 flex-1 items-center gap-[2px] overflow-hidden">
+      {/* Mismas medidas que la onda de reproducción (h-5, barras finas y
+          platino) para que grabar y escuchar se vean como lo mismo: dos
+          estilos distintos en la misma burbuja es lo que hacía que
+          cantara. */}
+      <span className="flex h-5 flex-1 items-center gap-[1.5px] overflow-hidden">
         {ondaEnVivo.map((n, i) => (
           <span
             key={i}
             className="min-w-0 flex-1 rounded-full"
             style={{
               height: "100%",
-              background: "var(--ice)",
-              opacity: 0.22 + (i / ondaEnVivo.length) * 0.78,
-              transform: `scaleY(${Math.max(0.14, Math.min(1, n))})`,
+              background: "var(--platinum)",
+              opacity: 0.28 + (i / ondaEnVivo.length) * 0.62,
+              transform: `scaleY(${Math.max(0.22, Math.min(1, n))})`,
               transformOrigin: "center",
               transition: "transform 110ms linear",
               willChange: "transform",
