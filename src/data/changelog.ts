@@ -23,6 +23,25 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v181",
+    fecha: "2026-08-05",
+    titulo: "El archivo de noticias, ahora sí",
+    puntos: [
+      "Las noticias antiguas de una serie ya no desaparecen por un tropiezo pasajero.",
+      "Y si de verdad no se puede consultar, te lo dice y puedes reintentarlo.",
+    ],
+  },
+  {
+    version: "v180",
+    fecha: "2026-08-05",
+    titulo: "Tú decides cuánta animación quieres",
+    intro: "En Ajustes hay una opción nueva.",
+    puntos: [
+      "Si tienes «Reducir movimiento» activado en tu sistema, la app te lo respetaba y te enseñaba una versión casi sin animaciones. Ahora puedes pedirle que las ponga todas igualmente.",
+      "Y al revés: puedes dejarlas al mínimo aunque tu sistema no pida nada.",
+    ],
+  },
+  {
     version: "v179",
     fecha: "2026-08-05",
     titulo: "La búsqueda deja de dar saltos",

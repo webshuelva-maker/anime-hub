@@ -169,12 +169,31 @@ body {
    * usa a conciencia) conservan una duración real, y más abajo se
    * sustituyen por fundidos sin movimiento.
    */
-  *,
-  *::before,
-  *::after {
+  /*
+   * Condicionado al atributo del <html> (v180): si en los ajustes se ha
+   * elegido "animaciones completas", esta regla no se aplica aunque el
+   * sistema pida reducir movimiento. Es una decisión consciente del
+   * usuario sobre su propia app, y manda sobre el ajuste general.
+   *
+   * Y 0,08 s era demasiado poco: a esa velocidad un cambio de color o un
+   * desplegable no se percibe como una transición, sino como un corte. Se
+   * sube a 0,18 s, que sigue siendo movimiento reducido de verdad pero se
+   * ve como algo que ocurre en vez de como un parpadeo.
+   */
+  html:not([data-animaciones="completas"]) *,
+  html:not([data-animaciones="completas"]) *::before,
+  html:not([data-animaciones="completas"]) *::after {
     animation-iteration-count: 1 !important;
-    transition-duration: 0.08s !important;
+    transition-duration: 0.18s !important;
   }
+}
+
+/* Modo mínimo pedido a mano: sin depender de lo que diga el sistema. */
+html[data-animaciones="minimas"] *,
+html[data-animaciones="minimas"] *::before,
+html[data-animaciones="minimas"] *::after {
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.05s !important;
 }
 
 /* El autocompletado de Chrome/Safari pinta los campos con un fondo casi
@@ -360,16 +379,16 @@ html.arrancando [data-chrome-app] {
  * lo que desaparece es el movimiento, que es lo que molesta.
  */
 @media (prefers-reduced-motion: reduce) {
-  .boot-mark {
+  html:not([data-animaciones="completas"]) .boot-mark {
     animation: boot-solo-fundido 0.7s ease-out both !important;
     transform: none !important;
   }
-  .boot-in {
+  html:not([data-animaciones="completas"]) .boot-in {
     animation: boot-solo-fundido 0.7s ease-out 0.25s both !important;
     letter-spacing: 0.15em !important;
     text-indent: 0.15em !important;
   }
-  .boot-in-delay-1 {
+  html:not([data-animaciones="completas"]) .boot-in-delay-1 {
     animation: boot-solo-fundido 0.7s ease-out 1.15s both !important;
   }
   .boot-in-delay-2,

@@ -51,6 +51,8 @@ export function NewsFeed() {
   const [searchTerm, setSearchTerm] = useState("");
   const [animeResults, setAnimeResults] = useState<AnimeSearchResult[]>([]);
   const [searchingAnime, setSearchingAnime] = useState(false);
+  // Identificador de MyAnimeList del mejor resultado, para el archivo.
+  const [malId, setMalId] = useState<number | null>(null);
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const pendingItemsRef = useRef<NewsItem[]>([]);
@@ -720,13 +722,20 @@ export function NewsFeed() {
                 setSearchingAnime(true);
                 fetch(`/api/anime-search?q=${encodeURIComponent(term)}`)
                   .then((res) => res.json())
-                  .then((data: { results?: AnimeSearchResult[] }) => setAnimeResults(data.results ?? []))
-                  .catch(() => setAnimeResults([]))
+                  .then((data: { results?: AnimeSearchResult[]; malId?: number | null }) => {
+                    setAnimeResults(data.results ?? []);
+                    setMalId(data.malId ?? null);
+                  })
+                  .catch(() => {
+                    setAnimeResults([]);
+                    setMalId(null);
+                  })
                   .finally(() => setSearchingAnime(false));
               }}
               onClear={() => {
                 setSearchTerm("");
                 setAnimeResults([]);
+                setMalId(null);
               }}
             />
           </div>
@@ -826,7 +835,7 @@ export function NewsFeed() {
                 {/* Se va a buscar fuera SOLO aquí: cuando el feed no ha
                     encontrado nada. Mientras haya noticias propias no se
                     gasta ni una petición. */}
-                <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} />
+                <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} malId={malId} />
                 {casiResultados.length > 0 && (
                   <div className="mt-8">
                     <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">

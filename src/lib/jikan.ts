@@ -43,7 +43,23 @@ export interface JikanNewsItem {
   excerpt: string;
 }
 
-async function getJson(path: string, timeoutMs = 6000): Promise<unknown | null> {
+/*
+ * Jikan permite 3 peticiones por segundo, y una búsqueda de la app puede
+ * hacer tres seguidas: la de la ficha (dentro de /api/anime-search) y las
+ * dos del archivo de noticias. Justo en el límite, así que de vez en
+ * cuando devuelve un 429 "vas muy rápido" y la respuesta se perdía en
+ * silencio: la app concluía que ese anime no tenía noticias.
+ *
+ * Ahora, ante un 429, se espera y se reintenta una vez. Y se distingue
+ * "no hay nada" de "no se ha podido preguntar", que hasta ahora era el
+ * mismo null y llevaba a guardar el fallo como si fuera una respuesta.
+ */
+interface Respuesta {
+  ok: boolean;
+  datos: unknown | null;
+}
+
+async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -51,13 +67,31 @@ async function getJson(path: string, timeoutMs = 6000): Promise<unknown | null> 
       signal: controller.signal,
       headers: { Accept: "application/json", "User-Agent": "AnimeHub/1.0" },
     });
-    if (!res.ok) return null;
-    return await res.json();
+    if (res.status === 429) return { ok: false, datos: null };
+    if (!res.ok) {
+      // Un 404 SÍ es una respuesta válida: significa que no hay nada.
+      return { ok: res.status === 404, datos: null };
+    }
+    return { ok: true, datos: await res.json() };
   } catch {
-    return null;
+    return { ok: false, datos: null };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function getJsonJikan(path: string, timeoutMs = 6000): Promise<Respuesta> {
+  const primera = await pedir(path, timeoutMs);
+  if (primera.ok || primera.datos !== null) return primera;
+
+  // Un solo reintento, y esperando de verdad: reintentar al instante
+  // vuelve a chocar con el mismo límite.
+  await new Promise((r) => setTimeout(r, 1200));
+  return pedir(path, timeoutMs);
+}
+
+async function getJson(path: string, timeoutMs = 6000): Promise<unknown | null> {
+  return (await getJsonJikan(path, timeoutMs)).datos;
 }
 
 interface RawJikanAnime {
@@ -169,11 +203,27 @@ interface RawJikanNews {
   excerpt?: string;
 }
 
+/**
+ * Noticias que MyAnimeList tiene publicadas sobre ese anime concreto.
+ * Devuelve también si la consulta llegó a hacerse, para poder distinguir
+ * "esta serie no tiene noticias" de "no he podido preguntar".
+ */
+export async function getJikanNewsConEstado(
+  malId: number,
+  limit = 5
+): Promise<{ ok: boolean; noticias: JikanNewsItem[] }> {
+  const res = await getJsonJikan(`/anime/${malId}/news`);
+  const data = res.datos as { data?: RawJikanNews[] } | null;
+  return { ok: res.ok, noticias: mapearNoticias(data?.data ?? [], limit) };
+}
+
 /** Noticias que MyAnimeList tiene publicadas sobre ese anime concreto. */
 export async function getJikanNews(malId: number, limit = 5): Promise<JikanNewsItem[]> {
   const data = (await getJson(`/anime/${malId}/news`)) as { data?: RawJikanNews[] } | null;
-  const items = data?.data ?? [];
+  return mapearNoticias(data?.data ?? [], limit);
+}
 
+function mapearNoticias(items: RawJikanNews[], limit: number): JikanNewsItem[] {
   return items
     .filter((n) => n.title && n.url)
     .slice(0, limit)

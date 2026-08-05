@@ -33,9 +33,18 @@ function fecha(iso: string | null): string {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export function NoticiasDeArchivo({ titulo }: { titulo: string }) {
+export function NoticiasDeArchivo({
+  titulo,
+  malId = null,
+}: {
+  titulo: string;
+  /** Si ya se conoce, evita que el servidor tenga que buscar la serie. */
+  malId?: number | null;
+}) {
   const [noticias, setNoticias] = useState<NoticiaMal[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [fallo, setFallo] = useState(false);
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     let vivo = true;
@@ -44,11 +53,21 @@ export function NoticiasDeArchivo({ titulo }: { titulo: string }) {
     const id = setTimeout(async () => {
       setCargando(true);
       try {
-        const res = await fetch(`/api/anime-noticias?titulo=${encodeURIComponent(titulo)}`);
-        const json = (await res.json()) as { noticias?: NoticiaMal[] };
-        if (vivo) setNoticias(json.noticias ?? []);
+        const res = await fetch(
+          `/api/anime-noticias?titulo=${encodeURIComponent(titulo)}${
+            malId ? `&malId=${malId}` : ""
+          }`
+        );
+        const json = (await res.json()) as { noticias?: NoticiaMal[]; fallo?: boolean };
+        if (vivo) {
+          setNoticias(json.noticias ?? []);
+          setFallo(Boolean(json.fallo));
+        }
       } catch {
-        if (vivo) setNoticias([]);
+        if (vivo) {
+          setNoticias([]);
+          setFallo(true);
+        }
       } finally {
         if (vivo) setCargando(false);
       }
@@ -57,7 +76,7 @@ export function NoticiasDeArchivo({ titulo }: { titulo: string }) {
       vivo = false;
       clearTimeout(id);
     };
-  }, [titulo]);
+  }, [titulo, malId, intento]);
 
   if (cargando) {
     return (
@@ -71,7 +90,25 @@ export function NoticiasDeArchivo({ titulo }: { titulo: string }) {
     );
   }
 
-  if (noticias.length === 0) return null;
+  if (noticias.length === 0) {
+    // Solo se dice algo cuando la consulta ha FALLADO. Si simplemente no
+    // hay noticias, callarse es mejor que anunciar un vacío.
+    if (!fallo) return null;
+    return (
+      <div className="mt-8 flex items-center gap-3 rounded-xl border border-panel-border px-4 py-3">
+        <p className="flex-1 text-xs leading-snug text-muted">
+          No se ha podido consultar el archivo de MyAnimeList. Suele ser cosa de un momento.
+        </p>
+        <button
+          type="button"
+          onClick={() => setIntento((n) => n + 1)}
+          className="pulsable shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs text-muted hover:text-foreground"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-8">

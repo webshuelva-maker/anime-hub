@@ -80,4 +80,17 @@ export interface UserPreferences {
   acceptedLegalVersion: string | null; // qué versión aceptó — es lo que sirve de prueba // último cambio del usuario, para sincronizar entre dispositivos // de qué series le viene cada estudio ("no sabes quién es MAPPA, pero has visto esto")
   searchHistory: string[]; // términos buscados, para reforzar el feed sin que el usuario tenga que marcar nada
   soundEnabled: boolean; // sonidos de interfaz (clics, confirmaciones, etc.)
+  /*
+   * Cuántas animaciones se enseñan.
+   *
+   * "sistema" hace caso a la preferencia de accesibilidad del sistema
+   * operativo, y es lo correcto por defecto: quien activa "Reducir
+   * movimiento" suele hacerlo por mareos o migrañas.
+   *
+   * Pero eso deja sin salida a quien lo tiene activado y SÍ quiere ver
+   * las animaciones de esta app en concreto — que es exactamente el caso
+   * del dueño del proyecto, al que la app llevaba versiones enseñándole
+   * su versión sin animar mientras el resto del mundo veía la buena.
+   */
+  animaciones: "sistema" | "completas" | "minimas";
 }

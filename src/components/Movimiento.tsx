@@ -1,36 +1,60 @@
 "use client";
 
 import { MotionConfig } from "framer-motion";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { PREFERENCES_CHANGED_EVENT, getPreferences } from "@/lib/storage";
 
 /**
- * Hace que TODAS las animaciones de framer-motion respeten el "Reducir
- * movimiento" del sistema operativo.
+ * Cuántas animaciones enseña la app.
  *
  * ---------------------------------------------------------------------
- * POR QUÉ ESTO ARREGLA EL TIRÓN EN SU ORDENADOR
+ * POR QUÉ EXISTE ESTE INTERRUPTOR (v180)
  *
- * El CSS de la app ya respetaba esa preferencia desde hace tiempo. Pero
- * framer-motion no mira el CSS: calcula cada fotograma en JavaScript y
- * lo escribe en el elemento. O sea que en un equipo con "Reducir
- * movimiento" activado —como el suyo— seguían ejecutándose TODAS las
- * animaciones, y encima el navegador no podía delegarlas en la tarjeta
- * gráfica igual de bien: cada panel que se abre, cada fila de una lista
- * escalonada y cada tarjeta que entra costaban trabajo del procesador.
+ * Hasta ahora esto era fijo: framer-motion obedecía al "Reducir
+ * movimiento" del sistema y el CSS aplastaba todas las transiciones a
+ * 0,08 s cuando esa preferencia estaba activada.
  *
- * Con reducedMotion="user", framer consulta la preferencia del sistema y,
- * cuando está activada, deja de animar posiciones, tamaños y rotaciones:
- * solo hace fundidos, que son casi gratis. Los elementos siguen
- * apareciendo y desapareciendo con suavidad, pero sin mover nada.
+ * Obedecer está bien —quien activa esa opción suele hacerlo por mareos o
+ * migrañas y merece que se le haga caso—, pero deja sin salida a quien la
+ * tiene puesta y sí quiere ver las animaciones de ESTA app. Y ese era
+ * justo el caso del dueño del proyecto: durante varias versiones estuvo
+ * pidiendo arreglos de animaciones que en su pantalla no se iban a ver
+ * nunca, mientras al resto del mundo se le enseñaban enteras.
  *
- * No es solo rendimiento: es lo correcto. Quien activa esa opción lo
- * hace por mareos, migrañas o problemas vestibulares, y una app que la
- * ignora le sienta mal de verdad. Estábamos haciendo eso sin querer.
+ * Tres opciones, y la de por defecto sigue siendo hacer caso al sistema:
  *
- * En equipos SIN esa preferencia activada no cambia absolutamente nada:
- * las animaciones siguen exactamente igual que hasta ahora.
+ *   sistema   → lo de siempre, obedecer al sistema operativo.
+ *   completas → todas las animaciones, aunque el sistema pida reducir.
+ *   mínimas   → sin animaciones, aunque el sistema no pida nada.
+ *
+ * El valor se pone también en el <html> como atributo, porque el CSS
+ * necesita saberlo: la regla que acorta las transiciones vive en una
+ * consulta de medios y no se puede desactivar desde JavaScript, así que
+ * se escribe condicionada a este atributo.
  * ---------------------------------------------------------------------
  */
 export function Movimiento({ children }: { children: ReactNode }) {
-  return <MotionConfig reducedMotion="user">{children}</MotionConfig>;
+  const [modo, setModo] = useState<"sistema" | "completas" | "minimas">("sistema");
+
+  useEffect(() => {
+    const leer = () => {
+      const valor = getPreferences().animaciones ?? "sistema";
+      setModo(valor);
+      document.documentElement.setAttribute("data-animaciones", valor);
+    };
+    const id = setTimeout(leer, 0);
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, leer);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, leer);
+    };
+  }, []);
+
+  return (
+    <MotionConfig
+      reducedMotion={modo === "completas" ? "never" : modo === "minimas" ? "always" : "user"}
+    >
+      {children}
+    </MotionConfig>
+  );
 }

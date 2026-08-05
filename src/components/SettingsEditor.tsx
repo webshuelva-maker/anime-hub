@@ -155,6 +155,56 @@ export function SettingsEditor() {
             />
           </button>
         </div>
+
+        {/*
+          Animaciones. Va aquí y no escondido porque para quien tenga
+          "Reducir movimiento" activado en su sistema es la diferencia
+          entre ver la app entera o verla en corto sin saber por qué.
+        */}
+        <div className="mt-6 border-t border-panel-border pt-5">
+          <p className="text-sm font-medium">Animaciones</p>
+          <p className="mt-0.5 text-xs leading-snug text-muted">
+            Por defecto se hace caso a lo que pidas en tu sistema operativo. Si tienes activado
+            «Reducir movimiento» y aun así quieres verlas aquí, ponlo en completas.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(
+              [
+                { valor: "sistema", texto: "Según mi sistema" },
+                { valor: "completas", texto: "Completas" },
+                { valor: "minimas", texto: "Mínimas" },
+              ] as const
+            ).map((opcion) => {
+              const elegida = (prefs.animaciones ?? "sistema") === opcion.valor;
+              return (
+                <button
+                  key={opcion.valor}
+                  type="button"
+                  onClick={() => {
+                    setPrefs((p) => ({ ...p, animaciones: opcion.valor }));
+                    // Se aplica al momento, sin esperar al guardado: si no,
+                    // el cambio no se ve hasta recargar y parece que no ha
+                    // hecho nada.
+                    document.documentElement.setAttribute("data-animaciones", opcion.valor);
+                    playToggle();
+                  }}
+                  className="pulsable rounded-full border px-3.5 py-1.5 text-xs font-medium"
+                  style={
+                    elegida
+                      ? {
+                          borderColor: "var(--ice)",
+                          color: "var(--ice)",
+                          background: "color-mix(in srgb, var(--ice) 12%, transparent)",
+                        }
+                      : { borderColor: "var(--panel-border)", color: "var(--muted)" }
+                  }
+                >
+                  {opcion.texto}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJikanNews, searchJikanAnime, type JikanNewsItem } from "@/lib/jikan";
+import { getJikanNewsConEstado, searchJikanAnime, type JikanNewsItem } from "@/lib/jikan";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -41,6 +41,7 @@ interface Guardado {
 
 const cache = new Map<string, Guardado>();
 const SEIS_HORAS = 6 * 60 * 60 * 1000;
+const MEDIA_HORA = 30 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const titulo = (req.nextUrl.searchParams.get("titulo") ?? "").trim();
@@ -48,6 +49,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ noticias: [] });
   }
 
+  // Si quien llama ya sabe el identificador de MyAnimeList, se ahorra la
+  // consulta de búsqueda: media espera menos y una petición menos contra
+  // su límite.
+  const malIdDado = Number(req.nextUrl.searchParams.get("malId") ?? "");
   const clave = titulo.toLowerCase();
   const guardado = cache.get(clave);
   if (guardado && guardado.hasta > Date.now()) {
@@ -55,21 +60,42 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const ficha = await searchJikanAnime(titulo);
+    const ficha = Number.isFinite(malIdDado) && malIdDado > 0
+      ? { malId: malIdDado, title: titulo, url: null as string | null }
+      : await searchJikanAnime(titulo);
     if (!ficha) {
-      cache.set(clave, { noticias: [], hasta: Date.now() + SEIS_HORAS });
-      return NextResponse.json({ noticias: [] });
+      // No se guarda: puede que la consulta ni siquiera se haya hecho.
+      return NextResponse.json({ noticias: [], fallo: true });
     }
 
-    const noticias = await getJikanNews(ficha.malId, 8);
-    cache.set(clave, { noticias, hasta: Date.now() + SEIS_HORAS });
+    const { ok, noticias } = await getJikanNewsConEstado(ficha.malId, 8);
+
+    /*
+     * Solo se guarda lo que ES una respuesta.
+     *
+     * Antes se guardaba también el vacío que dejaba un fallo, y eso
+     * convertía un tropiezo pasajero en seis horas de "esta serie no
+     * tiene noticias". Que es justo lo que pasaba con Violet Evergarden:
+     * la app hace tres consultas seguidas a MyAnimeList al buscar (la
+     * ficha y las dos del archivo), roza su límite de tres por segundo,
+     * y la que se caía se quedaba archivada como si fuera la verdad.
+     *
+     * Un vacío de verdad se guarda menos tiempo que un resultado: una
+     * serie sin noticias hoy puede tenerlas mañana.
+     */
+    if (ok) {
+      cache.set(clave, {
+        noticias,
+        hasta: Date.now() + (noticias.length > 0 ? SEIS_HORAS : MEDIA_HORA),
+      });
+    }
 
     return NextResponse.json(
-      { noticias, serie: ficha.title, malUrl: ficha.url },
-      { headers: { "Cache-Control": "public, max-age=3600" } }
+      { noticias, serie: ficha.title, malUrl: ficha.url, fallo: !ok },
+      { headers: { "Cache-Control": ok ? "public, max-age=3600" : "no-store" } }
     );
   } catch {
     // Que falle esto no puede romper la búsqueda: es un extra.
-    return NextResponse.json({ noticias: [] });
+    return NextResponse.json({ noticias: [], fallo: true });
   }
 }
