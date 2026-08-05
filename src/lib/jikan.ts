@@ -142,7 +142,22 @@ async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
       // Un 404 SÍ es una respuesta válida: significa que no hay nada.
       return { ok: true, datos: null, motivo: null };
     }
-    if (!res.ok) return { ok: false, datos: null, motivo: `respuesta ${res.status}` };
+    if (!res.ok) {
+      /*
+       * Los 5xx son problema de MyAnimeList, no de la app ni de la red.
+       * Se dice con esas palabras porque "respuesta 504" a secas mandó a
+       * buscar el fallo en el equipo del usuario durante varios
+       * intentos, cuando lo que pasaba estaba al otro lado.
+       */
+      const suyo = res.status >= 500;
+      return {
+        ok: false,
+        datos: null,
+        motivo: suyo
+          ? `MyAnimeList no responde ahora mismo (${res.status})`
+          : `respuesta ${res.status}`,
+      };
+    }
     return { ok: true, datos: await res.json(), motivo: null };
   } catch (e) {
     const nombre = e instanceof Error ? e.name : "";
@@ -161,14 +176,31 @@ async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
 }
 
 export async function getJsonJikan(path: string, timeoutMs = 9000): Promise<Respuesta> {
-  const primera = await pedir(path, timeoutMs);
-  if (primera.ok) return primera;
+  /*
+   * Hasta TRES intentos, esperando cada vez más.
+   *
+   * Jikan arrastra un fallo conocido y abierto: devuelve 504 de forma
+   * INTERMITENTE cuando no consigue hablar con MyAnimeList, y reintentar
+   * unas veces funciona y otras no. Su propia documentación lo dice: un
+   * 5xx significa que el problema está en el lado de MyAnimeList, no en
+   * quien pregunta. Contra eso no hay arreglo posible desde aquí; lo
+   * único sensato es insistir un poco, espaciando, y rendirse con un
+   * mensaje honesto.
+   *
+   * Un intento único era demasiado poco para un fallo que va y viene.
+   * Cinco serían maltratar un servicio gratuito que ya va apurado.
+   */
+  const esperas = [900, 2200];
+  let ultima = await pedir(path, timeoutMs);
+  if (ultima.ok) return ultima;
 
-  // Un solo reintento, y esperando de verdad: reintentar al instante
-  // vuelve a chocar con el mismo límite.
-  await new Promise((r) => setTimeout(r, 1200));
-  const segunda = await pedir(path, timeoutMs);
-  return segunda.ok ? segunda : { ...segunda, motivo: `${segunda.motivo} (2 intentos)` };
+  for (let i = 0; i < esperas.length; i++) {
+    await new Promise((r) => setTimeout(r, esperas[i]));
+    ultima = await pedir(path, timeoutMs);
+    if (ultima.ok) return ultima;
+  }
+
+  return { ...ultima, motivo: `${ultima.motivo} (${esperas.length + 1} intentos)` };
 }
 
 async function getJson(path: string, timeoutMs = 6000): Promise<unknown | null> {
@@ -207,6 +239,8 @@ interface RawJikanAnime {
 export async function searchJikanList(term: string): Promise<
   {
     id: number;
+    /* En MyAnimeList el identificador ES el suyo propio. */
+    malId: number | null;
     title: string;
     coverImage: string | null;
     description: string | null;
@@ -234,6 +268,7 @@ export async function searchJikanList(term: string): Promise<
     .filter((m) => m.mal_id && (m.title || m.title_english))
     .map((m) => ({
       id: m.mal_id as number,
+      malId: m.mal_id as number,
       title: m.title_english || m.title || clean,
       coverImage: m.images?.jpg?.image_url ?? null,
       description: m.synopsis ? m.synopsis.replace(/\s+/g, " ").trim().slice(0, 300) : null,

@@ -1,7 +1,21 @@
 # Informe: el archivo de noticias de MyAnimeList
 
-**Estado: causa de fondo encontrada y corregida en v184.** Queda una
-comprobación de red pendiente por parte del usuario.
+**Estado: RESUELTO en v185, en lo que dependia de la app.**
+
+Hubo DOS problemas encadenados:
+
+1. Un fallo de codigo en la app (el `malId` que nunca se enviaba),
+   corregido en v184. Ver apartado 4.
+2. Un fallo AJENO, en el propio Jikan: devuelve errores 504
+   intermitentes porque no consigue hablar con MyAnimeList. Esta
+   documentado en su repositorio (issue #610, julio de 2026) y su propia
+   documentacion lo confirma: un 5xx significa que el problema esta en el
+   lado de MyAnimeList. Desde aqui no tiene arreglo; v185 lo rodea todo
+   lo posible. Ver apartado 4 bis.
+
+La hipotesis de la red quedo DESCARTADA: recibir un 504 demuestra que el
+equipo si alcanza `api.jikan.moe`, porque para responder con un codigo
+HTTP hay que haber llegado hasta el servidor.
 
 Este documento sustituye al informe anterior. La versión previa contenía
 un razonamiento erróneo que mandó la investigación por el camino
@@ -79,6 +93,42 @@ falsa evidencia se construyó la hipótesis principal (el equipo no alcanza
 
 Lección: antes de acusar a la red, verificar que el dato que se dice
 «vacío» llega a escribirse en algún sitio.
+
+## 4 bis. El segundo problema: Jikan no habla con MyAnimeList
+
+Una vez enviado el `malId`, el mensaje cambio a **`respuesta 504`**. Ese
+dato es concluyente en dos direcciones:
+
+- **Descarta la red.** Un 504 es una respuesta HTTP; para recibirla hay
+  que haber llegado al servidor.
+- **Senala al culpable.** Un 504 es "el servidor de destino tardo
+  demasiado". Jikan hace de intermediario con MyAnimeList, y cuando MAL
+  no le responde, devuelve 504.
+
+Esta reportado y abierto en el repositorio de Jikan (issue #610): errores
+504 intermitentes, donde reintentar unas veces funciona y otras no.
+
+Contra eso no hay arreglo posible desde la app. Lo que v185 hace es
+rodearlo:
+
+- **Se deja de usar el buscador de Jikan.** AniList publica el `idMal` de
+  cada obra, asi que el identificador de MyAnimeList llega sin gastar ni
+  una peticion contra el servicio que falla. De tres llamadas se pasa a
+  UNA.
+- **Tres intentos** con esperas crecientes, porque el fallo es
+  intermitente.
+- **Salida digna**: si aun asi falla, se ofrece un enlace directo al
+  archivo en la web de MyAnimeList (que si funciona) y se dice de quien
+  es el problema, en vez de dejar un error que parece de la app.
+
+### v185: cambios
+
+| Cambio | Archivo | Verificado |
+|---|---|---|
+| `idMal` de AniList: el buscador de Jikan deja de usarse | `lib/anilist.ts`, `api/anime-search/route.ts` | Si |
+| Tres intentos con esperas crecientes (900 ms, 2,2 s) | `lib/jikan.ts` | Si: se recupera de dos 504 seguidos |
+| Los 5xx dicen que el problema es de MyAnimeList | `lib/jikan.ts` | Si |
+| Enlace al archivo en la web de MAL cuando la API falla | `api/anime-noticias/route.ts`, `NoticiasDeArchivo.tsx` | Si |
 
 ## 5. Qué se ha cambiado en v184
 

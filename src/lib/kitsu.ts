@@ -23,6 +23,8 @@ export interface ResultadoBusqueda {
   endYear: number | null;
   genres: string[];
   studios: string[];
+  /* Kitsu no expone el identificador de MyAnimeList en la búsqueda. */
+  malId: number | null;
   type: "ANIME";
 }
 
@@ -75,6 +77,7 @@ export async function searchKitsu(term: string): Promise<ResultadoBusqueda[]> {
           // pedir aparte esa relación; se deja vacío, igual que genres.
           genres: [],
           studios: [],
+          malId: null,
           type: "ANIME" as const,
         };
       });

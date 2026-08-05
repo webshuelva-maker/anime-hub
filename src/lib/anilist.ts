@@ -82,6 +82,15 @@ export async function findCoverImage(searchText: string): Promise<{ coverImageUr
 
 export interface AnimeSearchResult {
   id: number;
+  /*
+   * El identificador de la MISMA obra en MyAnimeList, si AniList lo sabe
+   * (lo sabe casi siempre: las dos bases están cruzadas).
+   *
+   * Vale su peso en oro: con esto, para pedir el archivo de noticias de
+   * MyAnimeList ya no hace falta BUSCAR la serie allí primero. Y esa
+   * búsqueda era justo la llamada que venía fallando con error 504.
+   */
+  malId: number | null;
   title: string;
   coverImage: string | null;
   description: string | null;
@@ -99,6 +108,7 @@ query ($search: String) {
   anime: Page(page: 1, perPage: 8) {
     media(search: $search, type: ANIME) {
       id
+      idMal
       title { romaji english }
       coverImage { large }
       description(asHtml: false)
@@ -156,6 +166,7 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutc
     const media = data?.data?.anime?.media ?? [];
     const results = media.map((m: {
       id: number;
+      idMal?: number | null;
       title: { romaji?: string; english?: string };
       coverImage?: { large?: string };
       description?: string;
@@ -167,6 +178,7 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutc
       studios?: { nodes?: { name: string }[] };
     }) => ({
       id: m.id,
+      malId: m.idMal ?? null,
       title: m.title.english || m.title.romaji || "Sin título",
       coverImage: m.coverImage?.large ?? null,
       description: m.description ? m.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : null,

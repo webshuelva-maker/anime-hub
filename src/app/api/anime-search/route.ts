@@ -139,29 +139,31 @@ async function buscarEn(
    * del archivo para que no tenga que buscar la serie otra vez. Solo que
    * esta ruta no devolvía ese campo NUNCA: `data.malId` era siempre
    * undefined, así que el archivo acababa haciendo su propia búsqueda
-   * SIEMPRE. Dos consecuencias:
+   * SIEMPRE.
    *
-   *  - Cada búsqueda gastaba tres llamadas a MyAnimeList casi a la vez
-   *    en vez de dos, justo en su límite de tres por segundo. O sea que
-   *    el arreglo del límite que se dio por probado nunca llegó a estar
-   *    activo.
-   *  - Y si esa segunda búsqueda fallaba, el archivo entero fallaba,
-   *    aunque la primera —la de aquí— hubiera encontrado la serie
-   *    perfectamente.
+   * Se coge de dos sitios, en este orden:
    *
-   * Se empareja por núcleo de título porque las tres bases nombran la
-   * misma serie de formas distintas; comparando el título entero no
-   * casaría casi nunca.
+   *  1. Del propio resultado, si lo trae. AniList publica el id de
+   *     MyAnimeList de cada obra (las dos bases están cruzadas), y esa
+   *     es la vía buena: llega sin gastar NI UNA petición a MyAnimeList.
+   *     Importa porque Jikan arrastra un fallo conocido y abierto de
+   *     errores 504 intermitentes al hablar con MyAnimeList, y su
+   *     endpoint de búsqueda es de los que más lo sufren. Sacando el id
+   *     de AniList, esa llamada frágil desaparece del camino.
+   *  2. Si no, emparejando por núcleo de título con lo que haya
+   *     devuelto MyAnimeList, porque las tres bases nombran la misma
+   *     serie de formas distintas y el título entero no casaría.
    */
   const mejor = resultados[0];
   const nucleoMejor = mejor ? nucleoDeTitulo(mejor.title) : "";
   const enMal = nucleoMejor ? mal.find((m) => nucleoDeTitulo(m.title) === nucleoMejor) : undefined;
-  const malId = enMal?.id ?? null;
+  const malId = mejor?.malId ?? enMal?.id ?? null;
+  const deDonde = mejor?.malId ? "anilist" : enMal ? "mal" : "no";
 
   return {
     resultados,
     malId,
-    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes | malId: ${malId ?? "no"}`,
+    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes | malId: ${malId ?? "no"} (${deDonde})`,
   };
 }
 

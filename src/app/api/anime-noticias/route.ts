@@ -135,11 +135,25 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    /*
+     * Aunque la consulta falle, se devuelve el enlace al archivo en la
+     * web de MyAnimeList, que se puede construir solo con el id.
+     *
+     * Es lo que convierte un callejón sin salida en un desvío: Jikan
+     * arrastra un fallo conocido de errores 504 intermitentes, y cuando
+     * le da por fallar no hay nada que hacer desde aquí. Pero la página
+     * de MyAnimeList sí funciona, así que al menos se puede ofrecer ir
+     * directamente a ella en vez de dejar al usuario con un error y un
+     * botón de reintentar que a lo mejor tampoco funciona.
+     */
+    const archivoEnMal = `https://myanimelist.net/anime/${ficha.malId}/_/news`;
+
     return NextResponse.json(
       {
         noticias,
         serie: ficha.title,
         malUrl: ficha.url,
+        archivoUrl: archivoEnMal,
         fallo: !ok,
         motivo: ok ? null : `${motivo ?? "desconocido"} · id ${ficha.malId}`,
       },

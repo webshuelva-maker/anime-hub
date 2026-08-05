@@ -45,6 +45,7 @@ export function NoticiasDeArchivo({
   const [cargando, setCargando] = useState(true);
   const [fallo, setFallo] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
+  const [archivoUrl, setArchivoUrl] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -63,11 +64,13 @@ export function NoticiasDeArchivo({
           noticias?: NoticiaMal[];
           fallo?: boolean;
           motivo?: string | null;
+          archivoUrl?: string | null;
         };
         if (vivo) {
           setNoticias(json.noticias ?? []);
           setFallo(Boolean(json.fallo));
           setMotivo(json.motivo ?? null);
+          setArchivoUrl(json.archivoUrl ?? null);
         }
       } catch {
         if (vivo) {
@@ -101,17 +104,41 @@ export function NoticiasDeArchivo({
     // Solo se dice algo cuando la consulta ha FALLADO. Si simplemente no
     // hay noticias, callarse es mejor que anunciar un vacío.
     if (!fallo) return null;
+    /*
+     * Cuando el que falla es MyAnimeList, se dice y se ofrece la salida.
+     *
+     * Su API (Jikan) tiene un fallo conocido de errores intermitentes al
+     * hablar con MyAnimeList; desde aquí no hay nada que arreglar. Pero
+     * la web de MyAnimeList sí funciona, así que en vez de dejar un
+     * error y un botón que quizá tampoco funcione, se ofrece ir directo
+     * al archivo. Y se dice de quién es el problema: si no, parece que
+     * la app esté rota.
+     */
+    const esDeEllos = Boolean(motivo && motivo.includes("MyAnimeList no responde"));
+
     return (
       <div className="mt-8 flex items-center gap-3 rounded-xl border border-panel-border px-4 py-3">
         <div className="flex-1">
           <p className="text-xs leading-snug text-muted">
-            No se ha podido consultar el archivo de MyAnimeList.
+            {esDeEllos
+              ? "MyAnimeList no responde ahora mismo, así que su archivo no se puede consultar. No es cosa tuya: suele volver solo en un rato."
+              : "No se ha podido consultar el archivo de MyAnimeList."}
           </p>
           {/* El motivo técnico, a la vista. Es feo, pero un fallo mudo
               cuesta tres versiones de adivinanzas y este texto lo
               resuelve en una. */}
           {motivo && <p className="mt-0.5 font-mono text-[10px] text-muted/70">{motivo}</p>}
         </div>
+        {archivoUrl && (
+          <a
+            href={archivoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pulsable shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs text-muted hover:text-foreground"
+          >
+            Verlo en MyAnimeList
+          </a>
+        )}
         <button
           type="button"
           onClick={() => setIntento((n) => n + 1)}
