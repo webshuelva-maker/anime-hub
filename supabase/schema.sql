@@ -1229,6 +1229,12 @@ end $$;
 -- Lo que NO se hace: avisar a quien marca de que ha marcado bien. Quien
 -- te marcó no sabe que estás viendo su ficha; solo se entera si le dices
 -- que sí. Eso mantiene el "nadie sabe que le has dicho que no".
+--
+-- El DROP es obligatorio, no una limpieza: Postgres no deja que
+-- "create or replace" cambie lo que devuelve una función, y esta versión
+-- añade la columna te_ha_marcado. Sin el drop delante, el fichero falla
+-- aquí con "cannot change return type of existing function".
+drop function if exists public.descubrir_perfiles(integer);
 create or replace function public.descubrir_perfiles(limite int default 12)
 returns table (
   user_id uuid,
@@ -1415,6 +1421,9 @@ $$;
 
 -- Coincidencias con lo necesario para pintar la lista de chats: último
 -- mensaje, cuándo, y cuántos sin leer.
+--
+-- Mismo motivo que arriba para el DROP: cambia lo que devuelve.
+drop function if exists public.mis_coincidencias();
 create or replace function public.mis_coincidencias()
 returns table (
   user_id uuid,

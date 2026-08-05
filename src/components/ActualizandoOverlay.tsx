@@ -63,9 +63,15 @@ export function ActualizandoOverlay({
       transition={{ duration: 0.35, ease: "easeOut" }}
       className="fixed inset-0 z-[55] flex items-center justify-center px-6"
       style={{
-        background: "color-mix(in srgb, var(--background) 90%, transparent)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        /*
+          Antes esto llevaba backdrop-filter: blur(12px), que obliga al
+          navegador a desenfocar TODA la página que hay detrás en cada
+          fotograma mientras la pantalla está puesta. Es de lo más caro
+          que se puede pedir, y encima el fondo ya está casi tapado: el
+          desenfoque apenas se veía. Un fondo casi opaco da el mismo
+          resultado y no cuesta nada.
+        */
+        background: "color-mix(in srgb, var(--background) 97%, transparent)",
       }}
     >
       <motion.div

@@ -123,7 +123,7 @@ export function MobileNav() {
         style={{ background: "linear-gradient(to top, var(--background), transparent)" }}
       />
       <div
-        className="relative flex items-stretch justify-around backdrop-blur-2xl"
+        className="relative flex items-stretch justify-around backdrop-blur-md"
         style={{
           background:
             "linear-gradient(to bottom, color-mix(in srgb, var(--background) 62%, transparent), color-mix(in srgb, var(--background) 88%, transparent))",

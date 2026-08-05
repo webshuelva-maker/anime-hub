@@ -14,6 +14,7 @@ import { BanGate } from "@/components/BanGate";
 import { AvisoModeracion } from "@/components/AvisoModeracion";
 import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
+import { Movimiento } from "@/components/Movimiento";
 
 export const metadata: Metadata = {
   title: `${siteConfig.name} — ${siteConfig.tagline}`,
@@ -111,13 +112,17 @@ try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <BanGate />
-        <AvisoModeracion />
-        <CloudSyncGate />
-        <AmbientGlow />
-        <SiteChrome />
-        {children}
-        <SiteFooter />
+        {/* Todo dentro: así ninguna animación de la app se salta el
+            "Reducir movimiento" del sistema. */}
+        <Movimiento>
+          <BanGate />
+          <AvisoModeracion />
+          <CloudSyncGate />
+          <AmbientGlow />
+          <SiteChrome />
+          {children}
+          <SiteFooter />
+        </Movimiento>
       </body>
     </html>
   );

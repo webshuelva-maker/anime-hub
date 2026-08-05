@@ -410,48 +410,47 @@ export function DescubrirPerfiles() {
                 salvo que sea mutuo.
               </p>
               <div className="mt-3 flex gap-3">
-                <motion.button
+                <button
                   type="button"
                   onClick={() => responder("paso")}
                   disabled={decidiendo}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ duration: 0.2, ease: SUAVE }}
-                  className="flex-1 rounded-full border border-panel-border py-2.5 text-sm font-medium text-muted transition-colors duration-200 hover:border-ice/30 hover:text-foreground disabled:opacity-40"
+                  className="pulsable flex-1 rounded-full border border-panel-border py-3 text-sm font-medium text-muted hover:border-ice/30 hover:text-foreground disabled:opacity-40"
                 >
                   Paso
-                </motion.button>
-                <motion.button
+                </button>
+                <button
                   type="button"
                   onClick={() => responder("interesa")}
                   disabled={decidiendo}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ duration: 0.2, ease: SUAVE }}
-                  className="accent-gradient flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                  className="accent-gradient pulsable flex-1 rounded-full py-3 text-sm font-semibold text-white disabled:opacity-40"
                 >
-                  Me interesa
-                </motion.button>
+                  {decidiendo ? "Un momento…" : "Me interesa"}
+                </button>
               </div>
 
               {/* A la vista, no escondido en un menú. */}
-              <div className="mt-4 flex items-center justify-center gap-4 text-[11px]">
+              <div className="mt-5 flex items-center justify-center gap-3 text-[11px]">
                 <button
                   type="button"
                   onClick={() => setConfirmandoBloqueo(true)}
-                  className="text-muted transition-colors duration-200 hover:text-foreground"
+                  title="No volveréis a apareceros. No se le avisa."
+                  className="pulsable pulsable-riesgo rounded-full border border-panel-border px-3 py-1.5 font-medium text-muted"
                 >
                   Bloquear
                 </button>
-                <span className="text-muted/40">·</span>
                 <button
                   type="button"
                   onClick={() => setDenunciando(true)}
-                  className="text-muted transition-colors duration-200 hover:text-rumor"
+                  title="Avisas al equipo de moderación y además le bloqueas"
+                  className="pulsable pulsable-riesgo rounded-full border border-panel-border px-3 py-1.5 font-medium text-muted"
                 >
                   Denunciar
                 </button>
               </div>
+              <p className="mt-2 text-center text-[10px] leading-snug text-muted">
+                Bloquear os hace invisibles el uno para el otro. Denunciar avisa al equipo y
+                bloquea también.
+              </p>
               </div>
             </motion.div>
           ) : (
@@ -540,9 +539,7 @@ export function DescubrirPerfiles() {
             transition={{ duration: 0.25 }}
             className="fixed inset-0 z-[58] flex items-center justify-center px-4 py-6"
             style={{
-              background: "color-mix(in srgb, var(--background) 92%, transparent)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
+              background: "color-mix(in srgb, var(--background) 97%, transparent)",
             }}
           >
             <div className="w-full max-w-lg">
@@ -572,9 +569,9 @@ export function DescubrirPerfiles() {
             transition={{ duration: 0.3 }}
             className="fixed inset-0 z-[60] flex items-center justify-center px-6"
             style={{
-              background: "color-mix(in srgb, var(--background) 88%, transparent)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
+              // Sin backdrop-filter: desenfocar la página entera detrás
+              // cuesta más que todo lo que se ve delante.
+              background: "color-mix(in srgb, var(--background) 96%, transparent)",
             }}
             onClick={() => setNuevaCoincidencia(null)}
           >

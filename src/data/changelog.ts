@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v159",
+    fecha: "2026-08-05",
+    titulo: "Va suave",
+    puntos: [
+      "Si tienes activado «Reducir movimiento» en tu sistema, la app ahora lo respeta de verdad y va mucho más ligera.",
+      "Los botones responden al pulsarlos, tengas o no las animaciones activadas.",
+      "Bloquear y denunciar explican qué hacen antes de que los necesites.",
+    ],
+  },
+  {
     version: "v158",
     fecha: "2026-08-05",
     titulo: "Ya podéis hablar",

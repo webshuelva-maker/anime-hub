@@ -162,7 +162,7 @@ export function ChatConversacion({
         <button
           type="button"
           onClick={onCerrar}
-          className="shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs text-muted transition-colors duration-200 hover:text-foreground"
+          className="pulsable shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-xs text-muted"
         >
           Volver
         </button>
@@ -171,22 +171,33 @@ export function ChatConversacion({
           <p className="truncate text-sm font-semibold">{con.alias}</p>
           <p className="text-[11px] text-muted">{con.edad} años</p>
         </div>
-        {/* A la vista, no en un menú. */}
+        {/* A la vista, no en un menú, y con forma de botón: antes eran
+            dos palabras sueltas que no parecían pulsables. */}
         <button
           type="button"
           onClick={() => setConfirmandoBloqueo(true)}
-          className="shrink-0 text-[11px] text-muted transition-colors duration-200 hover:text-foreground"
+          title="Dejáis de veros y se acaba la conversación"
+          className="pulsable pulsable-riesgo shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-[11px] font-medium text-muted"
         >
           Bloquear
         </button>
         <button
           type="button"
           onClick={() => setDenunciando(true)}
-          className="shrink-0 text-[11px] text-muted transition-colors duration-200 hover:text-rumor"
+          title="Avisas al equipo de moderación y además le bloqueas"
+          className="pulsable pulsable-riesgo shrink-0 rounded-full border border-panel-border px-3 py-1.5 text-[11px] font-medium text-muted"
         >
           Denunciar
         </button>
       </div>
+
+      {/* Qué hacen esos dos botones. Antes no lo decía nadie, y son
+          justo los dos que hay que entender ANTES de necesitarlos. */}
+      <p className="border-b border-panel-border px-4 pb-2.5 text-[11px] leading-snug text-muted">
+        <span className="text-foreground/80">Bloquear</span> corta la conversación y dejáis de
+        veros; no se le avisa. <span className="text-foreground/80">Denunciar</span> se lo pasa al
+        equipo de moderación, que podrá leer lo que os habéis escrito, y le bloquea también.
+      </p>
 
       {/* Mensajes */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -278,17 +289,14 @@ export function ChatConversacion({
             placeholder="Escribe un mensaje…"
             className="panel-elevated max-h-28 min-h-[42px] flex-1 resize-none rounded-2xl px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent"
           />
-          <motion.button
+          <button
             type="button"
             onClick={enviar}
             disabled={enviando || !texto.trim()}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ duration: 0.2, ease: SUAVE }}
-            className="accent-gradient shrink-0 rounded-full px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-30"
+            className="accent-gradient pulsable shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-30"
           >
-            Enviar
-          </motion.button>
+            {enviando ? "Enviando…" : "Enviar"}
+          </button>
         </div>
       </div>
 
@@ -333,7 +341,7 @@ export function ChatConversacion({
                       setMotivoDenuncia(m);
                       playToggle();
                     }}
-                    className="rounded-xl border px-3 py-2 text-left text-sm transition-colors duration-200"
+                    className="pulsable rounded-xl border px-3 py-2 text-left text-sm"
                     style={
                       motivoDenuncia === m
                         ? {
@@ -352,7 +360,7 @@ export function ChatConversacion({
                 <button
                   type="button"
                   onClick={() => setDenunciando(false)}
-                  className="flex-1 rounded-full border border-panel-border py-2.5 text-sm text-muted"
+                  className="pulsable flex-1 rounded-full border border-panel-border py-2.5 text-sm text-muted"
                 >
                   Cancelar
                 </button>
@@ -360,7 +368,7 @@ export function ChatConversacion({
                   type="button"
                   onClick={enviarDenuncia}
                   disabled={!motivoDenuncia}
-                  className="flex-1 rounded-full border py-2.5 text-sm font-semibold text-rumor disabled:opacity-40"
+                  className="pulsable flex-1 rounded-full border py-2.5 text-sm font-semibold text-rumor disabled:opacity-40"
                   style={{
                     borderColor: "color-mix(in srgb, var(--rumor) 50%, transparent)",
                     background: "color-mix(in srgb, var(--rumor) 10%, transparent)",

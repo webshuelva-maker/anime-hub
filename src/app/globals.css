@@ -403,3 +403,53 @@ html.arrancando body::before {
   background: var(--background);
   pointer-events: none;
 }
+
+/* ============================================================
+   Botones que responden al tocarlos — v159
+   ============================================================
+   Los efectos de pulsación estaban puestos con framer-motion
+   (whileHover / whileTap). En un equipo con "Reducir movimiento"
+   activado, framer los desactiva enteros: el botón se queda
+   completamente plano y parece que no hace nada al pulsarlo.
+
+   Esto lo resuelve en CSS, que sí distingue los dos casos: con
+   movimiento normal hay un hundido al pulsar; con movimiento reducido
+   se cambia el brillo en vez de mover nada. En los dos casos hay
+   respuesta, que es lo que importa — un botón sin respuesta se pulsa
+   dos veces porque no sabes si te ha oído. */
+.pulsable {
+  transition:
+    transform 120ms ease,
+    filter 140ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+.pulsable:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.pulsable:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.95);
+}
+.pulsable:disabled {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulsable:active:not(:disabled) {
+    transform: none;
+    filter: brightness(0.85);
+  }
+}
+
+/* Botón de riesgo: bloquear, denunciar, expulsar. Se distingue del
+   resto SIN ser rojo por defecto — un botón rojo permanente en la
+   cabecera de un chat pone nervioso a quien no lo necesita. Solo se
+   enciende al acercarse. */
+.pulsable-riesgo:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--rumor) 55%, transparent);
+  background: color-mix(in srgb, var(--rumor) 10%, transparent);
+  color: var(--rumor);
+  filter: none;
+}
