@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MAX_NOTA_MS, duracionLegible, urlDeNotaDeVoz } from "@/lib/conectar";
 import { playClick, playError, playToggle } from "@/lib/sound";
@@ -155,6 +155,110 @@ function repartirEnBarras(niveles: number[], barras = BARRAS): number[] {
    */
   const maximo = Math.max(0.12, ...salida);
   return salida.map((n) => Math.min(1, n / maximo));
+}
+
+/**
+ * Forma de onda estable para una nota que ya está enviada.
+ *
+ * De las notas recibidas no guardamos el volumen real (habría que
+ * descargar y decodificar el audio entero solo para dibujar), así que se
+ * genera a partir del identificador de la nota: la misma nota se ve
+ * siempre igual, y dos notas distintas se ven distintas.
+ *
+ * Se suaviza haciendo media con las barras vecinas y se le pone un sobre
+ * que baja en los extremos. Sin eso salían picos sueltos y disparejos,
+ * que es lo que daba ese aire de ecualizador de videojuego; una voz real
+ * sube y baja de forma continua.
+ */
+function formaDeOnda(semilla: string, barras: number): number[] {
+  let h = 2166136261;
+  for (let i = 0; i < semilla.length; i++) {
+    h ^= semilla.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+
+  const crudo: number[] = [];
+  for (let i = 0; i < barras; i++) {
+    h = (Math.imul(h, 1103515245) + 12345) & 0x7fffffff;
+    crudo.push((h % 1000) / 1000);
+  }
+
+  // Media móvil con los vecinos: convierte el ruido en algo que ondula.
+  const suave = crudo.map((_, i) => {
+    const a = crudo[Math.max(0, i - 1)];
+    const b = crudo[i];
+    const c = crudo[Math.min(crudo.length - 1, i + 1)];
+    return (a + b * 2 + c) / 4;
+  });
+
+  return suave.map((n, i) => {
+    // Sobre: los extremos algo más bajos, como el arranque y el final de
+    // una frase hablada.
+    const p = i / (barras - 1);
+    const sobre = 0.55 + 0.45 * Math.sin(Math.PI * p);
+    return Math.min(1, Math.max(0.16, n * sobre + 0.12));
+  });
+}
+
+/**
+ * La onda, dibujada.
+ *
+ * Se pinta DOS veces, una encima de otra: abajo la versión apagada y
+ * encima la de color, recortada por la izquierda según lo que lleves
+ * escuchado. Ese recorte es continuo, así que el avance es fluido de
+ * verdad.
+ *
+ * Antes se coloreaba barra a barra según el progreso, y eso solo puede
+ * avanzar de barra en barra: se veía dar saltos, como a cachitos. Y como
+ * el navegador solo avisa del tiempo cuatro veces por segundo, el salto
+ * era todavía más evidente.
+ */
+function Onda({
+  niveles,
+  progreso,
+  className = "",
+}: {
+  niveles: number[];
+  progreso: number;
+  className?: string;
+}) {
+  const barras = (color: string, opacidad: number) => (
+    <div className="absolute inset-0 flex items-center gap-[2px]">
+      {niveles.map((n, i) => (
+        <span
+          key={i}
+          className="min-w-0 flex-1 rounded-full"
+          style={{
+            height: "100%",
+            background: color,
+            opacity: opacidad,
+            transform: `scaleY(${Math.max(0.14, Math.min(1, n))})`,
+            transformOrigin: "center",
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  const recorte = `inset(0 ${Math.max(0, 100 - progreso * 100)}% 0 0)`;
+
+  return (
+    <div className={`relative h-6 w-full ${className}`}>
+      {barras("var(--muted)", 0.38)}
+      <div
+        className="absolute inset-0"
+        style={{
+          clipPath: recorte,
+          WebkitClipPath: recorte,
+          // Muy corto y lineal: solo suaviza el hueco entre avisos del
+          // reproductor, sin llegar a arrastrarse por detrás del sonido.
+          transition: "clip-path 80ms linear",
+        }}
+      >
+        {barras("var(--ice)", 1)}
+      </div>
+    </div>
+  );
 }
 
 /* ================= Grabar ================= */
@@ -402,19 +506,26 @@ export function GrabadorDeVoz({
           animar la altura de cuarenta barras obliga al navegador a
           recalcular la maquetación en cada fotograma, y eso es justo lo
           que se veía lento y a tirones. El escalado lo lleva la tarjeta
-          gráfica y va suelto. */}
-      <span className="flex h-6 flex-1 items-center gap-[3px] overflow-hidden">
+          gráfica y va suelto.
+
+          Todas del mismo color: antes las últimas barras iban en ámbar
+          para señalar "esto es lo que entra ahora", pero con el punto
+          rojo de grabación al lado ya se entiende, y esa mancha amarilla
+          a la derecha era lo que le daba el aire de ecualizador. El
+          degradado de opacidad hacia la izquierda basta para dar la
+          sensación de cinta que avanza. */}
+      <span className="flex h-6 flex-1 items-center gap-[2px] overflow-hidden">
         {ondaEnVivo.map((n, i) => (
           <span
             key={i}
             className="min-w-0 flex-1 rounded-full"
             style={{
-              height: 22,
-              background: i >= ondaEnVivo.length - 4 ? "var(--rumor)" : "var(--ice)",
-              opacity: 0.35 + (i / ondaEnVivo.length) * 0.65,
-              transform: `scaleY(${Math.max(0.09, Math.min(1, n))})`,
+              height: "100%",
+              background: "var(--ice)",
+              opacity: 0.22 + (i / ondaEnVivo.length) * 0.78,
+              transform: `scaleY(${Math.max(0.14, Math.min(1, n))})`,
               transformOrigin: "center",
-              transition: "transform 110ms linear, background-color 200ms linear",
+              transition: "transform 110ms linear",
               willChange: "transform",
             }}
           />
@@ -478,7 +589,21 @@ function RevisarNota({
       setSonando(false);
       setProgreso(0);
     };
-    audio.ontimeupdate = () => {
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [url]);
+
+  // Igual que en el reproductor de las notas recibidas: el reloj se lee
+  // en cada fotograma para que la barra avance de forma continua y no a
+  // cuatro saltos por segundo.
+  useEffect(() => {
+    if (!sonando) return;
+    let cuadro = 0;
+    const paso = () => {
+      const audio = audioRef.current;
       /*
        * La duración se toma de lo que midió el cronómetro al grabar y no
        * de audio.duration: en los audios de MediaRecorder, Chrome dice
@@ -486,14 +611,12 @@ function RevisarNota({
        * entero, y con eso la barra no avanzaría.
        */
       const total = duracionMs / 1000;
-      if (total > 0) setProgreso(Math.min(1, audio.currentTime / total));
+      if (audio && total > 0) setProgreso(Math.min(1, audio.currentTime / total));
+      cuadro = requestAnimationFrame(paso);
     };
-    audioRef.current = audio;
-    return () => {
-      audio.pause();
-      audioRef.current = null;
-    };
-  }, [url, duracionMs]);
+    cuadro = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(cuadro);
+  }, [sonando, duracionMs]);
 
   const alternar = () => {
     const audio = audioRef.current;
@@ -526,23 +649,8 @@ function RevisarNota({
         {sonando ? <IconoPausa className="h-4 w-4" /> : <IconoPlay className="h-4 w-4" />}
       </button>
 
-      <span className="flex h-6 flex-1 items-center gap-[3px] overflow-hidden">
-        {barras.map((n, i) => {
-          const alcanzada = i / barras.length <= progreso;
-          return (
-            <span
-              key={i}
-              className="min-w-0 flex-1 rounded-full"
-              style={{
-                height: 22,
-                background: alcanzada ? "var(--ice)" : "var(--panel-border)",
-                transform: `scaleY(${Math.max(0.09, Math.min(1, n))})`,
-                transformOrigin: "center",
-                transition: "background-color 140ms linear",
-              }}
-            />
-          );
-        })}
+      <span className="flex h-6 flex-1 items-center overflow-hidden">
+        <Onda niveles={barras} progreso={progreso} />
       </span>
 
       <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
@@ -590,6 +698,35 @@ export function NotaDeVoz({
   const [velocidad, setVelocidad] = useState<number>(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  /*
+   * El progreso se lee en cada fotograma, no con el aviso "timeupdate"
+   * del navegador.
+   *
+   * Ese aviso llega unas cuatro veces por segundo, así que la barra daba
+   * cuatro saltos por segundo: eso era lo de avanzar a cachitos. Leyendo
+   * el reloj del audio en cada fotograma se mueve de forma continua, y
+   * cuesta lo mismo que cualquier animación. El bucle solo existe
+   * mientras suena; en cuanto se pausa, se corta.
+   */
+  useEffect(() => {
+    if (!sonando) return;
+    let cuadro = 0;
+    const paso = () => {
+      const audio = audioRef.current;
+      if (audio) {
+        // La duración guardada es de fiar; la que dice el navegador para
+        // los audios de MediaRecorder no siempre lo es.
+        const total = duracionMs ? duracionMs / 1000 : audio.duration;
+        if (total && Number.isFinite(total)) {
+          setProgreso(Math.min(1, audio.currentTime / total));
+        }
+      }
+      cuadro = requestAnimationFrame(paso);
+    };
+    cuadro = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(cuadro);
+  }, [sonando, duracionMs]);
+
   useEffect(() => {
     return () => {
       audioRef.current?.pause();
@@ -615,17 +752,9 @@ export function NotaDeVoz({
       setSonando(false);
       setProgreso(0);
     };
-    audio.ontimeupdate = () => {
-      // Igual que al revisar: la duración guardada es de fiar, la que
-      // dice el navegador no siempre.
-      const total = duracionMs ? duracionMs / 1000 : audio.duration;
-      if (total && Number.isFinite(total)) {
-        setProgreso(Math.min(1, audio.currentTime / total));
-      }
-    };
     audioRef.current = audio;
     return audio;
-  }, [ruta, duracionMs, velocidad]);
+  }, [ruta, velocidad]);
 
   const alternar = async () => {
     if (audioRef.current && sonando) {
@@ -660,6 +789,9 @@ export function NotaDeVoz({
   };
 
   const transcurrido = duracionMs ? progreso * duracionMs : 0;
+
+  // La forma se calcula una vez por nota y no cambia entre dibujados.
+  const onda = useMemo(() => formaDeOnda(ruta, 34), [ruta]);
 
   return (
     <div
@@ -719,33 +851,9 @@ export function NotaDeVoz({
         aria-valuemax={100}
         aria-valuenow={Math.round(progreso * 100)}
         tabIndex={0}
-        className="flex h-7 flex-1 cursor-pointer items-center gap-[2px]"
+        className="relative flex h-7 flex-1 cursor-pointer items-center"
       >
-        {Array.from({ length: 26 }).map((_, i) => {
-          // Alturas fijas por posición: la misma nota se ve siempre igual
-          // en vez de cambiar de forma en cada dibujado.
-          const alto = (5 + ((i * 13) % 15)) / 20;
-          const alcanzada = i / 26 <= progreso;
-          // La barra que se está reproduciendo ahora mismo da un saltito,
-          // así se ve de un vistazo por dónde va.
-          const activa = sonando && Math.floor(progreso * 26) === i;
-          return (
-            <span
-              key={i}
-              className="min-w-0 flex-1 rounded-full"
-              style={{
-                height: 20,
-                background: alcanzada ? "var(--ice)" : "var(--panel-border)",
-                transform: `scaleY(${Math.min(1, activa ? alto * 1.35 : alto)})`,
-                transformOrigin: "center",
-                // Corto y lineal: con una curva suave y 26 barras, el
-                // saltito de la barra activa se arrastraba por detrás del
-                // sonido y parecía que iba a destiempo.
-                transition: "transform 90ms linear, background-color 120ms linear",
-              }}
-            />
-          );
-        })}
+        <Onda niveles={onda} progreso={progreso} />
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-0.5">

@@ -431,13 +431,55 @@ export function ChatConversacion({
                           <span className="text-[10px] text-muted">{hora(m.creado_en)}</span>
                         </p>
                       )}
-                      {m.audio_ruta ? (
-                        <NotaDeVoz ruta={m.audio_ruta} duracionMs={m.audio_ms} mio={mio} />
-                      ) : (
-                        <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
-                          {m.texto}
-                        </p>
-                      )}
+                      {/*
+                        El contenido va en una caja que ocupa solo lo que
+                        mide el mensaje (w-fit), y no toda la fila. Así la
+                        barra de reacciones puede anclarse a SU borde y
+                        salir pegada al mensaje. Antes iba anclada al
+                        borde derecho de la fila entera, o sea al final de
+                        la pantalla: reaccionabas a una nota de voz de
+                        tres dedos de ancho y el menú te aparecía en la
+                        otra punta, sin relación visible con lo que
+                        estabas señalando.
+                      */}
+                      <div className="relative w-fit max-w-[85%]">
+                        {m.audio_ruta ? (
+                          <NotaDeVoz ruta={m.audio_ruta} duracionMs={m.audio_ms} mio={mio} />
+                        ) : (
+                          <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
+                            {m.texto}
+                          </p>
+                        )}
+
+                        {/* Barra que aparece al pasar por encima:
+                            reaccionar rápido o responder. En pantallas
+                            estrechas se coloca justo encima del mensaje,
+                            porque al lado no cabría. */}
+                        <div className="pointer-events-none absolute bottom-full right-0 z-10 mb-1 flex items-center gap-0.5 rounded-full border border-panel-border bg-panel p-0.5 opacity-0 shadow-lg transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 sm:bottom-auto sm:left-full sm:right-auto sm:top-1/2 sm:mb-0 sm:ml-2 sm:-translate-y-1/2">
+                          {REACCIONES_RAPIDAS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => reaccionar(m.id, emoji)}
+                              className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-sm hover:bg-panel-soft"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRespondiendoA(m);
+                              cajaRef.current?.focus();
+                              playToggle();
+                            }}
+                            aria-label="Responder a este mensaje"
+                            className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-xs text-muted hover:bg-panel-soft hover:text-foreground"
+                          >
+                            ↩
+                          </button>
+                        </div>
+                      </div>
 
                       {/* Reacciones puestas. Las tuyas van marcadas, y
                           volver a pulsar las quita. */}
@@ -484,33 +526,6 @@ export function ChatConversacion({
                       {mio && i === mensajes.length - 1 && m.leido_en && (
                         <p className="mt-0.5 text-[10px] text-muted">Visto</p>
                       )}
-                    </div>
-
-                    {/* Barra que aparece al pasar por encima, como en
-                        Discord: reaccionar rápido o responder. */}
-                    <div className="pointer-events-none absolute right-2 top-0 flex -translate-y-1/2 items-center gap-0.5 rounded-full border border-panel-border bg-panel p-0.5 opacity-0 shadow-lg transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
-                      {REACCIONES_RAPIDAS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => reaccionar(m.id, emoji)}
-                          className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-sm hover:bg-panel-soft"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRespondiendoA(m);
-                          cajaRef.current?.focus();
-                          playToggle();
-                        }}
-                        aria-label="Responder a este mensaje"
-                        className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-xs text-muted hover:bg-panel-soft hover:text-foreground"
-                      >
-                        ↩
-                      </button>
                     </div>
                   </motion.div>
                 </div>
