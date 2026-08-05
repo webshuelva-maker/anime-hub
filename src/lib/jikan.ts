@@ -11,7 +11,16 @@
  *    genérica en la web que puede volver vacía.
  */
 
-const JIKAN_BASE = "https://api.jikan.moe/v4";
+/*
+ * La dirección se puede cambiar por variable de entorno.
+ *
+ * Sirve para dos cosas: poder probar todo este camino contra un servidor
+ * de mentira (que es como se ha comprobado que el interpretado y la cola
+ * funcionan sin depender de que MyAnimeList esté de buenas), y poder
+ * apuntar a un espejo o a un proxy propio si algún día el equipo o la
+ * red no llegan a api.jikan.moe.
+ */
+const JIKAN_BASE = process.env.JIKAN_BASE_URL || "https://api.jikan.moe/v4";
 
 export interface JikanFacts {
   malId: number;
@@ -70,15 +79,65 @@ interface Respuesta {
   motivo: string | null;
 }
 
+/*
+ * TURNOS: las peticiones a Jikan van de una en una y espaciadas.
+ *
+ * Jikan permite 3 por segundo. La app hacía tres casi simultáneas en
+ * cada búsqueda (la ficha, la búsqueda del archivo y sus noticias), o
+ * sea justo el límite, y si el usuario escribía rápido o recargaba, se
+ * pasaba. Un 429 es indistinguible de "esta serie no tiene noticias" a
+ * ojos del que mira la pantalla.
+ *
+ * Reintentar no arregla eso, solo lo reparte: hay que no llegar a
+ * pedirlo. Aquí se encadenan todas las llamadas del servidor en una
+ * única fila y se deja un hueco mínimo entre ellas. Cuesta menos de un
+ * segundo por búsqueda y a cambio el 429 deja de ser posible por culpa
+ * nuestra.
+ */
+const HUECO_MS = 400;
+let ultimaSalida = 0;
+let fila: Promise<unknown> = Promise.resolve();
+
+function enFila<T>(tarea: () => Promise<T>): Promise<T> {
+  const siguiente = fila.then(async () => {
+    const espera = HUECO_MS - (Date.now() - ultimaSalida);
+    if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    ultimaSalida = Date.now();
+    return tarea();
+  });
+  // La fila no se puede romper porque una tarea falle: se guarda una
+  // versión "siempre cumplida" para encadenar la siguiente.
+  fila = siguiente.catch(() => undefined);
+  return siguiente;
+}
+
 async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
+  /*
+   * El cronómetro se pone DENTRO del turno, no antes.
+   *
+   * Puesto fuera, el tiempo de espera se gastaría haciendo cola y una
+   * petición podría abortarse sin haber llegado a salir — que además da
+   * el mismo mensaje ("sin respuesta en 9s") que un servidor caído, o
+   * sea que mandaría a buscar el fallo al sitio equivocado.
+   */
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
-    const res = await fetch(`${JIKAN_BASE}${path}`, {
-      signal: controller.signal,
-      headers: { Accept: "application/json", "User-Agent": "AnimeHub/1.0" },
+    const res = await enFila(() => {
+      timeout = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(`${JIKAN_BASE}${path}`, {
+        signal: controller.signal,
+        headers: { Accept: "application/json", "User-Agent": "AnimeHub/1.0" },
+      });
     });
-    if (res.status === 429) return { ok: false, datos: null, motivo: "429 demasiadas peticiones" };
+    if (res.status === 429) {
+      // Si dice cuánto esperar, se le hace caso: es la única forma de no
+      // volver a chocar con lo mismo en el reintento.
+      const dice = Number(res.headers.get("retry-after") ?? "");
+      const esperaMs = Number.isFinite(dice) && dice > 0 ? Math.min(dice * 1000, 5000) : 1500;
+      await new Promise((r) => setTimeout(r, esperaMs));
+      return { ok: false, datos: null, motivo: "429 demasiadas peticiones" };
+    }
     if (res.status === 404) {
       // Un 404 SÍ es una respuesta válida: significa que no hay nada.
       return { ok: true, datos: null, motivo: null };
@@ -97,7 +156,7 @@ async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
           : `no se pudo conectar (${mensaje.slice(0, 60) || nombre || "desconocido"})`,
     };
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
   }
 }
 
@@ -189,17 +248,44 @@ export async function searchJikanList(term: string): Promise<
 }
 
 export async function searchJikanAnime(name: string): Promise<JikanFacts | null> {
+  return (await searchJikanAnimeConEstado(name)).ficha;
+}
+
+/**
+ * Igual que searchJikanAnime, pero diciendo si la consulta llegó a
+ * hacerse.
+ *
+ * La diferencia importa: hasta ahora, una consulta que se caía y una
+ * serie que de verdad no existe daban las dos el mismo null, y la app
+ * acababa diciendo "no se encontró la serie en MyAnimeList" cuando el
+ * problema era que ni siquiera había podido preguntar. Eso manda a
+ * buscar el fallo al sitio equivocado.
+ */
+export async function searchJikanAnimeConEstado(
+  name: string
+): Promise<{ ok: boolean; ficha: JikanFacts | null; motivo: string | null }> {
   const clean = name.trim();
-  if (clean.length < 2) return null;
+  if (clean.length < 2) return { ok: true, ficha: null, motivo: "búsqueda demasiado corta" };
 
-  const data = (await getJson(`/anime?q=${encodeURIComponent(clean)}&limit=1`)) as
-    | { data?: RawJikanAnime[] }
-    | null;
+  const res = await getJsonJikan(`/anime?q=${encodeURIComponent(clean)}&limit=1`);
+  const data = res.datos as { data?: RawJikanAnime[] } | null;
   const m = data?.data?.[0];
-  if (!m?.mal_id) return null;
 
+  if (!m?.mal_id) {
+    return {
+      ok: res.ok,
+      ficha: null,
+      motivo: res.ok ? "MyAnimeList no tiene esa serie" : res.motivo,
+    };
+  }
+
+  return { ok: true, motivo: null, ficha: construirFicha(m, clean) };
+}
+
+function construirFicha(m: RawJikanAnime, clean: string): JikanFacts {
   return {
-    malId: m.mal_id,
+    // Quien llama ya ha comprobado que existe.
+    malId: m.mal_id as number,
     title: m.title_english || m.title || clean,
     status: m.status ?? null,
     airing: m.airing === true,

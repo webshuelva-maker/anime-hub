@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJikanNewsConEstado, searchJikanAnime, type JikanNewsItem } from "@/lib/jikan";
+import {
+  getJikanNewsConEstado,
+  searchJikanAnimeConEstado,
+  type JikanNewsItem,
+} from "@/lib/jikan";
+import { nucleoDeTitulo } from "@/lib/coincidenciaTitulos";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -60,17 +65,51 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const ficha =
-      Number.isFinite(malIdDado) && malIdDado > 0
-        ? { malId: malIdDado, title: titulo, url: null as string | null }
-        : await searchJikanAnime(titulo);
+    let ficha: { malId: number; title: string; url: string | null } | null = null;
+    let motivoBusqueda: string | null = null;
+
+    if (Number.isFinite(malIdDado) && malIdDado > 0) {
+      ficha = { malId: malIdDado, title: titulo, url: null };
+    } else {
+      const r = await searchJikanAnimeConEstado(titulo);
+      motivoBusqueda = r.motivo;
+      if (r.ficha) ficha = { malId: r.ficha.malId, title: r.ficha.title, url: r.ficha.url };
+
+      /*
+       * Segundo intento con el nombre a secas.
+       *
+       * Los títulos oficiales largos son los que peor buscan: "Re:ZERO
+       * -Starting Life in Another World-" mete tantas palabras que
+       * MyAnimeList puede no devolver nada aunque la serie esté ahí de
+       * sobra. Solo se reintenta si el primero volvió VACÍO habiendo
+       * podido preguntar; si el problema fue de conexión, insistir con
+       * otro texto no arregla nada y solo gasta otra petición.
+       */
+      if (!ficha && r.ok) {
+        const nucleo = nucleoDeTitulo(titulo);
+        if (nucleo && nucleo.length >= 3 && nucleo.toLowerCase() !== titulo.toLowerCase()) {
+          const r2 = await searchJikanAnimeConEstado(nucleo);
+          if (r2.ficha) {
+            ficha = { malId: r2.ficha.malId, title: r2.ficha.title, url: r2.ficha.url };
+            motivoBusqueda = null;
+          } else {
+            motivoBusqueda = r2.motivo ?? motivoBusqueda;
+          }
+        }
+      }
+    }
 
     if (!ficha) {
-      // No se guarda: puede que la consulta ni siquiera se haya hecho.
+      /*
+       * Aquí se decía siempre "no se encontró la serie", y era engañoso:
+       * también se llegaba cuando la consulta ni siquiera había podido
+       * hacerse. Ahora el motivo viene de la propia consulta y distingue
+       * "MyAnimeList no tiene esa serie" de "no se pudo conectar".
+       */
       return NextResponse.json({
         noticias: [],
         fallo: true,
-        motivo: "no se encontró la serie en MyAnimeList",
+        motivo: motivoBusqueda ?? "no se pudo consultar MyAnimeList",
       });
     }
 

@@ -15,7 +15,9 @@ export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja marge
 type Resultado = Awaited<ReturnType<typeof searchAnimeDatabase>>["results"][number];
 
 /** Pregunta a las tres bases y devuelve lo que encaja con el término. */
-async function buscarEn(term: string): Promise<{ resultados: Resultado[]; debug: string }> {
+async function buscarEn(
+  term: string
+): Promise<{ resultados: Resultado[]; malId: number | null; debug: string }> {
   /*
    * Se pregunta a las TRES bases a la vez y se juntan los resultados.
    *
@@ -129,9 +131,37 @@ async function buscarEn(term: string): Promise<{ resultados: Resultado[]; debug:
     )
     .map(({ r }) => r);
 
+  /*
+   * El identificador de MyAnimeList del mejor resultado.
+   *
+   * ESTO FALTABA, y era el fallo de fondo del archivo de noticias. La
+   * pantalla lee `data.malId` de esta respuesta y se lo pasa a la ruta
+   * del archivo para que no tenga que buscar la serie otra vez. Solo que
+   * esta ruta no devolvía ese campo NUNCA: `data.malId` era siempre
+   * undefined, así que el archivo acababa haciendo su propia búsqueda
+   * SIEMPRE. Dos consecuencias:
+   *
+   *  - Cada búsqueda gastaba tres llamadas a MyAnimeList casi a la vez
+   *    en vez de dos, justo en su límite de tres por segundo. O sea que
+   *    el arreglo del límite que se dio por probado nunca llegó a estar
+   *    activo.
+   *  - Y si esa segunda búsqueda fallaba, el archivo entero fallaba,
+   *    aunque la primera —la de aquí— hubiera encontrado la serie
+   *    perfectamente.
+   *
+   * Se empareja por núcleo de título porque las tres bases nombran la
+   * misma serie de formas distintas; comparando el título entero no
+   * casaría casi nunca.
+   */
+  const mejor = resultados[0];
+  const nucleoMejor = mejor ? nucleoDeTitulo(mejor.title) : "";
+  const enMal = nucleoMejor ? mal.find((m) => nucleoDeTitulo(m.title) === nucleoMejor) : undefined;
+  const malId = enMal?.id ?? null;
+
   return {
     resultados,
-    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes`,
+    malId,
+    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes | malId: ${malId ?? "no"}`,
   };
 }
 
@@ -159,6 +189,7 @@ export async function GET(req: NextRequest) {
     if (segunda.resultados.length > 0) {
       return NextResponse.json({
         results: segunda.resultados.slice(0, 10),
+        malId: segunda.malId,
         fuente: "segundo intento",
         terminoUsado: corta,
         debug: `1º "${term}" → 0 | 2º "${corta}" → ${segunda.debug}`,
@@ -168,6 +199,9 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     results: primera.resultados.slice(0, 10),
+    // Lo lee la pantalla para pasárselo al archivo de noticias y
+    // ahorrarle una búsqueda contra MyAnimeList.
+    malId: primera.malId,
     fuente: primera.resultados.length > 0 ? "directa" : "ninguna",
     // El diagnóstico va SIEMPRE en la respuesta: llevamos varias vueltas
     // adivinando por qué una búsqueda vuelve vacía.

@@ -23,7 +23,7 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
-    version: "v182",
+    version: "v183",
     fecha: "2026-08-05",
     titulo: "Cuando algo falla, ahora dice por qué",
     puntos: [
