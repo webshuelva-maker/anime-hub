@@ -7,7 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { playClick, playError, playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
 import { createClient } from "@/lib/supabase/client";
-import { GrabadorDeVoz, NotaDeVoz } from "./NotasDeVoz";
+import { GrabadorDeVoz, NotaDeVoz, IconoMicrofono } from "./NotasDeVoz";
 import {
   Coincidencia,
   MOTIVOS_DENUNCIA,
@@ -693,16 +693,17 @@ export function ChatConversacion({
               }}
               disabled={enviando}
               aria-label="Grabar una nota de voz"
-              className="pulsable mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-panel-border text-sm text-muted hover:text-foreground disabled:opacity-30"
+              title="Grabar una nota de voz"
+              className="pulsable mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-panel-border text-muted transition-colors hover:border-ice/40 hover:text-ice disabled:opacity-30"
             >
-              🎤
+              <IconoMicrofono className="h-[18px] w-[18px]" />
             </button>
           )}
         </div>
         )}
         <p className="mt-1.5 px-1 text-[10px] text-muted">
           {grabando
-            ? "Se envía al pulsar Enviar. Máximo dos minutos."
+            ? "Para y escúchala antes de enviarla. Máximo dos minutos."
             : "Enter envía · Mayús + Enter salta de línea"}
         </p>
       </div>

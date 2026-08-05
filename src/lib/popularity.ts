@@ -156,7 +156,10 @@ function plataformasDe(links: unknown): string[] {
   return [...salida];
 }
 
-async function pedirLote(titulos: string[]): Promise<Map<string, DatosTitulo>> {
+async function pedirLote(
+  titulos: string[],
+  tipo?: "ANIME" | "MANGA"
+): Promise<Map<string, DatosTitulo>> {
   const resultado = new Map<string, DatosTitulo>();
   if (titulos.length === 0) return resultado;
 
@@ -178,12 +181,23 @@ async function pedirLote(titulos: string[]): Promise<Map<string, DatosTitulo>> {
    * "Mato Seihei no Slave" son la misma obra, y con eso se pueden quitar
    * las noticias duplicadas que llegan con el título japonés por un lado
    * y el internacional por otro.
+   *
+   * El tipo es OPCIONAL a propósito. Para el feed no se filtra, porque
+   * muchas noticias son de manga puro sin adaptación todavía y filtrando
+   * se quedarían sin datos. Pero para los favoritos hay que pedir ANIME
+   * sí o sí: sin filtrar, un título como "Re:ZERO -Starting Life in
+   * Another World-" encuentra primero la NOVELA LIGERA, que se llama
+   * exactamente igual — y una novela no tiene estudio de animación, así
+   * que devolvía la portada del libro y cero estudios. Ese era el motivo
+   * de que la sección de Estudios saliera casi vacía teniendo varios
+   * favoritos marcados.
    */
+  const filtroTipo = tipo ? `, type: ${tipo}` : "";
   const consulta = `query {
 ${titulos
   .map(
     (t, i) => `  t${i}: Page(perPage: 1) {
-    media(search: "${escapar(t)}", sort: SEARCH_MATCH) {
+    media(search: "${escapar(t)}"${filtroTipo}, sort: SEARCH_MATCH) {
       id
       title { romaji }
       coverImage { extraLarge large }
@@ -257,16 +271,28 @@ ${titulos
  * Devuelve popularidad, géneros y estudios de una lista de títulos.
  * Lo que ya esté en memoria no se vuelve a pedir; el resto va en lotes
  * de doce, en paralelo, para no montar una consulta gigante.
+ *
+ * Con "tipo" se limita la búsqueda a anime o a manga. Los favoritos lo
+ * usan con ANIME para no acabar en la ficha de la novela ligera, que se
+ * llama igual pero no tiene estudio de animación.
  */
-export async function datosDeTitulos(titulos: string[]): Promise<Map<string, DatosTitulo>> {
+export async function datosDeTitulos(
+  titulos: string[],
+  tipo?: "ANIME" | "MANGA"
+): Promise<Map<string, DatosTitulo>> {
   const ahora = Date.now();
   const salida = new Map<string, DatosTitulo>();
   const pendientes: string[] = [];
 
+  // La caché se reparte por tipo: la ficha del anime y la de la novela
+  // del mismo título son distintas, y guardarlas bajo la misma clave
+  // haría que la primera que llegara tapara a la otra.
+  const claveCache = (t: string) => `${tipo ?? "cualquiera"}:${claveDe(t)}`;
+
   for (const t of titulos) {
     const clave = claveDe(t);
     if (!clave || salida.has(clave)) continue;
-    const guardado = cache.get(clave);
+    const guardado = cache.get(claveCache(t));
     if (guardado && guardado.expira > ahora) {
       salida.set(clave, guardado.datos);
     } else if (!pendientes.some((p) => claveDe(p) === clave)) {
@@ -277,10 +303,10 @@ export async function datosDeTitulos(titulos: string[]): Promise<Map<string, Dat
   const lotes: string[][] = [];
   for (let i = 0; i < pendientes.length; i += 12) lotes.push(pendientes.slice(i, i + 12));
 
-  const respuestas = await Promise.all(lotes.map(pedirLote));
+  const respuestas = await Promise.all(lotes.map((lote) => pedirLote(lote, tipo)));
   for (const r of respuestas) {
     for (const [clave, datos] of r) {
-      cache.set(clave, { datos, expira: ahora + TTL_MS });
+      cache.set(`${tipo ?? "cualquiera"}:${clave}`, { datos, expira: ahora + TTL_MS });
       salida.set(clave, datos);
     }
   }

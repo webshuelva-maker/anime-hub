@@ -34,7 +34,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const datos = await datosDeTitulos(titulos);
+    /*
+     * Se pide como ANIME, no "lo que haya".
+     *
+     * Sin filtrar, un favorito como "Re:ZERO -Starting Life in Another
+     * World-" encuentra primero la NOVELA LIGERA, que se llama
+     * exactamente igual. Y una novela no tiene estudio de animación: por
+     * eso salía la portada del libro en vez de la del anime, y la
+     * sección de Estudios se quedaba casi vacía aun teniendo varios
+     * favoritos marcados.
+     */
+    const datos = await datosDeTitulos(titulos, "ANIME");
 
     const caratulas: Record<string, string> = {};
     const fichas: Record<string, { genres: string[]; studios: string[] }> = {};
@@ -75,7 +85,7 @@ export async function GET(request: NextRequest) {
 
       const variantes = [...porVariante.keys()];
       if (variantes.length > 0) {
-        const segundos = await datosDeTitulos(variantes);
+        const segundos = await datosDeTitulos(variantes, "ANIME");
         for (const [clave, original] of porVariante) {
           if (caratulas[original]) continue;
           const valor = segundos.get(clave);
@@ -86,6 +96,27 @@ export async function GET(request: NextRequest) {
           if (!fichas[original] && (valor.genres.length > 0 || valor.studios.length > 0)) {
             fichas[original] = { genres: valor.genres, studios: valor.studios };
           }
+        }
+      }
+    }
+
+    /*
+     * Tercera y última pasada, ya sin filtrar por tipo.
+     *
+     * Es para lo que de verdad no tiene anime: un manga o una novela que
+     * el usuario ha marcado como favorito. Ahí no habrá estudio —no
+     * existe— pero al menos se recupera su portada en vez de dejar el
+     * hueco vacío.
+     */
+    const sinNada = titulos.filter((t) => !caratulas[t]);
+    if (sinNada.length > 0) {
+      const terceros = await datosDeTitulos(sinNada);
+      for (const titulo of sinNada) {
+        const valor = terceros.get(titulo.toLowerCase().trim());
+        if (!valor) continue;
+        if (valor.coverImageUrl) caratulas[titulo] = valor.coverImageUrl;
+        if (!fichas[titulo] && valor.genres.length > 0) {
+          fichas[titulo] = { genres: valor.genres, studios: valor.studios };
         }
       }
     }

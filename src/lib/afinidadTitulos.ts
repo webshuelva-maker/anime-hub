@@ -20,7 +20,17 @@ import { boostCategories } from "./learning";
  * repite en cada visita ni infla los contadores en cada recarga.
  */
 
-const CLAVE = "anime-hub:afinidad-rellenada";
+/*
+ * La clave lleva versión a propósito.
+ *
+ * La primera vuelta de este relleno consultaba AniList sin filtrar por
+ * tipo, y para títulos como "Re:ZERO -Starting Life in Another World-"
+ * caía en la ficha de la NOVELA LIGERA, que se llama igual y no tiene
+ * estudio de animación. Esos títulos quedaron marcados como revisados
+ * con las manos vacías y no se habrían vuelto a mirar nunca. Subiendo la
+ * versión se repasan una vez más, ya con la consulta correcta.
+ */
+const CLAVE = "anime-hub:afinidad-rellenada:v2";
 
 function yaRevisados(): Set<string> {
   if (typeof window === "undefined") return new Set();
