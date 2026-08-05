@@ -90,6 +90,7 @@ export interface AnimeSearchResult {
   startYear: number | null;
   endYear: number | null;
   genres: string[];
+  studios: string[];
   type: "ANIME" | "MANGA";
 }
 
@@ -106,6 +107,7 @@ query ($search: String) {
       startDate { year }
       endDate { year }
       genres
+      studios(isMain: true) { nodes { name } }
     }
   }
 }`;
@@ -162,6 +164,7 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutc
       startDate?: { year?: number };
       endDate?: { year?: number };
       genres?: string[];
+      studios?: { nodes?: { name: string }[] };
     }) => ({
       id: m.id,
       title: m.title.english || m.title.romaji || "Sin título",
@@ -172,6 +175,7 @@ export async function searchAnimeDatabase(term: string): Promise<AnimeSearchOutc
       startYear: m.startDate?.year ?? null,
       endYear: m.endDate?.year ?? null,
       genres: m.genres ?? [],
+      studios: (m.studios?.nodes ?? []).map((s) => s.name),
       type: "ANIME" as const,
     }));
 

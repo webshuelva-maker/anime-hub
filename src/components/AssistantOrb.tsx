@@ -440,7 +440,7 @@ export function AssistantOrb() {
         // escribe la gente al hablar.
         const res = await fetch(`/api/anime-search?q=${encodeURIComponent(title)}`);
         const data = (await res.json()) as {
-          results?: { title: string; genres?: string[] }[];
+          results?: { title: string; genres?: string[]; studios?: string[] }[];
         };
         const mejor =
           data.results?.find((r) => titlesMatch(title, r.title)) ?? data.results?.[0] ?? null;
@@ -453,7 +453,7 @@ export function AssistantOrb() {
           if (!yaEstaba) {
             savePreferences({ ...prefs, favoriteTitles: [...prefs.favoriteTitles, canonico] });
           }
-          recordAnimeInterest(canonico, mejor.genres ?? [], []);
+          recordAnimeInterest(canonico, mejor.genres ?? [], mejor.studios ?? []);
           boostedTitlesGlobal.add(canonico.toLowerCase());
           confirmacion = yaEstaba
             ? `${canonico} ya estaba en tus favoritos`
@@ -490,14 +490,14 @@ export function AssistantOrb() {
         try {
           const res = await fetch(`/api/anime-search?q=${encodeURIComponent(title)}`);
           const data = (await res.json()) as {
-            results?: { title: string; genres?: string[] }[];
+            results?: { title: string; genres?: string[]; studios?: string[] }[];
           };
           const facts = data.results?.find((r) => titlesMatch(title, r.title)) ?? null;
           // AniList siempre devuelve ALGO parecido de nombre, aunque le
           // preguntes por un videojuego. Si lo que vuelve no se parece a
           // lo pedido, no era un anime y no se apunta nada: por eso
           // acababa "Valorant" en la lista de series seguidas.
-          if (facts) recordAnimeInterest(facts.title, facts.genres ?? [], []);
+          if (facts) recordAnimeInterest(facts.title, facts.genres ?? [], facts.studios ?? []);
         } catch {
           // La afinidad es una mejora, no algo crítico: si falla, se ignora.
         }

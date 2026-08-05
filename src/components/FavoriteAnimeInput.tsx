@@ -30,6 +30,7 @@ interface Resultado {
   startYear: number | null;
   format: string | null;
   genres: string[];
+  studios: string[];
 }
 
 export function FavoriteAnimeInput() {
@@ -115,9 +116,12 @@ export function FavoriteAnimeInput() {
     }
 
     savePreferences({ ...prefs, favoriteTitles: [...prefs.favoriteTitles, r.title] });
-    // Sus géneros cuentan también para la afinidad: marcar algo como
-    // favorito es la señal más clara que existe de lo que te gusta.
-    boostCategories(r.genres ?? [], [], 3, r.title);
+    // Sus géneros Y estudios cuentan también para la afinidad: marcar
+    // algo como favorito es la señal más clara que existe de lo que te
+    // gusta. Antes aquí siempre se mandaba [] de estudios, así que un
+    // favorito nunca reforzaba ningún estudio y la sección "Estudios" de
+    // Tus gustos se quedaba vacía por más favoritos que marcaras.
+    boostCategories(r.genres ?? [], r.studios ?? [], 3, r.title);
     setTitles([...prefs.favoriteTitles, r.title]);
     setDraft("");
     setResultados([]);

@@ -11,7 +11,6 @@ import {
 import { UserPreferences } from "@/types/news";
 import { AVATAR_OPTIONS } from "@/data/options";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
-import { FavoriteAnimeInput } from "./FavoriteAnimeInput";
 import { Toast } from "./Toast";
 import { clearRenMemory } from "@/lib/renMemory";
 import { createClient } from "@/lib/supabase/client";
@@ -289,16 +288,6 @@ export function ProfileEditor() {
             selectedId={prefs.avatarId}
             onSelect={(avatarId) => setPrefs((p) => ({ ...p, avatarId, avatarPhotoDataUrl: null }))}
           />
-        </div>
-      </div>
-
-      <div className="panel mt-6 rounded-2xl p-6">
-        <h2 className="font-heading text-lg font-semibold">Animes favoritos</h2>
-        <p className="mt-1 text-sm text-muted">
-          Sus noticias te salen las primeras. Se guarda solo, no hace falta confirmar nada.
-        </p>
-        <div className="mt-3">
-          <FavoriteAnimeInput />
         </div>
       </div>
 

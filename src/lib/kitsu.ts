@@ -22,6 +22,7 @@ export interface ResultadoBusqueda {
   startYear: number | null;
   endYear: number | null;
   genres: string[];
+  studios: string[];
   type: "ANIME";
 }
 
@@ -70,7 +71,10 @@ export async function searchKitsu(term: string): Promise<ResultadoBusqueda[]> {
           status: a.status ?? null,
           startYear: a.startDate ? Number(a.startDate.slice(0, 4)) : null,
           endYear: a.endDate ? Number(a.endDate.slice(0, 4)) : null,
+          // La búsqueda básica de Kitsu no trae géneros ni estudios sin
+          // pedir aparte esa relación; se deja vacío, igual que genres.
           genres: [],
+          studios: [],
           type: "ANIME" as const,
         };
       });

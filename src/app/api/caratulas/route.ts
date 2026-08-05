@@ -33,18 +33,20 @@ export async function GET(request: NextRequest) {
     const caratulas: Record<string, string> = {};
 
     for (const titulo of titulos) {
-      // datosDeTitulos indexa por una clave normalizada; se busca por el
-      // mismo camino recorriendo lo devuelto, que son 12 entradas como
-      // mucho.
-      for (const [, valor] of datos) {
-        if (!valor.coverImageUrl) continue;
-        const canonico = (valor.tituloCanonico ?? "").toLowerCase();
-        const buscado = titulo.toLowerCase();
-        if (canonico.includes(buscado) || buscado.includes(canonico)) {
-          caratulas[titulo] = valor.coverImageUrl;
-          break;
-        }
-      }
+      /*
+       * datosDeTitulos indexa por la MISMA clave que se le pide (el
+       * título tal cual, en minúsculas y sin espacios sobrantes) — es lo
+       * que busca dentro, no lo que AniList devuelve. Antes esto
+       * recorría todo lo devuelto comparando por inclusión de texto
+       * contra tituloCanonico (el romaji de AniList), y eso solo
+       * coincide cuando el romaji es igual al título que se escribió.
+       * En cuanto difieren — "Re:ZERO -Starting Life in Another World-"
+       * es "Re:Zero kara Hajimeru Isekai Seikatsu" en romaji, "Kaiju No.
+       * 8" es "Kaijuu 8-gou" — ninguna cadena contiene a la otra y la
+       * carátula se perdía en silencio, aunque el dato sí había llegado.
+       */
+      const valor = datos.get(titulo.toLowerCase().trim());
+      if (valor?.coverImageUrl) caratulas[titulo] = valor.coverImageUrl;
     }
 
     return NextResponse.json(

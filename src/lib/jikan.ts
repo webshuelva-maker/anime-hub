@@ -100,6 +100,7 @@ export async function searchJikanList(term: string): Promise<
     startYear: number | null;
     endYear: number | null;
     genres: string[];
+    studios: string[];
     type: "ANIME";
   }[]
 > {
@@ -126,6 +127,7 @@ export async function searchJikanList(term: string): Promise<
       startYear: m.year ?? (m.aired?.from ? Number(m.aired.from.slice(0, 4)) : null),
       endYear: m.aired?.to ? Number(m.aired.to.slice(0, 4)) : null,
       genres: (m.genres ?? []).map((g) => g.name),
+      studios: (m.studios ?? []).map((s) => s.name),
       type: "ANIME" as const,
     }));
 }
