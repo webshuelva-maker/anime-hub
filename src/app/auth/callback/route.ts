@@ -20,5 +20,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/login?error=No se pudo confirmar el enlace, prueba a iniciar sesión directamente`);
+  /*
+   * Aquí se llega cuando el canje falla, y el motivo casi siempre es el
+   * mismo: el correo se ha abierto en un navegador distinto de aquel
+   * donde se pidió el enlace, así que el secreto del canje (PKCE) no
+   * está. Por eso los correos de confirmación apuntan ahora a
+   * /auth/confirmar, que no depende del navegador. Esta ruta se queda
+   * para los enlaces antiguos que sigan circulando.
+   */
+  const aviso =
+    "Ese enlace tiene que abrirse en el mismo navegador desde el que lo pediste. Vuelve a pedirlo desde aquí y ábrelo en este dispositivo.";
+  return NextResponse.redirect(`${origin}/login?aviso=${encodeURIComponent(aviso)}`);
 }

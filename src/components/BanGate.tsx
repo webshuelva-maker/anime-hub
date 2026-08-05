@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { sancionActiva, tiempoRestante, Sancion } from "@/lib/bans";
 import { escucharMisSanciones } from "@/lib/moderacion";
+import { cerrarSesion } from "@/lib/sesion";
 import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
 import { legalConfig, emailModeracion } from "@/config/legal";
@@ -72,9 +73,8 @@ export function BanGate() {
 
   const permanente = sancion.tipo === "permanente";
 
-  const cerrarSesion = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+  const salir = async () => {
+    await cerrarSesion();
     window.location.href = "/";
   };
 
@@ -128,7 +128,7 @@ export function BanGate() {
 
         <button
           type="button"
-          onClick={cerrarSesion}
+          onClick={salir}
           className="mt-6 w-full rounded-full border border-panel-border px-4 py-2.5 text-sm text-muted transition-colors hover:border-ice/40 hover:text-foreground"
         >
           Cerrar sesión

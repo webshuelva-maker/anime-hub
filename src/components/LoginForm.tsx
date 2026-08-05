@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
 import { playToggle } from "@/lib/sound";
+import { traducirErrorAuth } from "@/lib/erroresAuth";
 
 type Mode = "login" | "signup";
 
@@ -18,12 +19,19 @@ const BENEFITS = [
 
 export function LoginForm() {
   const router = useRouter();
+  // Los avisos que llegan del enlace del correo (caducado, ya usado…)
+  // se leen de la dirección para poder explicarlos aquí.
+  const avisoDeEnlace =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("aviso");
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestSignup, setSuggestSignup] = useState(false);
+  const [suggestReset, setSuggestReset] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
@@ -36,7 +44,7 @@ export function LoginForm() {
     }
     const supabase = createClient();
     await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+      redirectTo: `${window.location.origin}/auth/confirmar?next=/auth/reset-password`,
     });
     // Se muestra el mismo mensaje exista o no esa cuenta — igual que
     // signInWithPassword, esto también podría revelar qué emails están
@@ -48,6 +56,7 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
     setSuggestSignup(false);
+    setSuggestReset(false);
     setLoading(true);
     const supabase = createClient();
 
@@ -56,7 +65,7 @@ export function LoginForm() {
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+          options: { emailRedirectTo: `${window.location.origin}/auth/confirmar` },
         });
         if (signUpError) throw signUpError;
         // Truco conocido de Supabase: si el email YA tiene una cuenta
@@ -66,30 +75,25 @@ export function LoginForm() {
         // diferencia de un registro genuinamente nuevo. Antes esto
         // enseñaba "revisa tu correo" sin que llegara nada de verdad.
         if (signUpData.user && signUpData.user.identities && signUpData.user.identities.length === 0) {
-          setError("Ya hay una cuenta con este email. Prueba a iniciar sesión, o recupera tu contraseña si no la recuerdas.");
+          setError("Ya hay una cuenta con este correo. Cambia arriba a «Iniciar sesión» para entrar.");
+          setSuggestReset(true);
           setMode("login");
         } else {
           setConfirmSent(true);
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) {
-          // Supabase da a propósito el mismo error genérico tanto si la
-          // contraseña está mal como si el email no existe (para no
-          // revelar qué cuentas existen) — así que no podemos saber
-          // CUÁL de las dos es. Lo que sí podemos hacer es ofrecer, sin
-          // afirmarlo como un hecho, la opción de crear cuenta en vez de
-          // solo repetir el error.
-          if (signInError.message.toLowerCase().includes("invalid login credentials")) {
-            setSuggestSignup(true);
-          }
-          throw signInError;
-        }
+        if (signInError) throw signInError;
         router.push("/perfil");
         router.refresh();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Algo ha ido mal. Prueba otra vez.");
+      // Nunca el mensaje crudo de Supabase: viene en inglés y escrito
+      // para quien programa.
+      const t = traducirErrorAuth(err instanceof Error ? err.message : "");
+      setError(t.texto);
+      setSuggestSignup(Boolean(t.ofrecerRegistro) && mode === "login");
+      setSuggestReset(Boolean(t.ofrecerRecuperar) && mode === "login");
     } finally {
       setLoading(false);
     }
@@ -111,9 +115,15 @@ export function LoginForm() {
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="panel rounded-2xl p-6 text-center"
       >
-        <h2 className="font-heading text-lg font-semibold">Revisa tu correo</h2>
-        <p className="mt-2 text-sm text-muted">
-          Te hemos mandado un enlace de confirmación a {email}. Ábrelo para activar tu cuenta.
+        <h2 className="font-heading text-lg font-semibold">Te falta un paso</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          Hemos mandado un correo a <span className="text-foreground">{email}</span>. Ábrelo y pulsa
+          el botón <span className="text-foreground">Confirmar mi cuenta</span>: con eso quedará
+          activada y podrás entrar.
+        </p>
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          Si no aparece en unos minutos, mira en la carpeta de spam o correo no deseado. Hasta que
+          no lo confirmes, al intentar entrar te dirá que falta confirmar el correo.
         </p>
       </motion.div>
     );
@@ -174,6 +184,17 @@ export function LoginForm() {
         transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
         className="panel rounded-2xl p-6 sm:p-8"
       >
+        {avisoDeEnlace && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-4 rounded-xl border border-rumor/30 bg-rumor/5 px-3 py-2 text-xs leading-snug text-foreground/90"
+          >
+            {avisoDeEnlace}
+          </motion.p>
+        )}
+
         <div className="relative mb-6 flex rounded-full border border-panel-border p-1 text-sm">
           {/* Fondo que se desliza de una pestaña a otra, en vez de solo cambiar de color de golpe */}
           <motion.div
@@ -253,19 +274,33 @@ export function LoginForm() {
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.25 }}
                 >
-                  <p className="text-xs text-rumor">{error}</p>
-                  {suggestSignup && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode("signup");
-                        setError(null);
-                        setSuggestSignup(false);
-                      }}
-                      className="mt-1.5 text-xs font-medium text-ice underline hover:text-foreground"
-                    >
-                      ¿Todavía no tienes cuenta con este email? Crear una →
-                    </button>
+                  <p className="text-xs leading-snug text-rumor">{error}</p>
+                  {(suggestSignup || suggestReset) && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {suggestReset && (
+                        <button
+                          type="button"
+                          onClick={handleForgotPassword}
+                          className="text-left text-xs font-medium text-ice underline hover:text-foreground"
+                        >
+                          Mandarme un correo para cambiar la contraseña →
+                        </button>
+                      )}
+                      {suggestSignup && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("signup");
+                            setError(null);
+                            setSuggestSignup(false);
+                            setSuggestReset(false);
+                          }}
+                          className="text-left text-xs font-medium text-ice underline hover:text-foreground"
+                        >
+                          Crear una cuenta con este correo →
+                        </button>
+                      )}
+                    </div>
                   )}
                 </motion.div>
               )}

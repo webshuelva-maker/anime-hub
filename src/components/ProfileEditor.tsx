@@ -10,6 +10,7 @@ import { FavoriteAnimeInput } from "./FavoriteAnimeInput";
 import { Toast } from "./Toast";
 import { clearRenMemory } from "@/lib/renMemory";
 import { createClient } from "@/lib/supabase/client";
+import { cerrarSesion } from "@/lib/sesion";
 import Link from "next/link";
 import { playToggle } from "@/lib/sound";
 
@@ -52,11 +53,18 @@ export function ProfileEditor() {
   }, []);
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    // cerrarSesion() hace dos cosas que signOut() a secas no hacía:
+    // cierra SOLO en este dispositivo (antes echaba también del móvil) y
+    // borra del navegador el nombre, los gustos y lo que Iris recuerda,
+    // que si no se quedaban puestos para la siguiente cuenta que entrara.
+    await cerrarSesion();
     setAccount(null);
-    setToast("Sesión cerrada.");
-    setTimeout(() => setToast(null), 2000);
+    setToast("Sesión cerrada en este dispositivo.");
+    setTimeout(() => {
+      // Se recarga para que toda la app se pinte ya sin los datos del
+      // que acaba de salir, en vez de quedarse con ellos en pantalla.
+      window.location.href = "/login";
+    }, 700);
   };
 
   // Antes se podía cambiar el email o la contraseña sin verificar nada —

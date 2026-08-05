@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v156",
+    fecha: "2026-08-05",
+    titulo: "Arreglos de cuentas y sesión",
+    puntos: [
+      "Cerrar sesión en un dispositivo ya no te echa de los demás.",
+      "Al cambiar de cuenta, el nombre y los gustos de la anterior ya no se quedan puestos.",
+      "Los avisos al entrar o registrarte están en español y dicen qué hacer.",
+      "El enlace de confirmación funciona abras el correo donde lo abras, y al pulsarlo te dice claramente que ha ido bien.",
+    ],
+  },
+  {
     version: "v154",
     fecha: "2026-08-04",
     titulo: "Conectar empieza a funcionar",

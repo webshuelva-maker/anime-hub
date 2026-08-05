@@ -3,6 +3,7 @@
 import { createClient } from "./supabase/client";
 import { getPreferences, savePreferencesLocal, PREFERENCES_CHANGED_EVENT } from "./storage";
 import { getRenMemory, setRenMemoryLocal } from "./renMemory";
+import { comprobarDueno } from "./sesion";
 import { UserPreferences } from "@/types/news";
 
 /**
@@ -92,6 +93,18 @@ export async function pullCloudState(): Promise<boolean> {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return false;
 
+    /*
+     * Lo PRIMERO: ¿esto que hay guardado es de esta cuenta?
+     *
+     * Si no lo es, se borra antes de tocar nada. Colocado aquí y no más
+     * abajo por un motivo concreto: unas líneas más adelante, cuando la
+     * cuenta no tiene fila en la nube (o sea, cuando es nueva), se sube
+     * lo que haya en local. Con el estado del usuario anterior todavía
+     * puesto, eso le copiaba a la cuenta nueva el nombre, los gustos y
+     * lo que Iris recordaba del anterior.
+     */
+    const seLimpio = comprobarDueno(auth.user.id);
+
     const { data, error } = await supabase
       .from("user_state")
       .select("preferences, ren_memory, client_updated_at")
@@ -99,9 +112,18 @@ export async function pullCloudState(): Promise<boolean> {
       .maybeSingle<CloudRow>();
 
     if (error || !data) {
-      // Primera vez con cuenta en este usuario: lo que haya en el
-      // navegador se sube tal cual, para no perder nada de lo aprendido
-      // antes de registrarse.
+      // Cuenta sin nada guardado todavía.
+      //
+      // Si se acaba de limpiar porque el estado era de OTRA persona, no
+      // hay nada que subir: subir ahora sería volver a meter los datos
+      // del anterior en la cuenta de este. Se avisa a la pantalla de que
+      // refresque, que ahora enseña valores de fábrica.
+      if (seLimpio) {
+        window.dispatchEvent(new Event(PREFERENCES_CHANGED_EVENT));
+        return true;
+      }
+      // Caso legítimo: usó la app sin cuenta y ahora se registra. Lo
+      // aprendido es suyo y sube tal cual.
       await pushCloudState();
       return false;
     }
@@ -109,8 +131,11 @@ export async function pullCloudState(): Promise<boolean> {
     const cloudTime = data.client_updated_at ? Date.parse(data.client_updated_at) : 0;
     const localTime = localUpdatedAt();
 
-    if (cloudTime <= localTime) {
+    if (cloudTime <= localTime && !seLimpio) {
       // Lo de este navegador es igual o más nuevo: se sube y listo.
+      // Salvo que se acabe de limpiar: en ese caso lo local son valores
+      // de fábrica con fecha de ahora mismo, y ganarían por ser "más
+      // nuevos" borrándole a esta persona lo que tenía guardado.
       await pushCloudState();
       return false;
     }
