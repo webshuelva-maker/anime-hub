@@ -41,6 +41,23 @@ interface PerfilSocial {
   bio: string | null;
 }
 
+/**
+ * "Quieres coincidir con: Me da igual" quedaba como un campo de
+ * formulario volcado en pantalla. Se redacta como una frase, que es lo
+ * que un perfil debería parecer.
+ */
+function frasePreferencias(busca: string[]): string {
+  // "Me da igual" es como se guardó hasta la v163; "Cualquiera" es lo
+  // que se guarda ahora. Se reconocen los dos para no dejar tirados a los
+  // perfiles creados antes.
+  if (busca.includes("Me da igual") || busca.includes("Cualquiera"))
+    return "Abierto a conocer a cualquiera";
+  const nombres = busca.map((b) => b.toLowerCase());
+  if (nombres.length === 1) return `Quieres conocer a ${nombres[0]}`;
+  const ultimo = nombres[nombres.length - 1];
+  return `Quieres conocer a ${nombres.slice(0, -1).join(", ")} y ${ultimo}`;
+}
+
 function edadDe(fecha: string): number {
   const d = new Date(fecha);
   const hoy = new Date();
@@ -127,11 +144,23 @@ export function PerfilSocialVista({
   return (
     <div className="flex flex-col gap-4">
       {/* --- La ficha, montada igual que la que ven los demás --------- */}
-      <div className="panel overflow-hidden rounded-2xl">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: SUAVE }}
+        className="panel overflow-hidden rounded-2xl"
+      >
         <div className="relative px-6 pb-5 pt-7">
-          {Object.keys(caratulas).length > 0 && (
-            <div
+          {/* El mosaico entra con un fundido cuando llegan las carátulas.
+              Antes aparecía de golpe medio segundo después de la ficha,
+              y ese salto era lo que se veía tosco. */}
+          <AnimatePresence>
+            {Object.keys(caratulas).length > 0 && (
+            <motion.div
               aria-hidden
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
               className="pointer-events-none absolute inset-0 flex overflow-hidden"
               style={{
                 maskImage: "linear-gradient(to bottom, black 0%, transparent 92%)",
@@ -151,8 +180,9 @@ export function PerfilSocialVista({
                     loading="lazy"
                   />
                 ))}
-            </div>
-          )}
+            </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="relative flex items-center gap-4">
             <Avatar avatarId={prefs.avatarId ?? ""} size="xl" rounded="full" />
@@ -161,9 +191,7 @@ export function PerfilSocialVista({
               <p className="mt-0.5 text-sm text-muted">
                 {edadDe(perfil.birthdate)} años · {perfil.gender}
               </p>
-              <p className="mt-2 text-[11px] text-muted">
-                Quieres coincidir con {perfil.looking_for.join(", ").toLowerCase()}
-              </p>
+              <p className="mt-2 text-[11px] text-muted">{frasePreferencias(perfil.looking_for)}</p>
             </div>
           </div>
         </div>
@@ -175,9 +203,12 @@ export function PerfilSocialVista({
                 Lo que enseñas
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {favoritos.map((t) => (
-                  <span
+                {favoritos.map((t, i) => (
+                  <motion.span
                     key={t}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: Math.min(0.08 + i * 0.04, 0.3), ease: SUAVE }}
                     className={`flex items-center gap-2 rounded-full border text-xs ${
                       caratulas[t] ? "py-1 pl-1 pr-3" : "px-2.5 py-1"
                     }`}
@@ -197,15 +228,22 @@ export function PerfilSocialVista({
                       />
                     )}
                     {t}
-                  </span>
+                  </motion.span>
                 ))}
-                {generos.map((g) => (
-                  <span
+                {generos.map((g, i) => (
+                  <motion.span
                     key={g}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.3,
+                      delay: Math.min(0.08 + (favoritos.length + i) * 0.04, 0.36),
+                      ease: SUAVE,
+                    }}
                     className="rounded-full border border-panel-border px-2.5 py-1 text-xs text-muted"
                   >
                     {g}
-                  </span>
+                  </motion.span>
                 ))}
               </div>
             </>
@@ -228,7 +266,7 @@ export function PerfilSocialVista({
             )}
           </p>
         </div>
-      </div>
+      </motion.div>
 
       {/* --- Números ---------------------------------------------------- */}
       <div className="grid grid-cols-3 gap-3">
@@ -236,16 +274,27 @@ export function PerfilSocialVista({
           { valor: numeros.coincidencias, texto: "coincidencias" },
           { valor: numeros.teEsperan, texto: "te han marcado" },
           { valor: numeros.esperando, texto: "esperando respuesta" },
-        ].map((n) => (
-          <div key={n.texto} className="panel rounded-2xl px-3 py-4 text-center">
+        ].map((n, i) => (
+          <motion.div
+            key={n.texto}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.12 + i * 0.06, ease: SUAVE }}
+            className="panel rounded-2xl px-3 py-4 text-center"
+          >
             <p className="font-heading text-2xl font-bold">{n.valor}</p>
             <p className="mt-0.5 text-[11px] leading-tight text-muted">{n.texto}</p>
-          </div>
+          </motion.div>
         ))}
       </div>
 
       {/* --- Editar la descripción ------------------------------------- */}
-      <div className="panel rounded-2xl p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.3, ease: SUAVE }}
+        className="panel rounded-2xl p-6"
+      >
         <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
           Algo sobre ti
         </h2>
@@ -299,7 +348,7 @@ export function PerfilSocialVista({
           </AnimatePresence>
         </div>
         {aviso && <p className="mt-2 text-xs text-rumor">{aviso}</p>}
-      </div>
+      </motion.div>
 
       {/* --- Salir ------------------------------------------------------ */}
       <div className="pt-2">

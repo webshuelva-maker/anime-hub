@@ -54,6 +54,9 @@ export interface Mensaje {
   creado_en: string;
   leido_en: string | null;
   responde_a: string | null;
+  /** Ruta dentro del cubo privado, si el mensaje es una nota de voz. */
+  audio_ruta: string | null;
+  audio_ms: number | null;
 }
 
 export interface Reaccion {
@@ -223,7 +226,9 @@ export async function mensajesCon(otro: string): Promise<Mensaje[]> {
 
   const { data } = await supabase
     .from("social_messages")
-    .select("id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a")
+    .select(
+      "id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a, audio_ruta, audio_ms"
+    )
     .eq("usuario_a", a)
     .eq("usuario_b", b)
     .order("creado_en", { ascending: true });
@@ -433,4 +438,92 @@ export async function alternarReaccion(
     .from("social_message_reactions")
     .insert({ mensaje_id: mensajeId, usuario_id: auth.user.id, emoji });
   return !error;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Notas de voz                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Tope de grabación. Dos minutos es una nota; más allá es un monólogo. */
+export const MAX_NOTA_MS = 120_000;
+
+/**
+ * Sube el audio y crea el mensaje. Devuelve el error en texto o null.
+ *
+ * El orden importa: primero el archivo y después la fila. Si se hiciera
+ * al revés y fallara la subida, quedaría en la conversación un mensaje de
+ * voz que apunta a un audio que no existe — y como los mensajes no se
+ * pueden borrar, se quedaría ahí para siempre.
+ */
+export async function enviarNotaDeVoz(
+  otro: string,
+  audio: Blob,
+  duracionMs: number,
+  respondeA?: string | null
+): Promise<string | null> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return "No hay sesión iniciada.";
+
+  const { a, b } = pareja(auth.user.id, otro);
+  const nombre = `${a}/${b}/${crypto.randomUUID()}.webm`;
+
+  const { error: errorSubida } = await supabase.storage
+    .from("notas-voz")
+    .upload(nombre, audio, { contentType: audio.type || "audio/webm", upsert: false });
+
+  if (errorSubida) {
+    const m = errorSubida.message.toLowerCase();
+    if (m.includes("exceeded") || m.includes("size")) return "La nota es demasiado larga.";
+    if (m.includes("policy") || m.includes("unauthorized")) {
+      return "Ya no puedes escribir en esta conversación.";
+    }
+    if (m.includes("bucket")) {
+      return "Falta crear el almacén de notas de voz en Supabase (el SQL de la v165).";
+    }
+    return "No se ha podido subir la nota.";
+  }
+
+  const { error } = await supabase.from("social_messages").insert({
+    usuario_a: a,
+    usuario_b: b,
+    autor_id: auth.user.id,
+    texto: "",
+    audio_ruta: nombre,
+    audio_ms: Math.round(duracionMs),
+    responde_a: respondeA ?? null,
+  });
+
+  if (error) {
+    // El archivo ya está subido pero el mensaje no ha entrado: se retira
+    // para no dejar audios sueltos que nadie puede oír ni borrar.
+    await supabase.storage.from("notas-voz").remove([nombre]);
+    return "No se ha podido enviar la nota.";
+  }
+  return null;
+}
+
+/**
+ * Enlace temporal para oír una nota. El cubo es privado, así que la
+ * dirección no vale de nada sin firmar y caduca en una hora — se puede
+ * compartir por error sin regalar el audio para siempre.
+ */
+const enlacesAudio = new Map<string, string>();
+
+export async function urlDeNotaDeVoz(ruta: string): Promise<string | null> {
+  const guardado = enlacesAudio.get(ruta);
+  if (guardado) return guardado;
+
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from("notas-voz").createSignedUrl(ruta, 3600);
+  if (error || !data?.signedUrl) return null;
+
+  enlacesAudio.set(ruta, data.signedUrl);
+  return data.signedUrl;
+}
+
+/** mm:ss a partir de milisegundos. */
+export function duracionLegible(ms: number): string {
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }

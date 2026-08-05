@@ -1554,3 +1554,121 @@ begin
   alter publication supabase_realtime add table public.social_message_reactions;
 exception when duplicate_object then null;
 end $$;
+
+-- ============================================================
+--  v164 — "Me da igual" pasa a llamarse "Cualquiera"
+-- ============================================================
+-- Solo cambia el texto, no el significado. "Me da igual" es una respuesta
+-- de formulario y en la ficha se leía como desgana; en un perfil que
+-- otras personas van a leer, eso dice algo que nadie quiso decir.
+--
+-- La app entiende los dos valores, así que este UPDATE no es obligatorio
+-- para que funcione: solo deja los perfiles antiguos con la palabra
+-- nueva.
+-- PRIMERO la función, y luego el renombrado. Al revés habría un rato
+-- —el que se tarde en ejecutar lo segundo— en el que los perfiles ya
+-- dirían 'Cualquiera' y la función seguiría buscando 'Me da igual': a
+-- todo el que hubiera elegido esa opción dejaría de salirle gente.
+create or replace function public.encaja_busqueda(
+  a_genero text, a_busca text[], b_genero text, b_busca text[]
+)
+returns boolean
+language sql
+immutable
+as $$
+  select
+    -- Se aceptan las dos palabras: 'Me da igual' es como se guardaba
+    -- hasta la v163 y 'Cualquiera' como se guarda ahora.
+    ('Me da igual' = any(a_busca) or 'Cualquiera' = any(a_busca) or
+      case b_genero
+        when 'Mujer' then 'Mujeres' = any(a_busca)
+        when 'Hombre' then 'Hombres' = any(a_busca)
+        when 'No binario' then 'Personas no binarias' = any(a_busca)
+        else true
+      end)
+    and
+    ('Me da igual' = any(b_busca) or 'Cualquiera' = any(b_busca) or
+      case a_genero
+        when 'Mujer' then 'Mujeres' = any(b_busca)
+        when 'Hombre' then 'Hombres' = any(b_busca)
+        when 'No binario' then 'Personas no binarias' = any(b_busca)
+        else true
+      end);
+$$;
+
+update public.social_profiles
+   set looking_for = array_replace(looking_for, 'Me da igual', 'Cualquiera')
+ where 'Me da igual' = any(looking_for);
+
+-- ============================================================
+--  v165 — Notas de voz en el chat
+-- ============================================================
+
+-- Un cubo PRIVADO. Nada de público: un cubo público significa que
+-- cualquiera con la dirección del archivo puede oír la conversación de
+-- dos desconocidos, y las direcciones se filtran solas (historial,
+-- registros del servidor, alguien que comparte un enlace sin pensar).
+-- Al ser privado, para oír un audio hay que pedir un enlace firmado que
+-- caduca, y solo lo consigue quien pertenece a esa conversación.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'notas-voz',
+  'notas-voz',
+  false,
+  3145728, -- 3 MB: dos minutos de voz comprimida caben de sobra
+  array['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg']
+)
+on conflict (id) do update
+  set file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+-- Los archivos se guardan como {usuario_a}/{usuario_b}/{id}.webm, con la
+-- pareja ordenada igual que en el resto de tablas. Así el permiso se
+-- puede comprobar leyendo la propia ruta, sin consultar nada más.
+drop policy if exists "Oir notas de mis conversaciones" on storage.objects;
+create policy "Oir notas de mis conversaciones"
+  on storage.objects for select
+  using (
+    bucket_id = 'notas-voz'
+    and auth.uid()::text in (
+      (storage.foldername(name))[1],
+      (storage.foldername(name))[2]
+    )
+    and exists (
+      select 1 from public.social_matches m
+      where m.usuario_a::text = (storage.foldername(name))[1]
+        and m.usuario_b::text = (storage.foldername(name))[2]
+    )
+  );
+
+-- Subir exige lo mismo que escribir: si te han bloqueado o estás
+-- sancionado, tampoco puedes mandar audios.
+drop policy if exists "Subir notas a mis conversaciones" on storage.objects;
+create policy "Subir notas a mis conversaciones"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'notas-voz'
+    and auth.uid()::text in (
+      (storage.foldername(name))[1],
+      (storage.foldername(name))[2]
+    )
+    and public.puede_escribir(
+      ((storage.foldername(name))[1])::uuid,
+      ((storage.foldername(name))[2])::uuid
+    )
+  );
+
+-- Un mensaje pasa a poder ser texto O voz.
+alter table public.social_messages
+  add column if not exists audio_ruta text,
+  add column if not exists audio_ms int;
+
+-- La restricción original exigía texto de 1 a 2000 caracteres, así que
+-- una nota de voz (que no lleva texto) no cabía. Ahora se admite lo uno
+-- o lo otro, pero nunca un mensaje vacío de las dos cosas.
+alter table public.social_messages drop constraint if exists social_messages_texto_check;
+alter table public.social_messages drop constraint if exists social_messages_contenido;
+alter table public.social_messages add constraint social_messages_contenido check (
+  (audio_ruta is not null and char_length(trim(texto)) = 0)
+  or char_length(trim(texto)) between 1 and 2000
+);

@@ -7,6 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { playClick, playError, playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
 import { createClient } from "@/lib/supabase/client";
+import { GrabadorDeVoz, NotaDeVoz } from "./NotasDeVoz";
 import {
   Coincidencia,
   MOTIVOS_DENUNCIA,
@@ -18,6 +19,7 @@ import {
   bloquear,
   denunciar,
   enviarMensaje,
+  enviarNotaDeVoz,
   engancharConversacion,
   marcarConversacionLeida,
   mensajesCon,
@@ -95,6 +97,7 @@ export function ChatConversacion({
   /** El mensaje al que se está respondiendo, si hay alguno. */
   const [respondiendoA, setRespondiendoA] = useState<Mensaje | null>(null);
   const [emojisAbiertos, setEmojisAbiertos] = useState(false);
+  const [grabando, setGrabando] = useState(false);
   const engancheRef = useRef<{ avisarQueEscribo: () => void; cerrar: () => void } | null>(null);
   const finEscribirRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
@@ -409,7 +412,9 @@ export function ChatConversacion({
                               <span className="shrink-0 font-medium">
                                 {citado.autor_id === yo ? "Tú" : con.alias}
                               </span>
-                              <span className="truncate opacity-80">{citado.texto}</span>
+                              <span className="truncate opacity-80">
+                                {citado.audio_ruta ? "Nota de voz" : citado.texto}
+                              </span>
                             </p>
                           );
                         })()}
@@ -426,9 +431,13 @@ export function ChatConversacion({
                           <span className="text-[10px] text-muted">{hora(m.creado_en)}</span>
                         </p>
                       )}
-                      <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
-                        {m.texto}
-                      </p>
+                      {m.audio_ruta ? (
+                        <NotaDeVoz ruta={m.audio_ruta} duracionMs={m.audio_ms} mio={mio} />
+                      ) : (
+                        <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
+                          {m.texto}
+                        </p>
+                      )}
 
                       {/* Reacciones puestas. Las tuyas van marcadas, y
                           volver a pulsar las quita. */}
@@ -585,6 +594,24 @@ export function ChatConversacion({
           )}
         </AnimatePresence>
 
+        {grabando ? (
+          <GrabadorDeVoz
+            onCancelar={() => setGrabando(false)}
+            onListo={async (audio, duracion) => {
+              setGrabando(false);
+              setEnviando(true);
+              const error = await enviarNotaDeVoz(
+                con.user_id,
+                audio,
+                duracion,
+                respondiendoA?.id ?? null
+              );
+              setEnviando(false);
+              if (error) setFallo(error);
+              else setRespondiendoA(null);
+            }}
+          />
+        ) : (
         <div className="relative flex items-end gap-2 rounded-2xl border border-panel-border bg-panel-soft/60 px-3 py-2 transition-colors duration-200 focus-within:border-ice/40">
           <AnimatePresence>
             {emojisAbiertos && (
@@ -644,18 +671,39 @@ export function ChatConversacion({
             placeholder={`Escribe a ${con.alias}`}
             className="max-h-36 flex-1 resize-none bg-transparent py-1 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted"
           />
-          <button
-            type="button"
-            onClick={enviar}
-            disabled={enviando || !texto.trim()}
-            aria-label="Enviar mensaje"
-            className="accent-gradient pulsable mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-25"
-          >
-            ↑
-          </button>
+          {/* El mismo hueco hace de micrófono o de enviar según haya
+              algo escrito. Dos botones fijos ahí obligarían a elegir
+              cuál mirar cada vez. */}
+          {texto.trim() ? (
+            <button
+              type="button"
+              onClick={enviar}
+              disabled={enviando}
+              aria-label="Enviar mensaje"
+              className="accent-gradient pulsable mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-25"
+            >
+              ↑
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setFallo(null);
+                setGrabando(true);
+              }}
+              disabled={enviando}
+              aria-label="Grabar una nota de voz"
+              className="pulsable mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-panel-border text-sm text-muted hover:text-foreground disabled:opacity-30"
+            >
+              🎤
+            </button>
+          )}
         </div>
+        )}
         <p className="mt-1.5 px-1 text-[10px] text-muted">
-          Enter envía · Mayús + Enter salta de línea
+          {grabando
+            ? "Se envía al pulsar Enviar. Máximo dos minutos."
+            : "Enter envía · Mayús + Enter salta de línea"}
         </p>
       </div>
 

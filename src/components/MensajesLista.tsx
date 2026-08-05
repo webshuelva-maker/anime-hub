@@ -111,7 +111,11 @@ export function MensajesLista() {
                       c.sin_leer > 0 ? "text-foreground" : "text-muted"
                     }`}
                   >
-                    {c.ultimo_texto ?? "Decid algo — nadie ha empezado todavía"}
+                    {c.ultimo_texto === null
+                      ? "Decid algo — nadie ha empezado todavía"
+                      : c.ultimo_texto.trim() === ""
+                      ? "Nota de voz"
+                      : c.ultimo_texto}
                   </span>
                   {c.sin_leer > 0 && (
                     <span className="accent-gradient shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white">

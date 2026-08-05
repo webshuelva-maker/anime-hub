@@ -23,6 +23,25 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v165",
+    fecha: "2026-08-05",
+    titulo: "Notas de voz",
+    puntos: [
+      "Graba y manda notas de voz en el chat, de hasta dos minutos.",
+      "Solo las podéis oír vosotros dos: se guardan en privado y el enlace caduca.",
+    ],
+  },
+  {
+    version: "v164",
+    fecha: "2026-08-05",
+    titulo: "Tus favoritos, donde tocaba",
+    puntos: [
+      "Tus animes favoritos aparecen por fin en Tus gustos, con su carátula, y se editan ahí mismo.",
+      "La ficha de Conectar entra con animación en vez de aparecer a trozos.",
+      "En tu perfil, «me da igual» pasa a leerse como una frase y no como una casilla.",
+    ],
+  },
+  {
     version: "v163",
     fecha: "2026-08-05",
     titulo: "Un chat de verdad, y tu perfil como lo ven",

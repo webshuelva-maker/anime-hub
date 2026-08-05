@@ -29,7 +29,7 @@ import { playError, playSuccess } from "@/lib/sound";
  */
 
 const GENDERS = ["Mujer", "Hombre", "No binario", "Prefiero no decirlo"];
-const LOOKING_FOR = ["Mujeres", "Hombres", "Personas no binarias", "Me da igual"];
+const LOOKING_FOR = ["Mujeres", "Hombres", "Personas no binarias", "Cualquiera"];
 
 interface SocialProfile {
   alias: string;

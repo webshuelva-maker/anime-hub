@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { UserPreferences } from "@/types/news";
-import { DEFAULT_PREFERENCES, getPreferences } from "@/lib/storage";
+import { DEFAULT_PREFERENCES, PREFERENCES_CHANGED_EVENT, getPreferences } from "@/lib/storage";
 import { getTopAffinities, removeAnimeInterest } from "@/lib/learning";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -11,6 +11,8 @@ import { playToggle } from "@/lib/sound";
 import { getRenMemory, removeRenMemory } from "@/lib/renMemory";
 import { genreLabel } from "@/lib/genreNames";
 import { siteConfig } from "@/config/site";
+import { FavoriteAnimeInput } from "./FavoriteAnimeInput";
+import { caratulasDe } from "@/lib/conectar";
 
 /**
  * Pantalla de Afinidad: SOLO lo que la app ha aprendido de ti.
@@ -32,6 +34,73 @@ function strengthLabel(pct: number): string {
   if (pct >= 55) return "te gusta bastante";
   if (pct >= 30) return "te gusta";
   return "te llama algo";
+}
+
+/**
+ * Los favoritos, con su carátula.
+ *
+ * Una lista de títulos en texto no se parece en nada a una estantería de
+ * series. Las carátulas ya están descargadas para el feed, así que
+ * enseñarlas aquí no cuesta ninguna petición nueva.
+ */
+function FavoritosConCaratula() {
+  const [titulos, setTitulos] = useState<string[]>([]);
+  const [caratulas, setCaratulas] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const leer = () => setTitulos(getPreferences().favoriteTitles ?? []);
+    const id = setTimeout(leer, 0);
+    // Se relee cuando cambian: el buscador de abajo guarda directamente
+    // en las preferencias y avisa por este evento.
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, leer);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, leer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (titulos.length === 0) return;
+    let vivo = true;
+    void caratulasDe(titulos).then((c) => {
+      if (vivo) setCaratulas((prev) => ({ ...prev, ...c }));
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [titulos]);
+
+  if (titulos.length === 0) {
+    return (
+      <p className="rounded-xl border border-panel-border px-4 py-3 text-xs leading-relaxed text-muted">
+        Todavía no has marcado ninguno. Búscalos aquí abajo: es lo que más cambia tu feed.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      {titulos.map((t, i) => (
+        <motion.div
+          key={t}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.34, delay: Math.min(i * 0.05, 0.3), ease: "easeOut" }}
+          className="w-[86px]"
+        >
+          <div className="aspect-[2/3] overflow-hidden rounded-lg border border-panel-border bg-panel-soft">
+            {caratulas[t] ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={caratulas[t]} alt="" className="h-full w-full object-cover" loading="lazy" />
+            ) : (
+              <div className="h-full w-full animate-pulse bg-panel-border/40" />
+            )}
+          </div>
+          <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-muted">{t}</p>
+        </motion.div>
+      ))}
+    </div>
+  );
 }
 
 function AffinityRow({
@@ -178,7 +247,35 @@ export function PreferencesEditor() {
               Iniciar sesión / Crear cuenta
             </Link>
           </div>
-        ) : !hasLearned ? (
+        ) : (
+          <>
+        {/*
+          Los favoritos, arriba del todo.
+
+          Estaban SOLO en la pantalla de Perfil, así que la página que se
+          llama "Tus gustos" no enseñaba lo que más peso tiene con
+          diferencia al ordenar el feed. Se marcaban en un sitio y no
+          aparecían en el otro, y desde fuera eso parece que no se hayan
+          guardado.
+
+          Van los primeros porque son lo único que eliges tú a mano: todo
+          lo demás de esta página lo ha deducido la app.
+        */}
+        <div className="mb-8">
+          <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
+            Tus favoritos
+          </h2>
+          <p className="mb-4 mt-1 text-[11px] leading-snug text-muted">
+            Los eliges tú, y son lo que más pesa: sus noticias te salen las primeras y son con lo
+            que se te empareja en Conectar.
+          </p>
+          <FavoritosConCaratula />
+          <div className="mt-3">
+            <FavoriteAnimeInput />
+          </div>
+        </div>
+
+        {!hasLearned ? (
           <p className="text-sm text-muted">
             Todavía no hay nada. Dale <span className="ice-text">♡</span> a alguna noticia del feed o
             pregúntale a {siteConfig.assistantName} por una serie, y esto se irá llenando solo.
@@ -237,6 +334,8 @@ export function PreferencesEditor() {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
 
         {topTitles.length > 0 && (
