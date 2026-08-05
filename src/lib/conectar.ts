@@ -30,6 +30,8 @@ export interface PerfilDescubierto {
   generos_comunes: string[];
   estudios_comunes: string[];
   favoritos_comunes: string[];
+  /** Esta persona ya te dijo que sí. Si le dices que sí, hay coincidencia. */
+  te_ha_marcado: boolean;
 }
 
 export interface Coincidencia {
@@ -38,6 +40,19 @@ export interface Coincidencia {
   edad: number;
   avatar_id: string | null;
   desde: string;
+  ultimo_texto: string | null;
+  ultimo_en: string | null;
+  sin_leer: number;
+}
+
+export interface Mensaje {
+  id: string;
+  usuario_a: string;
+  usuario_b: string;
+  autor_id: string;
+  texto: string;
+  creado_en: string;
+  leido_en: string | null;
 }
 
 /**
@@ -168,4 +183,111 @@ export function etiquetaAfinidad(afinidad: number): { texto: string; fuerza: num
   if (afinidad >= 4) return { texto: "Algo en común", fuerza: 0.5 };
   if (afinidad > 0) return { texto: "Algún gusto compartido", fuerza: 0.3 };
   return { texto: "Sin gustos en común todavía", fuerza: 0.1 };
+}
+
+/**
+ * Cuánta gente te ha marcado y todavía no has decidido sobre ella.
+ *
+ * A esas personas les sale su ficha la primera cuando abres Conectar,
+ * así que esto es literalmente "cuántas coincidencias tienes a un toque
+ * de distancia".
+ */
+export async function cuantosTeEsperan(): Promise<number> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("cuantos_te_esperan");
+  if (error) return 0;
+  return (data as number) ?? 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Chat                                                              */
+/* ------------------------------------------------------------------ */
+
+/** Los dos identificadores ordenados, como los guarda la base de datos. */
+function pareja(yo: string, otro: string): { a: string; b: string } {
+  return yo < otro ? { a: yo, b: otro } : { a: otro, b: yo };
+}
+
+export async function mensajesCon(otro: string): Promise<Mensaje[]> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+  const { a, b } = pareja(auth.user.id, otro);
+
+  const { data } = await supabase
+    .from("social_messages")
+    .select("id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en")
+    .eq("usuario_a", a)
+    .eq("usuario_b", b)
+    .order("creado_en", { ascending: true });
+  return (data as Mensaje[]) ?? [];
+}
+
+/** Devuelve el error en texto, o null si se envió. */
+export async function enviarMensaje(otro: string, texto: string): Promise<string | null> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return "No hay sesión iniciada.";
+  const { a, b } = pareja(auth.user.id, otro);
+
+  const { error } = await supabase.from("social_messages").insert({
+    usuario_a: a,
+    usuario_b: b,
+    autor_id: auth.user.id,
+    texto: texto.trim(),
+  });
+  if (!error) return null;
+
+  // Las políticas de la base de datos rechazan el mensaje cuando ya no se
+  // puede escribir (bloqueo, sanción, coincidencia deshecha). Ese rechazo
+  // llega como un error genérico de permisos, así que se traduce.
+  if (error.code === "42501" || error.message.toLowerCase().includes("policy")) {
+    return "Ya no puedes escribir en esta conversación.";
+  }
+  return error.message;
+}
+
+export async function marcarConversacionLeida(otro: string): Promise<void> {
+  try {
+    const supabase = createClient();
+    await supabase.rpc("marcar_conversacion_leida", { otro });
+  } catch {
+    // Si falla, el contador de sin leer se quedará alto un rato. No es
+    // motivo para cortarle el chat a nadie.
+  }
+}
+
+/**
+ * Escucha los mensajes nuevos de una conversación. Devuelve la función
+ * para dejar de escuchar.
+ */
+export function escucharConversacion(
+  yo: string,
+  otro: string,
+  alLlegar: (m: Mensaje) => void
+): () => void {
+  const supabase = createClient();
+  const { a, b } = pareja(yo, otro);
+  const canal = supabase
+    .channel(`chat-${a}-${b}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "social_messages",
+        filter: `usuario_a=eq.${a}`,
+      },
+      (payload) => {
+        const m = payload.new as Mensaje;
+        // El filtro del canal solo admite una columna, así que la otra
+        // mitad de la pareja se comprueba aquí.
+        if (m.usuario_b === b) alLlegar(m);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(canal);
+  };
 }

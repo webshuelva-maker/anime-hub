@@ -23,6 +23,18 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v158",
+    fecha: "2026-08-05",
+    titulo: "Ya podéis hablar",
+    intro: "Conectar deja de acabarse en la coincidencia.",
+    puntos: [
+      "Chat con quien has coincidido, con los mensajes llegando al momento.",
+      "Si alguien te marca, su ficha te sale la primera: ya no hay que esperar a que te toque.",
+      "La descripción del perfil pasa a ser obligatoria, para que haya algo que leer.",
+      "Bloquear y denunciar están siempre a la vista dentro de la conversación.",
+    ],
+  },
+  {
     version: "v157",
     fecha: "2026-08-05",
     titulo: "Conectar se entiende, y tu nombre deja de perderse",

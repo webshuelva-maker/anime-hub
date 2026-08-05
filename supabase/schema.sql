@@ -1194,3 +1194,277 @@ as $$
     )
   order by m.created_at desc;
 $$;
+
+-- ============================================================
+--  v158 — Conectar fase 2: quien te marca sube, y chat
+-- ============================================================
+
+-- Descripción obligatoria y con fondo.
+--
+-- Antes era opcional y de una palabra valía. El resultado eran fichas
+-- que no decían nada de nadie, y sin nada que leer la decisión se toma
+-- por el avatar — que es justo lo contrario de lo que pretende esta
+-- sección. Va como NOT VALID para que los perfiles que ya existen sigan
+-- funcionando: la regla se aplica a lo que se escriba a partir de ahora.
+do $$
+begin
+  alter table public.social_profiles
+    add constraint social_profiles_bio_minima
+    check (bio is not null and char_length(trim(bio)) >= 40) not valid;
+exception when duplicate_object then null;
+end $$;
+
+-- ============================================================
+--  v158 — Quien te ha marcado sale primero
+-- ============================================================
+-- El problema de esperar a que le salgas: con cincuenta personas en la
+-- baraja, que a quien te ha marcado le toque justo tu ficha es cuestión
+-- de suerte, y una coincidencia que depende de la suerte no llega nunca.
+--
+-- Así que la información se usa: si alguien ya te ha marcado, su ficha
+-- salta al principio de tu montón. La coincidencia deja de depender de
+-- que dos personas coincidan en el tiempo — basta con que las dos digan
+-- que sí, en el orden que sea.
+--
+-- Lo que NO se hace: avisar a quien marca de que ha marcado bien. Quien
+-- te marcó no sabe que estás viendo su ficha; solo se entera si le dices
+-- que sí. Eso mantiene el "nadie sabe que le has dicho que no".
+create or replace function public.descubrir_perfiles(limite int default 12)
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  gender text,
+  bio text,
+  avatar_id text,
+  afinidad int,
+  generos_comunes text[],
+  estudios_comunes text[],
+  favoritos_comunes text[],
+  te_ha_marcado boolean
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  yo public.social_profiles%rowtype;
+begin
+  select * into yo from public.social_profiles where social_profiles.user_id = auth.uid();
+  if not found or not yo.is_active then
+    return;
+  end if;
+
+  if exists (select 1 from public.sancion_activa(auth.uid())) then
+    return;
+  end if;
+
+  return query
+  select
+    p.user_id,
+    p.alias,
+    extract(year from age(p.birthdate))::int,
+    p.gender,
+    p.bio,
+    p.avatar_id,
+    public.afinidad_gustos(
+      yo.favoritos, yo.generos, yo.estudios,
+      p.favoritos, p.generos, p.estudios
+    ),
+    array(select unnest(yo.generos) intersect select unnest(p.generos)),
+    array(select unnest(yo.estudios) intersect select unnest(p.estudios)),
+    array(select unnest(yo.favoritos) intersect select unnest(p.favoritos)),
+    exists (
+      select 1 from public.social_decisions d
+      where d.user_id = p.user_id
+        and d.target_id = auth.uid()
+        and d.decision = 'interesa'
+    )
+  from public.social_profiles p
+  where p.user_id <> auth.uid()
+    and p.is_active
+    and not exists (
+      select 1 from public.social_decisions d
+      where d.user_id = auth.uid() and d.target_id = p.user_id
+    )
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = p.user_id)
+         or (b.blocker_id = p.user_id and b.blocked_id = auth.uid())
+    )
+    and not exists (select 1 from public.sancion_activa(p.user_id))
+    and public.encaja_busqueda(yo.gender, yo.looking_for, p.gender, p.looking_for)
+  order by
+    -- Primero, quien ya te ha dicho que sí.
+    exists (
+      select 1 from public.social_decisions d
+      where d.user_id = p.user_id and d.target_id = auth.uid() and d.decision = 'interesa'
+    ) desc,
+    public.afinidad_gustos(
+      yo.favoritos, yo.generos, yo.estudios,
+      p.favoritos, p.generos, p.estudios
+    ) desc,
+    p.created_at desc
+  limit greatest(1, least(coalesce(limite, 12), 30));
+end;
+$$;
+
+-- Cuánta gente te ha marcado y todavía no has decidido sobre ella.
+-- Solo el número: para verlos hay que pasar por la baraja como todo el
+-- mundo, y así no se convierte en una lista de admiradores.
+create or replace function public.cuantos_te_esperan()
+returns int
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::int
+  from public.social_decisions d
+  join public.social_profiles p on p.user_id = d.user_id and p.is_active
+  where d.target_id = auth.uid()
+    and d.decision = 'interesa'
+    and not exists (
+      select 1 from public.social_decisions mia
+      where mia.user_id = auth.uid() and mia.target_id = d.user_id
+    )
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = d.user_id)
+         or (b.blocker_id = d.user_id and b.blocked_id = auth.uid())
+    )
+    and not exists (select 1 from public.sancion_activa(d.user_id));
+$$;
+
+-- ============================================================
+--  v158 — Chat entre coincidencias
+-- ============================================================
+create table if not exists public.social_messages (
+  id uuid default gen_random_uuid() primary key,
+  -- La pareja, siempre ordenada igual que en social_matches: así una
+  -- conversación es una sola cosa y no dos según quién escriba.
+  usuario_a uuid references auth.users on delete cascade not null,
+  usuario_b uuid references auth.users on delete cascade not null,
+  autor_id uuid references auth.users on delete cascade not null,
+  texto text not null check (char_length(trim(texto)) between 1 and 2000),
+  creado_en timestamptz default now() not null,
+  leido_en timestamptz,
+  constraint social_messages_orden check (usuario_a < usuario_b)
+);
+
+create index if not exists social_messages_conv_idx
+  on public.social_messages (usuario_a, usuario_b, creado_en);
+
+alter table public.social_messages enable row level security;
+
+-- ¿Puede esta persona escribir a la otra AHORA MISMO?
+--
+-- Se comprueba en cada mensaje y no solo al abrir la conversación,
+-- porque las condiciones cambian mientras se habla: te pueden bloquear
+-- o sancionar en mitad de un chat. Si eso solo se mirara al abrir, el
+-- bloqueo no cortaría nada hasta que el otro cerrara la pantalla.
+create or replace function public.puede_escribir(a uuid, b uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    auth.uid() in (a, b)
+    and exists (
+      select 1 from public.social_matches m
+      where m.usuario_a = a and m.usuario_b = b
+    )
+    and not exists (
+      select 1 from public.social_blocks bl
+      where (bl.blocker_id = a and bl.blocked_id = b)
+         or (bl.blocker_id = b and bl.blocked_id = a)
+    )
+    and not exists (select 1 from public.sancion_activa(auth.uid()));
+$$;
+
+drop policy if exists "Leer mis conversaciones" on public.social_messages;
+create policy "Leer mis conversaciones"
+  on public.social_messages for select
+  using (auth.uid() in (usuario_a, usuario_b));
+
+drop policy if exists "Escribir en mis conversaciones" on public.social_messages;
+create policy "Escribir en mis conversaciones"
+  on public.social_messages for insert
+  with check (
+    auth.uid() = autor_id
+    and public.puede_escribir(usuario_a, usuario_b)
+  );
+
+-- Nadie edita ni borra mensajes, ni los suyos: en una conversación entre
+-- desconocidos, poder borrar lo que acabas de decir es poder acosar y
+-- luego hacer desaparecer la prueba. Si hay denuncia, el mensaje sigue.
+
+create or replace function public.marcar_conversacion_leida(otro uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.social_messages
+     set leido_en = now()
+   where usuario_a = least(auth.uid(), otro)
+     and usuario_b = greatest(auth.uid(), otro)
+     and autor_id = otro
+     and leido_en is null;
+$$;
+
+-- Coincidencias con lo necesario para pintar la lista de chats: último
+-- mensaje, cuándo, y cuántos sin leer.
+create or replace function public.mis_coincidencias()
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  avatar_id text,
+  desde timestamptz,
+  ultimo_texto text,
+  ultimo_en timestamptz,
+  sin_leer int
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.user_id,
+    p.alias,
+    extract(year from age(p.birthdate))::int,
+    p.avatar_id,
+    m.created_at,
+    (select ms.texto from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+      order by ms.creado_en desc limit 1),
+    (select ms.creado_en from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+      order by ms.creado_en desc limit 1),
+    (select count(*)::int from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and ms.autor_id <> auth.uid() and ms.leido_en is null)
+  from public.social_matches m
+  join public.social_profiles p
+    on p.user_id = case when m.usuario_a = auth.uid() then m.usuario_b else m.usuario_a end
+  where auth.uid() in (m.usuario_a, m.usuario_b)
+    and p.is_active
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = p.user_id)
+         or (b.blocker_id = p.user_id and b.blocked_id = auth.uid())
+    )
+  order by coalesce(
+    (select ms.creado_en from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+      order by ms.creado_en desc limit 1),
+    m.created_at
+  ) desc;
+$$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.social_messages;
+exception when duplicate_object then null;
+end $$;

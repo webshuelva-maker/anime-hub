@@ -143,6 +143,20 @@ export function SocialOnboarding() {
     if (age > 120) return setError("Esa fecha no parece correcta.");
     if (!gender) return setError("Elige una opción en «cómo te identificas».");
     if (lookingFor.length === 0) return setError("Elige con quién quieres coincidir.");
+    /*
+     * La descripción pasa a ser obligatoria y con un mínimo real.
+     *
+     * Siendo opcional, casi nadie la escribía, y sin nada que leer la
+     * decisión se toma mirando el avatar — justo lo contrario de lo que
+     * pretende esta sección, que empareja por gustos. Cuarenta
+     * caracteres es poco para escribir y suficiente para que sea una
+     * frase y no una palabra suelta.
+     */
+    if (bio.trim().length < 40) {
+      return setError(
+        "Escribe algo sobre ti, al menos una frase. Es lo único que las demás personas van a poder leer antes de decidir."
+      );
+    }
     if (!accepted) return setError("Tienes que aceptar las normas de convivencia para entrar.");
 
     setSaving(true);
@@ -421,15 +435,24 @@ export function SocialOnboarding() {
           ))}
         </div>
 
-        <label className="mt-6 block text-sm font-medium">Algo sobre ti (opcional)</label>
+        <label className="mt-6 block text-sm font-medium">Algo sobre ti</label>
+        <p className="mt-1 text-xs leading-snug text-muted">
+          Es lo único que las demás personas pueden leer de ti antes de decidir. Cuenta qué estás
+          viendo ahora, qué serie no te cansas de recomendar o qué buscas aquí.
+        </p>
         <textarea
           value={bio}
           onChange={(e) => setBio(e.target.value)}
           maxLength={280}
-          rows={3}
-          placeholder="Qué estás viendo ahora, qué te gusta…"
+          rows={4}
+          placeholder="Ej.: Llevo el verano con Frieren y me ha destrozado. Me van las series lentas y los finales tristes. Busco gente con quien comentar capítulos según salen."
           className="mt-2 w-full resize-none rounded-xl border border-panel-border bg-panel-soft/50 px-3 py-2 text-sm outline-none focus:border-ice/50"
         />
+        <p className="mt-1 text-right text-[11px] text-muted">
+          {bio.trim().length < 40
+            ? `Te faltan ${40 - bio.trim().length} caracteres`
+            : `${bio.length}/280`}
+        </p>
 
         <div className="mt-6">
           <CheckBox checked={accepted} onChange={setAccepted}>
