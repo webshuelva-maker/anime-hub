@@ -57,6 +57,17 @@ export interface JikanNewsItem {
 interface Respuesta {
   ok: boolean;
   datos: unknown | null;
+  /*
+   * Qué ha pasado exactamente, en corto.
+   *
+   * Existe porque diagnosticar esto a ciegas ya ha costado dos intentos
+   * fallidos. Un "no se ha podido" sin motivo obliga a adivinar: 429 (vas
+   * muy rápido), 403 (te está bloqueando), tiempo agotado (va lento o no
+   * hay salida a internet) y error de red son cuatro problemas distintos
+   * con cuatro soluciones distintas, y se arreglan en un intento si se
+   * sabe cuál es.
+   */
+  motivo: string | null;
 }
 
 async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
@@ -67,27 +78,38 @@ async function pedir(path: string, timeoutMs: number): Promise<Respuesta> {
       signal: controller.signal,
       headers: { Accept: "application/json", "User-Agent": "AnimeHub/1.0" },
     });
-    if (res.status === 429) return { ok: false, datos: null };
-    if (!res.ok) {
+    if (res.status === 429) return { ok: false, datos: null, motivo: "429 demasiadas peticiones" };
+    if (res.status === 404) {
       // Un 404 SÍ es una respuesta válida: significa que no hay nada.
-      return { ok: res.status === 404, datos: null };
+      return { ok: true, datos: null, motivo: null };
     }
-    return { ok: true, datos: await res.json() };
-  } catch {
-    return { ok: false, datos: null };
+    if (!res.ok) return { ok: false, datos: null, motivo: `respuesta ${res.status}` };
+    return { ok: true, datos: await res.json(), motivo: null };
+  } catch (e) {
+    const nombre = e instanceof Error ? e.name : "";
+    const mensaje = e instanceof Error ? e.message : "";
+    return {
+      ok: false,
+      datos: null,
+      motivo:
+        nombre === "AbortError"
+          ? `sin respuesta en ${timeoutMs / 1000}s`
+          : `no se pudo conectar (${mensaje.slice(0, 60) || nombre || "desconocido"})`,
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export async function getJsonJikan(path: string, timeoutMs = 6000): Promise<Respuesta> {
+export async function getJsonJikan(path: string, timeoutMs = 9000): Promise<Respuesta> {
   const primera = await pedir(path, timeoutMs);
-  if (primera.ok || primera.datos !== null) return primera;
+  if (primera.ok) return primera;
 
   // Un solo reintento, y esperando de verdad: reintentar al instante
   // vuelve a chocar con el mismo límite.
   await new Promise((r) => setTimeout(r, 1200));
-  return pedir(path, timeoutMs);
+  const segunda = await pedir(path, timeoutMs);
+  return segunda.ok ? segunda : { ...segunda, motivo: `${segunda.motivo} (2 intentos)` };
 }
 
 async function getJson(path: string, timeoutMs = 6000): Promise<unknown | null> {
@@ -211,10 +233,10 @@ interface RawJikanNews {
 export async function getJikanNewsConEstado(
   malId: number,
   limit = 5
-): Promise<{ ok: boolean; noticias: JikanNewsItem[] }> {
+): Promise<{ ok: boolean; noticias: JikanNewsItem[]; motivo: string | null }> {
   const res = await getJsonJikan(`/anime/${malId}/news`);
   const data = res.datos as { data?: RawJikanNews[] } | null;
-  return { ok: res.ok, noticias: mapearNoticias(data?.data ?? [], limit) };
+  return { ok: res.ok, noticias: mapearNoticias(data?.data ?? [], limit), motivo: res.motivo };
 }
 
 /** Noticias que MyAnimeList tiene publicadas sobre ese anime concreto. */

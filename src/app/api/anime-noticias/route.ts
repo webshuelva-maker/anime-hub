@@ -60,15 +60,21 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const ficha = Number.isFinite(malIdDado) && malIdDado > 0
-      ? { malId: malIdDado, title: titulo, url: null as string | null }
-      : await searchJikanAnime(titulo);
+    const ficha =
+      Number.isFinite(malIdDado) && malIdDado > 0
+        ? { malId: malIdDado, title: titulo, url: null as string | null }
+        : await searchJikanAnime(titulo);
+
     if (!ficha) {
       // No se guarda: puede que la consulta ni siquiera se haya hecho.
-      return NextResponse.json({ noticias: [], fallo: true });
+      return NextResponse.json({
+        noticias: [],
+        fallo: true,
+        motivo: "no se encontró la serie en MyAnimeList",
+      });
     }
 
-    const { ok, noticias } = await getJikanNewsConEstado(ficha.malId, 8);
+    const { ok, noticias, motivo } = await getJikanNewsConEstado(ficha.malId, 8);
 
     /*
      * Solo se guarda lo que ES una respuesta.
@@ -91,11 +97,21 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { noticias, serie: ficha.title, malUrl: ficha.url, fallo: !ok },
+      {
+        noticias,
+        serie: ficha.title,
+        malUrl: ficha.url,
+        fallo: !ok,
+        motivo: ok ? null : `${motivo ?? "desconocido"} · id ${ficha.malId}`,
+      },
       { headers: { "Cache-Control": ok ? "public, max-age=3600" : "no-store" } }
     );
-  } catch {
+  } catch (e) {
     // Que falle esto no puede romper la búsqueda: es un extra.
-    return NextResponse.json({ noticias: [], fallo: true });
+    return NextResponse.json({
+      noticias: [],
+      fallo: true,
+      motivo: e instanceof Error ? e.message.slice(0, 80) : "error inesperado",
+    });
   }
 }

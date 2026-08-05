@@ -23,6 +23,14 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v182",
+    fecha: "2026-08-05",
+    titulo: "Cuando algo falla, ahora dice por qué",
+    puntos: [
+      "Si no se puede consultar el archivo de noticias, se indica el motivo concreto en vez de un aviso genérico.",
+    ],
+  },
+  {
     version: "v181",
     fecha: "2026-08-05",
     titulo: "El archivo de noticias, ahora sí",

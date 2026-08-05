@@ -44,6 +44,7 @@ export function NoticiasDeArchivo({
   const [noticias, setNoticias] = useState<NoticiaMal[]>([]);
   const [cargando, setCargando] = useState(true);
   const [fallo, setFallo] = useState(false);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -58,15 +59,21 @@ export function NoticiasDeArchivo({
             malId ? `&malId=${malId}` : ""
           }`
         );
-        const json = (await res.json()) as { noticias?: NoticiaMal[]; fallo?: boolean };
+        const json = (await res.json()) as {
+          noticias?: NoticiaMal[];
+          fallo?: boolean;
+          motivo?: string | null;
+        };
         if (vivo) {
           setNoticias(json.noticias ?? []);
           setFallo(Boolean(json.fallo));
+          setMotivo(json.motivo ?? null);
         }
       } catch {
         if (vivo) {
           setNoticias([]);
           setFallo(true);
+          setMotivo("no se pudo llamar al servidor de la app");
         }
       } finally {
         if (vivo) setCargando(false);
@@ -96,9 +103,15 @@ export function NoticiasDeArchivo({
     if (!fallo) return null;
     return (
       <div className="mt-8 flex items-center gap-3 rounded-xl border border-panel-border px-4 py-3">
-        <p className="flex-1 text-xs leading-snug text-muted">
-          No se ha podido consultar el archivo de MyAnimeList. Suele ser cosa de un momento.
-        </p>
+        <div className="flex-1">
+          <p className="text-xs leading-snug text-muted">
+            No se ha podido consultar el archivo de MyAnimeList.
+          </p>
+          {/* El motivo técnico, a la vista. Es feo, pero un fallo mudo
+              cuesta tres versiones de adivinanzas y este texto lo
+              resuelve en una. */}
+          {motivo && <p className="mt-0.5 font-mono text-[10px] text-muted/70">{motivo}</p>}
+        </div>
         <button
           type="button"
           onClick={() => setIntento((n) => n + 1)}
