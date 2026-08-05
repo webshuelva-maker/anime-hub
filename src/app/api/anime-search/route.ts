@@ -4,6 +4,7 @@ import { searchJikanList } from "@/lib/jikan";
 import { searchKitsu } from "@/lib/kitsu";
 import {
   MINIMO_COINCIDENCIA,
+  acortarConsulta,
   nucleoDeTitulo,
   puntuarCoincidencia,
 } from "@/lib/coincidenciaTitulos";
@@ -11,52 +12,66 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
 
-export async function GET(req: NextRequest) {
-  const term = req.nextUrl.searchParams.get("q") ?? "";
+type Resultado = Awaited<ReturnType<typeof searchAnimeDatabase>>["results"][number];
+
+/** Pregunta a las tres bases y devuelve lo que encaja con el término. */
+async function buscarEn(term: string): Promise<{ resultados: Resultado[]; debug: string }> {
   /*
-   * Se pregunta a las DOS bases a la vez y se juntan los resultados.
+   * Se pregunta a las TRES bases a la vez y se juntan los resultados.
    *
    * En cascada no bastaba: AniList limita las peticiones por minuto y la
    * carga del feed consume unas cuantas, así que a veces respondía "sin
    * resultados" en lugar de con un error, y entonces ni siquiera se
-   * llegaba a consultar la segunda. Preguntando a las dos siempre, que
+   * llegaba a consultar la segunda. Preguntando a las tres siempre, que
    * una falle o esté limitada deja de importar.
-   *
-   * AniList va primero en la lista porque sus títulos y carátulas
-   * encajan mejor con el resto de la app; MyAnimeList añade lo que
-   * falte, sin repetir.
    */
-  const [anilist, mal, kitsu] = await Promise.all([
-    searchAnimeDatabase(term),
-    searchJikanList(term).catch(() => []),
-    searchKitsu(term).catch(() => []),
-  ]);
+  /*
+   * Se busca por el nombre de la obra, no por la frase entera.
+   *
+   * Al pulsar una noticia, el buscador se rellena con el titular
+   * completo. A una base de datos de anime no se le puede preguntar por
+   * un titular: busca títulos y devuelve cero, y por eso desaparecía el
+   * bloque de Contenido justo al abrir una noticia.
+   *
+   * Se prueba primero con lo escrito tal cual (que es lo bueno cuando se
+   * teclea "Re:Zero" a mano) y, si no vuelve nada, se reintenta con la
+   * versión recortada. Ese segundo intento solo ocurre cuando el primero
+   * ha fallado, así que no dobla las peticiones en el caso normal.
+   */
+  const corta = acortarConsulta(term);
+
+  const preguntar = async (consulta: string) =>
+    Promise.all([
+      searchAnimeDatabase(consulta),
+      searchJikanList(consulta).catch(() => []),
+      searchKitsu(consulta).catch(() => []),
+    ]);
+
+  let [anilist, mal, kitsu] = await preguntar(term);
+
+  if (
+    anilist.results.length + mal.length + kitsu.length === 0 &&
+    corta.length >= 3 &&
+    corta.toLowerCase() !== term.trim().toLowerCase()
+  ) {
+    [anilist, mal, kitsu] = await preguntar(corta);
+  }
 
   /*
-   * Quitar repetidos DE VERDAD.
+   * Quitar repetidos DE VERDAD: la clave es NÚCLEO + FORMATO + AÑO.
    *
-   * Antes la clave era el título entero sin espacios ni signos. Eso solo
-   * pilla los repetidos que se escriben exactamente igual, y estas tres
-   * bases de datos casi nunca coinciden en cómo llaman a una serie:
-   *
-   *   AniList  → "Re:ZERO -Starting Life in Another World-"
-   *   MAL      → "Re:Zero kara Hajimeru Isekai Seikatsu"
-   *   Kitsu    → "Re:Zero - Starting Life in Another World"
-   *
-   * Tres textos distintos, la misma serie, y las tres se colaban en la
-   * lista. De ahí el montón de entradas casi iguales.
-   *
-   * La clave nueva es NÚCLEO + FORMATO + AÑO. El núcleo es el nombre de
-   * la franquicia sin subtítulo, así que los tres ejemplos de arriba dan
-   * "re zero" + "TV" + 2016 y se quedan en uno. Y como el formato y el
-   * año entran en la clave, la serie, la película y el especial siguen
-   * siendo entradas distintas, que es lo correcto: son obras distintas.
+   * Las tres bases casi nunca llaman igual a la misma serie ("Re:ZERO
+   * -Starting Life in Another World-", "Re:Zero kara Hajimeru Isekai
+   * Seikatsu", "Re:Zero - Starting Life in Another World"), así que
+   * comparar el título entero dejaba pasar las tres. Con el núcleo se
+   * quedan en una, pero la serie, la película y el especial siguen
+   * separadas: son obras distintas.
    */
-  const claveDe = (r: (typeof anilist.results)[number]) =>
+  const claveDe = (r: Resultado) =>
     [nucleoDeTitulo(r.title), r.format ?? "?", r.startYear ?? "?"].join("|");
 
   const vistos = new Set<string>();
-  const juntos: typeof anilist.results = [];
+  const juntos: Resultado[] = [];
   for (const lista of [anilist.results, mal, kitsu]) {
     for (const r of lista) {
       const clave = claveDe(r);
@@ -67,26 +82,11 @@ export async function GET(req: NextRequest) {
   }
 
   /*
-   * Se ordena por parecido con lo buscado y se tira lo que no llega al
-   * listón.
-   *
-   * Antes se devolvían tal cual, en el orden en que venían de cada base:
-   * si AniList no encontraba nada (le pasa con los títulos oficiales
-   * largos y con puntuación), el primer resultado que se enseñaba era el
-   * que le sonara de lejos a MyAnimeList. Así es como buscando Re:ZERO
-   * salía "How a Realist Hero Rebuilt the Kingdom" — y encima como ficha
-   * principal, que es la que usa el resto de la pantalla.
-   */
-  /*
-   * Se ordena por parecido y, a igualdad, la serie de televisión va
-   * primero.
-   *
-   * Ese desempate importa más de lo que parece: buscando el nombre de
-   * una franquicia, la obra que la persona tiene en la cabeza es
-   * prácticamente siempre la serie, no un especial de siete minutos ni
-   * un recopilatorio. Y la primera de la lista es además la que usa el
-   * resto de la pantalla (el botón de seguir, el archivo de noticias),
-   * así que acertar aquí arregla tres cosas de golpe.
+   * A igualdad de parecido, la serie de televisión va primero: buscando
+   * el nombre de una franquicia, la obra que la persona tiene en la
+   * cabeza es casi siempre la serie, no un especial de siete minutos. Y
+   * la primera es la que usa el resto de la pantalla (el botón de seguir
+   * y el archivo de noticias), así que acertar aquí arregla tres cosas.
    */
   const pesoFormato = (formato: string | null): number => {
     const f = (formato ?? "").toUpperCase();
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     return 0;
   };
 
-  const relevantes = juntos
+  const resultados = juntos
     .map((r) => ({ r, puntos: puntuarCoincidencia(term, r.title) }))
     .filter(({ puntos }) => puntos >= MINIMO_COINCIDENCIA)
     .sort(
@@ -107,18 +107,48 @@ export async function GET(req: NextRequest) {
     )
     .map(({ r }) => r);
 
-  const fuentes = [
-    anilist.results.length > 0 ? "anilist" : null,
-    mal.length > 0 ? "myanimelist" : null,
-    kitsu.length > 0 ? "kitsu" : null,
-  ].filter(Boolean);
+  return {
+    resultados,
+    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes`,
+  };
+}
+
+export async function GET(req: NextRequest) {
+  const term = (req.nextUrl.searchParams.get("q") ?? "").trim();
+  if (!term) return NextResponse.json({ results: [], fuente: "ninguna", debug: "sin término" });
+
+  const primera = await buscarEn(term);
+
+  /*
+   * Segundo intento con el nombre corto.
+   *
+   * Se puede acabar buscando el TITULAR entero en vez del nombre de la
+   * serie ("Re:ZERO -Starting Life in Another World- proseguirá con el
+   * arco The Recapture en su temporada 4"), y con esa frase ninguna base
+   * de datos encuentra nada: buscan títulos de obra, no frases. Antes eso
+   * dejaba la búsqueda sin ficha aunque la serie fuera famosísima.
+   *
+   * Solo se reintenta cuando el primer intento vuelve vacío, así que una
+   * búsqueda normal no gasta ni una petición de más.
+   */
+  const corta = acortarConsulta(term);
+  if (primera.resultados.length === 0 && corta && corta.toLowerCase() !== term.toLowerCase()) {
+    const segunda = await buscarEn(corta);
+    if (segunda.resultados.length > 0) {
+      return NextResponse.json({
+        results: segunda.resultados.slice(0, 10),
+        fuente: "segundo intento",
+        terminoUsado: corta,
+        debug: `1º "${term}" → 0 | 2º "${corta}" → ${segunda.debug}`,
+      });
+    }
+  }
 
   return NextResponse.json({
-    results: relevantes.slice(0, 10),
-    fuente: fuentes.length > 0 ? fuentes.join("+") : "ninguna",
-    // El diagnóstico va SIEMPRE en la respuesta. Llevamos varias vueltas
-    // adivinando por qué una búsqueda vuelve vacía; con esto, la app
-    // puede enseñar exactamente qué contestó cada base de datos.
-    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} resultado(s) | kitsu: ${kitsu.length} resultado(s) | ${juntos.length} juntos, ${relevantes.length} relevantes`,
+    results: primera.resultados.slice(0, 10),
+    fuente: primera.resultados.length > 0 ? "directa" : "ninguna",
+    // El diagnóstico va SIEMPRE en la respuesta: llevamos varias vueltas
+    // adivinando por qué una búsqueda vuelve vacía.
+    debug: primera.debug,
   });
 }

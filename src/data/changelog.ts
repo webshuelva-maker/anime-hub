@@ -23,6 +23,14 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v177",
+    fecha: "2026-08-05",
+    titulo: "La ficha vuelve al pulsar una noticia",
+    puntos: [
+      "Al buscar desde el titular de una noticia vuelve a salir la ficha de la serie.",
+    ],
+  },
+  {
     version: "v176",
     fecha: "2026-08-05",
     titulo: "Buscar deja de ser un lío",
