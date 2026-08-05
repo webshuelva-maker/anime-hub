@@ -345,9 +345,27 @@ export function GrabadorDeVoz({
               suma += d * d;
             }
             const rms = Math.sqrt(suma / muestras.length);
-            // Se estira porque una voz normal se mueve por valores bajos
-            // y sin esto la onda casi no subiría.
-            return Math.min(1, rms * 3.2);
+
+            /*
+             * Escala en decibelios, NO lineal.
+             *
+             * Antes era `rms * 3.2`. El problema: hablando normal, un
+             * micrófono de móvil da valores de 0,02 a 0,08 — multiplicado
+             * por 3,2 se queda entre 0,06 y 0,26, o sea barras casi
+             * planas. Para llegar al máximo había que dar un valor de
+             * 0,31, que es literalmente gritar. Ese era el motivo de
+             * tener que levantar la voz para que la onda se moviera.
+             *
+             * El oído percibe el volumen en escala logarítmica, y así es
+             * como lo miden las apps de mensajería. Con este mapeo, una
+             * voz normal (unos -30 dB) llena algo más de la mitad de la
+             * barra y un susurro ya se nota.
+             */
+            const db = 20 * Math.log10(Math.max(rms, 1e-6));
+            const SILENCIO_DB = -55; // por debajo, barra al mínimo
+            const FUERTE_DB = -12; // a partir de aquí, barra llena
+            const nivel = (db - SILENCIO_DB) / (FUERTE_DB - SILENCIO_DB);
+            return Math.max(0, Math.min(1, nivel));
           };
         }
       } catch {
@@ -581,6 +599,9 @@ function RevisarNota({
 }) {
   const [sonando, setSonando] = useState(false);
   const [progreso, setProgreso] = useState(0);
+  // Espejo del progreso para poder leerlo dentro del bucle sin
+  // reiniciarlo en cada fotograma.
+  const progresoRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -588,6 +609,7 @@ function RevisarNota({
     audio.onended = () => {
       setSonando(false);
       setProgreso(0);
+      progresoRef.current = 0;
     };
     audioRef.current = audio;
     return () => {
@@ -602,16 +624,38 @@ function RevisarNota({
   useEffect(() => {
     if (!sonando) return;
     let cuadro = 0;
+
+    /*
+     * La duración se toma de lo que midió el cronómetro al grabar y no de
+     * audio.duration: en los audios de MediaRecorder el navegador dice
+     * que la duración es Infinity hasta recorrer el archivo entero.
+     *
+     * Y el AVANCE no se fía solo de audio.currentTime. En los audios
+     * grabados con MediaRecorder (sin metadatos de duración) hay
+     * navegadores que dejan currentTime clavado en 0 aunque el sonido se
+     * esté oyendo: por eso la barra no se movía y parecía arreglarse al
+     * pausar y volver a dar, que era lo único que la empujaba un poco.
+     *
+     * Así que se lleva también un reloj propio desde que se pulsa play.
+     * Si currentTime avanza, manda él (es el dato exacto); si no se
+     * mueve, tira el reloj. En los dos casos la barra avanza.
+     */
+    const total = duracionMs / 1000;
+    const inicio = performance.now();
+    const desde = progresoRef.current * total * 1000;
+    let currentTimeSirve = false;
+
     const paso = () => {
       const audio = audioRef.current;
-      /*
-       * La duración se toma de lo que midió el cronómetro al grabar y no
-       * de audio.duration: en los audios de MediaRecorder, Chrome dice
-       * que la duración es Infinity hasta que el archivo se recorre
-       * entero, y con eso la barra no avanzaría.
-       */
-      const total = duracionMs / 1000;
-      if (audio && total > 0) setProgreso(Math.min(1, audio.currentTime / total));
+      if (audio && total > 0) {
+        if (audio.currentTime > 0.15) currentTimeSirve = true;
+        const segundos = currentTimeSirve
+          ? audio.currentTime
+          : (desde + (performance.now() - inicio)) / 1000;
+        const p = Math.min(1, segundos / total);
+        progresoRef.current = p;
+        setProgreso(p);
+      }
       cuadro = requestAnimationFrame(paso);
     };
     cuadro = requestAnimationFrame(paso);
@@ -694,6 +738,9 @@ export function NotaDeVoz({
 }) {
   const [sonando, setSonando] = useState(false);
   const [progreso, setProgreso] = useState(0);
+  // Espejo del progreso, para poder leerlo dentro del bucle sin
+  // reiniciarlo en cada fotograma.
+  const progresoRef = useRef(0);
   const [cargando, setCargando] = useState(false);
   const [velocidad, setVelocidad] = useState<number>(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -711,6 +758,18 @@ export function NotaDeVoz({
   useEffect(() => {
     if (!sonando) return;
     let cuadro = 0;
+
+    /*
+     * Igual que en el reproductor del borrador: no basta con leer
+     * audio.currentTime. En los audios grabados con MediaRecorder hay
+     * navegadores que lo dejan clavado en 0 aunque el sonido se oiga, y
+     * entonces la barra no se movía. Se lleva un reloj propio de
+     * respaldo: si currentTime avanza manda él, y si no, el reloj.
+     */
+    const inicio = performance.now();
+    const desde = progresoRef.current;
+    let currentTimeSirve = false;
+
     const paso = () => {
       const audio = audioRef.current;
       if (audio) {
@@ -718,7 +777,13 @@ export function NotaDeVoz({
         // los audios de MediaRecorder no siempre lo es.
         const total = duracionMs ? duracionMs / 1000 : audio.duration;
         if (total && Number.isFinite(total)) {
-          setProgreso(Math.min(1, audio.currentTime / total));
+          if (audio.currentTime > 0.15) currentTimeSirve = true;
+          const segundos = currentTimeSirve
+            ? audio.currentTime
+            : desde * total + (performance.now() - inicio) / 1000;
+          const p = Math.min(1, segundos / total);
+          progresoRef.current = p;
+          setProgreso(p);
         }
       }
       cuadro = requestAnimationFrame(paso);

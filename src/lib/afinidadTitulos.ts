@@ -30,7 +30,21 @@ import { boostCategories } from "./learning";
  * con las manos vacías y no se habrían vuelto a mirar nunca. Subiendo la
  * versión se repasan una vez más, ya con la consulta correcta.
  */
-const CLAVE = "anime-hub:afinidad-rellenada:v2";
+/*
+ * OJO AL NÚMERO DE VERSIÓN.
+ *
+ * Aquí se anotan los títulos ya intentados para no volver a preguntar
+ * por ellos. El problema: cuando se arregla la consulta que fallaba, los
+ * títulos que se intentaron con la versión rota siguen marcados y NUNCA
+ * se reintentan — el arreglo queda hecho pero sin efecto, y desde fuera
+ * parece que no se ha arreglado nada. Pasó exactamente eso con los
+ * estudios: se corrigió la consulta y la sección seguía casi vacía.
+ *
+ * Así que cada vez que cambie algo de cómo se piden estos datos, hay que
+ * SUBIR este número. Eso borra la lista de intentados y da una
+ * oportunidad más a los títulos que ya estaban guardados.
+ */
+const CLAVE = "anime-hub:afinidad-rellenada:v3";
 
 function yaRevisados(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -39,6 +53,31 @@ function yaRevisados(): Set<string> {
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
   } catch {
     return new Set();
+  }
+}
+
+const CLAVE_INTENTOS = "anime-hub:afinidad-intentos:v1";
+const MAX_INTENTOS = 3;
+
+/**
+ * Suma un intento fallido a cada título y devuelve los que ya han
+ * agotado los reintentos, para darlos por perdidos.
+ */
+function sumarIntentoFallido(titulos: string[]): string[] {
+  if (typeof window === "undefined" || titulos.length === 0) return [];
+  try {
+    const raw = window.localStorage.getItem(CLAVE_INTENTOS);
+    const cuenta: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const agotados: string[] = [];
+    for (const t of titulos) {
+      const k = t.toLowerCase();
+      cuenta[k] = (cuenta[k] ?? 0) + 1;
+      if (cuenta[k] >= MAX_INTENTOS) agotados.push(t);
+    }
+    window.localStorage.setItem(CLAVE_INTENTOS, JSON.stringify(cuenta));
+    return agotados;
+  } catch {
+    return [];
   }
 }
 
@@ -106,10 +145,28 @@ export async function rellenarAfinidadPendiente(): Promise<boolean> {
       algo = true;
     }
 
-    // Se anotan TODOS los pedidos, hayan dado datos o no: si AniList no
-    // conoce un título, volver a preguntarle en cada visita no lo va a
-    // arreglar y solo gasta peticiones.
-    anotarRevisado(pendientes);
+    /*
+     * Solo se dan por revisados los que SÍ han dado datos.
+     *
+     * Antes se anotaban todos, hubieran servido o no, con el argumento de
+     * no gastar peticiones en títulos que AniList no conoce. El efecto
+     * secundario era peor: cualquier fallo temporal (o un fallo en la
+     * consulta, como el de los estudios) dejaba ese título marcado para
+     * siempre y ya no había forma de recuperarlo.
+     *
+     * Los que no dan nada se reintentan, pero con un tope: a los tres
+     * intentos se dan por perdidos, que es suficiente para descartar que
+     * fuera un problema pasajero sin quedarse preguntando en bucle.
+     */
+    const conDatos = pendientes.filter((t) => {
+      const f = datos[t];
+      return !!f && ((f.genres?.length ?? 0) > 0 || (f.studios?.length ?? 0) > 0);
+    });
+    anotarRevisado(conDatos);
+
+    const sinDatos = pendientes.filter((t) => !conDatos.includes(t));
+    const agotados = sumarIntentoFallido(sinDatos);
+    if (agotados.length > 0) anotarRevisado(agotados);
 
     if (algo) {
       // Un guardado extra en vacío para que la nube y el resto de
