@@ -9,6 +9,8 @@ import { FirstLoadOverlay } from "./FirstLoadOverlay";
 import { ActualizandoOverlay } from "./ActualizandoOverlay";
 import { PullToRefresh } from "./PullToRefresh";
 import { SinNoticias } from "./SinNoticias";
+import { NoticiasDeArchivo } from "./NoticiasDeArchivo";
+import { MINIMO_COINCIDENCIA, puntuarCoincidencia } from "@/lib/coincidenciaTitulos";
 import { vibrar } from "@/lib/haptics";
 import { ReliabilityBadge } from "./ReliabilityBadge";
 import { getPreferences, DEFAULT_PREFERENCES } from "@/lib/storage";
@@ -545,11 +547,50 @@ export function NewsFeed() {
 
   const searchResults = useMemo(() => {
     if (!searchTerm) return null;
-    const q = searchTerm.toLowerCase();
-    return ranked.filter(
-      ({ item }) => item.title.toLowerCase().includes(q) || item.relatedTitle.toLowerCase().includes(q)
-    );
+    /*
+     * Antes esto era `titulo.includes(consulta)` con la cadena entera.
+     * Buscando el título oficial de una serie —"Re:ZERO -Starting Life in
+     * Another World-"— no coincidía NINGUNA noticia, porque los medios
+     * titulan "Re:Zero confirma temporada 4". Se veía "nada por aquí" en
+     * series de las que sí había noticias.
+     */
+    return ranked
+      .map((r) => ({
+        ...r,
+        parecido: Math.max(
+          puntuarCoincidencia(searchTerm, r.item.title),
+          puntuarCoincidencia(searchTerm, r.item.relatedTitle)
+        ),
+      }))
+      .filter((r) => r.parecido >= MINIMO_COINCIDENCIA)
+      // Primero lo que más se parece a lo buscado; a igual parecido,
+      // manda el orden del feed (lo que encaja con tus gustos).
+      .sort((a, b) => b.parecido - a.parecido || b.score - a.score);
   }, [ranked, searchTerm]);
+
+  /*
+   * Lo que se parece pero no llega al listón.
+   *
+   * Sirve para no dejar la pantalla en blanco cuando no hay coincidencia
+   * exacta: si buscas una serie y no hay noticias suyas, pero sí de una
+   * película o de un spin-off con parte del nombre, eso es mejor que un
+   * "nada por aquí". Va aparte y con su propio rótulo, para que quede
+   * claro que no es lo que has pedido exactamente.
+   */
+  const casiResultados = useMemo(() => {
+    if (!searchTerm || (searchResults && searchResults.length > 0)) return [];
+    return ranked
+      .map((r) => ({
+        ...r,
+        parecido: Math.max(
+          puntuarCoincidencia(searchTerm, r.item.title),
+          puntuarCoincidencia(searchTerm, r.item.relatedTitle)
+        ),
+      }))
+      .filter((r) => r.parecido >= 15 && r.parecido < MINIMO_COINCIDENCIA)
+      .sort((a, b) => b.parecido - a.parecido)
+      .slice(0, 6);
+  }, [ranked, searchTerm, searchResults]);
 
   const handleToggleLike = (itemId: string) => {
     const item = items.find((n) => n.id === itemId);
@@ -773,7 +814,13 @@ export function NewsFeed() {
             </div>
 
             {searchingAnime && (
-              <p className="mb-4 text-xs text-muted">Buscando en la base de datos de anime…</p>
+              <motion.p
+                animate={{ opacity: [0.45, 1, 0.45] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                className="mb-4 text-xs text-muted"
+              >
+                Buscando la ficha de la serie…
+              </motion.p>
             )}
 
             {animeResults.length > 0 && (
@@ -782,8 +829,21 @@ export function NewsFeed() {
                   Contenido — información general, no son noticias
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {animeResults.slice(0, 4).map((a) => (
-                    <div key={a.id} className="panel flex cursor-default gap-4 rounded-xl p-4">
+                  {animeResults.slice(0, 4).map((a, i) => (
+                    // Entran escalonadas, como el resto de la app. Antes
+                    // aparecían de golpe medio segundo después que las
+                    // noticias, y ese salto era lo que se veía tosco.
+                    <motion.div
+                      key={a.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.36,
+                        delay: Math.min(i * 0.06, 0.24),
+                        ease: [0.16, 1, 0.3, 1],
+                      }}
+                      className="panel flex cursor-default gap-4 rounded-xl p-4"
+                    >
                       {a.coverImage && (
                         // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList)
                         <img src={a.coverImage} alt="" className="h-24 w-16 flex-shrink-0 rounded-lg object-cover" />
@@ -799,7 +859,7 @@ export function NewsFeed() {
                           <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted">{a.description}</p>
                         )}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </div>
@@ -809,7 +869,35 @@ export function NewsFeed() {
               Noticias recientes
             </p>
             {searchResults.length === 0 ? (
-              <SinNoticias termino={searchTerm} ficha={animeResults[0]} />
+              <>
+                <SinNoticias termino={searchTerm} ficha={animeResults[0]} />
+
+                {/* Se va a buscar fuera SOLO aquí: cuando el feed no ha
+                    encontrado nada. Mientras haya noticias propias no se
+                    gasta ni una petición. */}
+                <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} />
+                {casiResultados.length > 0 && (
+                  <div className="mt-8">
+                    <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
+                      Puede que tenga que ver
+                    </p>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      {casiResultados.map(({ item, score }) => (
+                        <NewsCard
+                          key={item.id}
+                          item={item}
+                          pending={enrichingIds.has(item.id)}
+                          translating={translatingIds.has(item.id)}
+                          highlight={hasLearned && score > 0}
+                          liked={prefs.likedNewsIds.includes(item.id)}
+                          onToggleLike={() => handleToggleLike(item.id)}
+                          onOpenDetail={() => handleOpenDetail(item.id, item)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {searchResults.map(({ item, score }) => (

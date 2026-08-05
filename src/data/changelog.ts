@@ -23,6 +23,25 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v175",
+    fecha: "2026-08-05",
+    titulo: "Noticias antiguas de cualquier serie",
+    puntos: [
+      "Si buscas una serie y no hay nada reciente, ahora se va a buscar su historial de noticias con fechas reales.",
+    ],
+  },
+  {
+    version: "v174",
+    fecha: "2026-08-05",
+    titulo: "La búsqueda deja de confundirse",
+    puntos: [
+      "Buscar por el título completo de una serie ya encuentra sus noticias.",
+      "Se acabaron las fichas de animes que no tienen nada que ver con lo que buscabas.",
+      "El botón de seguir dice la verdad, y ahora también se puede dejar de seguir.",
+      "Las fichas de serie entran con animación, como el resto.",
+    ],
+  },
+  {
     version: "v173",
     fecha: "2026-08-05",
     titulo: "Buscador en Mensajes",

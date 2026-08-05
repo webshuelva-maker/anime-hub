@@ -4,9 +4,9 @@ import { motion } from "framer-motion";
 import type { AnimeSearchResult } from "@/lib/anilist";
 import { BrandMark } from "./BrandMark";
 import { siteConfig } from "@/config/site";
-import { getPreferences, savePreferences } from "@/lib/storage";
+import { PREFERENCES_CHANGED_EVENT, getPreferences, savePreferences } from "@/lib/storage";
 import { playSuccess } from "@/lib/sound";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Qué se enseña cuando una búsqueda no tiene noticias.
@@ -74,18 +74,38 @@ export function SinNoticias({
 }) {
   const caso = analizar(termino, ficha);
   const tituloReal = ficha?.title ?? termino;
-  const [seguida, setSeguida] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return getPreferences().favoriteTitles.some(
-      (t) => t.toLowerCase() === tituloReal.toLowerCase()
-    );
-  });
 
-  const seguir = () => {
+  /*
+   * "Siguiendo" se calcula EN CADA DIBUJADO, no una sola vez al montar.
+   *
+   * Antes se guardaba al montar el componente, y ahí estaba el fallo que
+   * hacía que el botón dijera "Siguiendo How a Realist Hero Rebuilt the
+   * Kingdom" sin haberlo seguido nunca: en el primer dibujado la ficha
+   * todavía no ha llegado, así que se comparaba con lo que se había
+   * ESCRITO en el buscador —que sí estaba en favoritos— y salía que sí.
+   * Un instante después llegaba la ficha, el título cambiaba… pero el
+   * "sí" ya estaba grabado y nadie lo volvía a mirar.
+   */
+  const [favoritos, setFavoritos] = useState<string[]>([]);
+  useEffect(() => {
+    const leer = () => setFavoritos(getPreferences().favoriteTitles);
+    const id = setTimeout(leer, 0);
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, leer);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, leer);
+    };
+  }, []);
+
+  const seguida = favoritos.some((t) => t.toLowerCase() === tituloReal.toLowerCase());
+
+  const alternarSeguir = () => {
     const prefs = getPreferences();
-    if (prefs.favoriteTitles.some((t) => t.toLowerCase() === tituloReal.toLowerCase())) return;
-    savePreferences({ ...prefs, favoriteTitles: [...prefs.favoriteTitles, tituloReal] });
-    setSeguida(true);
+    const nuevos = seguida
+      ? prefs.favoriteTitles.filter((t) => t.toLowerCase() !== tituloReal.toLowerCase())
+      : [...prefs.favoriteTitles, tituloReal];
+    savePreferences({ ...prefs, favoriteTitles: nuevos });
+    setFavoritos(nuevos);
     playSuccess();
   };
 
@@ -149,18 +169,25 @@ export function SinNoticias({
         className="relative mt-6 flex flex-wrap items-center justify-center gap-2"
       >
         {ficha && (
-          <button
-            type="button"
-            onClick={seguir}
-            disabled={seguida}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-transform hover:scale-105 active:scale-95 ${
-              seguida
-                ? "border border-ice/30 bg-ice/10 text-ice"
-                : "accent-gradient text-white"
-            }`}
-          >
-            {seguida ? `Siguiendo ${tituloReal}` : `Seguir ${tituloReal}`}
-          </button>
+          <div className="w-full">
+            {/* Se puede dejar de seguir: antes el botón se quedaba
+                deshabilitado para siempre y no había vuelta atrás desde
+                aquí. */}
+            <button
+              type="button"
+              onClick={alternarSeguir}
+              className={`pulsable rounded-full px-4 py-2 text-sm font-semibold ${
+                seguida ? "border border-ice/30 bg-ice/10 text-ice" : "accent-gradient text-white"
+              }`}
+            >
+              {seguida ? `Siguiendo ${tituloReal}` : `Seguir ${tituloReal}`}
+            </button>
+            <p className="mx-auto mt-2 max-w-sm text-[11px] leading-snug text-muted">
+              {seguida
+                ? "Sus noticias te saldrán las primeras en cuanto salga alguna, y te avisamos si tienes los avisos activados."
+                : "Sus noticias te saldrán las primeras en cuanto salga alguna."}
+            </p>
+          </div>
         )}
 
         <p className="w-full text-xs text-muted">

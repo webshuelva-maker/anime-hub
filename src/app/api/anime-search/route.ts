@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchAnimeDatabase } from "@/lib/anilist";
 import { searchJikanList } from "@/lib/jikan";
 import { searchKitsu } from "@/lib/kitsu";
+import { MINIMO_COINCIDENCIA, puntuarCoincidencia } from "@/lib/coincidenciaTitulos";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
@@ -41,6 +42,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /*
+   * Se ordena por parecido con lo buscado y se tira lo que no llega al
+   * listón.
+   *
+   * Antes se devolvían tal cual, en el orden en que venían de cada base:
+   * si AniList no encontraba nada (le pasa con los títulos oficiales
+   * largos y con puntuación), el primer resultado que se enseñaba era el
+   * que le sonara de lejos a MyAnimeList. Así es como buscando Re:ZERO
+   * salía "How a Realist Hero Rebuilt the Kingdom" — y encima como ficha
+   * principal, que es la que usa el resto de la pantalla.
+   */
+  const relevantes = juntos
+    .map((r) => ({ r, puntos: puntuarCoincidencia(term, r.title) }))
+    .filter(({ puntos }) => puntos >= MINIMO_COINCIDENCIA)
+    .sort((a, b) => b.puntos - a.puntos)
+    .map(({ r }) => r);
+
   const fuentes = [
     anilist.results.length > 0 ? "anilist" : null,
     mal.length > 0 ? "myanimelist" : null,
@@ -48,11 +66,11 @@ export async function GET(req: NextRequest) {
   ].filter(Boolean);
 
   return NextResponse.json({
-    results: juntos.slice(0, 10),
+    results: relevantes.slice(0, 10),
     fuente: fuentes.length > 0 ? fuentes.join("+") : "ninguna",
     // El diagnóstico va SIEMPRE en la respuesta. Llevamos varias vueltas
     // adivinando por qué una búsqueda vuelve vacía; con esto, la app
     // puede enseñar exactamente qué contestó cada base de datos.
-    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} resultado(s) | kitsu: ${kitsu.length} resultado(s)`,
+    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} resultado(s) | kitsu: ${kitsu.length} resultado(s) | ${juntos.length} juntos, ${relevantes.length} relevantes`,
   });
 }
