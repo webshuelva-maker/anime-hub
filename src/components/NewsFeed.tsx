@@ -10,6 +10,7 @@ import { ActualizandoOverlay } from "./ActualizandoOverlay";
 import { PullToRefresh } from "./PullToRefresh";
 import { SinNoticias } from "./SinNoticias";
 import { NoticiasDeArchivo } from "./NoticiasDeArchivo";
+import { FichaDeContenido } from "./FichaDeContenido";
 import { MINIMO_COINCIDENCIA, puntuarCoincidencia } from "@/lib/coincidenciaTitulos";
 import { vibrar } from "@/lib/haptics";
 import { ReliabilityBadge } from "./ReliabilityBadge";
@@ -823,47 +824,7 @@ export function NewsFeed() {
               </motion.p>
             )}
 
-            {animeResults.length > 0 && (
-              <div className="mb-8">
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
-                  Contenido — información general, no son noticias
-                </p>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {animeResults.slice(0, 4).map((a, i) => (
-                    // Entran escalonadas, como el resto de la app. Antes
-                    // aparecían de golpe medio segundo después que las
-                    // noticias, y ese salto era lo que se veía tosco.
-                    <motion.div
-                      key={a.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        duration: 0.36,
-                        delay: Math.min(i * 0.06, 0.24),
-                        ease: [0.16, 1, 0.3, 1],
-                      }}
-                      className="panel flex cursor-default gap-4 rounded-xl p-4"
-                    >
-                      {a.coverImage && (
-                        // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList)
-                        <img src={a.coverImage} alt="" className="h-24 w-16 flex-shrink-0 rounded-lg object-cover" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="font-heading text-sm font-semibold text-foreground">{a.title}</p>
-                        <p className="mt-0.5 text-[11px] uppercase tracking-wide text-ice">
-                          {[a.format, a.status, a.startYear ? (a.endYear && a.endYear !== a.startYear ? `${a.startYear}–${a.endYear}` : `${a.startYear}`) : null]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                        {a.description && (
-                          <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted">{a.description}</p>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <FichaDeContenido resultados={animeResults} />
 
             <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
               Noticias recientes

@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v176",
+    fecha: "2026-08-05",
+    titulo: "Buscar deja de ser un lío",
+    puntos: [
+      "Al buscar una serie sale su ficha, una sola y grande, en vez de cuatro tarjetas mezcladas.",
+      "Las películas y especiales de esa franquicia van recogidos debajo, y se abren si los quieres ver.",
+      "Se acabaron las entradas repetidas de la misma obra.",
+      "Ya no pone «FINISHED» ni «TV» en inglés: pone Serie, Película o Especial, con su año.",
+    ],
+  },
+  {
     version: "v175",
     fecha: "2026-08-05",
     titulo: "Noticias antiguas de cualquier serie",

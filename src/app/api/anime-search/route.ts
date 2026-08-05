@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchAnimeDatabase } from "@/lib/anilist";
 import { searchJikanList } from "@/lib/jikan";
 import { searchKitsu } from "@/lib/kitsu";
-import { MINIMO_COINCIDENCIA, puntuarCoincidencia } from "@/lib/coincidenciaTitulos";
+import {
+  MINIMO_COINCIDENCIA,
+  nucleoDeTitulo,
+  puntuarCoincidencia,
+} from "@/lib/coincidenciaTitulos";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel Hobby permite hasta 60s; 30s deja margen de sobra para una llamada a Groq mas lenta de lo normal
@@ -28,15 +32,35 @@ export async function GET(req: NextRequest) {
     searchKitsu(term).catch(() => []),
   ]);
 
-  const normalizar = (t: string) =>
-    t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  /*
+   * Quitar repetidos DE VERDAD.
+   *
+   * Antes la clave era el título entero sin espacios ni signos. Eso solo
+   * pilla los repetidos que se escriben exactamente igual, y estas tres
+   * bases de datos casi nunca coinciden en cómo llaman a una serie:
+   *
+   *   AniList  → "Re:ZERO -Starting Life in Another World-"
+   *   MAL      → "Re:Zero kara Hajimeru Isekai Seikatsu"
+   *   Kitsu    → "Re:Zero - Starting Life in Another World"
+   *
+   * Tres textos distintos, la misma serie, y las tres se colaban en la
+   * lista. De ahí el montón de entradas casi iguales.
+   *
+   * La clave nueva es NÚCLEO + FORMATO + AÑO. El núcleo es el nombre de
+   * la franquicia sin subtítulo, así que los tres ejemplos de arriba dan
+   * "re zero" + "TV" + 2016 y se quedan en uno. Y como el formato y el
+   * año entran en la clave, la serie, la película y el especial siguen
+   * siendo entradas distintas, que es lo correcto: son obras distintas.
+   */
+  const claveDe = (r: (typeof anilist.results)[number]) =>
+    [nucleoDeTitulo(r.title), r.format ?? "?", r.startYear ?? "?"].join("|");
 
   const vistos = new Set<string>();
   const juntos: typeof anilist.results = [];
   for (const lista of [anilist.results, mal, kitsu]) {
     for (const r of lista) {
-      const clave = normalizar(r.title);
-      if (!clave || vistos.has(clave)) continue;
+      const clave = claveDe(r);
+      if (!nucleoDeTitulo(r.title) || vistos.has(clave)) continue;
       vistos.add(clave);
       juntos.push(r);
     }
@@ -53,10 +77,34 @@ export async function GET(req: NextRequest) {
    * salía "How a Realist Hero Rebuilt the Kingdom" — y encima como ficha
    * principal, que es la que usa el resto de la pantalla.
    */
+  /*
+   * Se ordena por parecido y, a igualdad, la serie de televisión va
+   * primero.
+   *
+   * Ese desempate importa más de lo que parece: buscando el nombre de
+   * una franquicia, la obra que la persona tiene en la cabeza es
+   * prácticamente siempre la serie, no un especial de siete minutos ni
+   * un recopilatorio. Y la primera de la lista es además la que usa el
+   * resto de la pantalla (el botón de seguir, el archivo de noticias),
+   * así que acertar aquí arregla tres cosas de golpe.
+   */
+  const pesoFormato = (formato: string | null): number => {
+    const f = (formato ?? "").toUpperCase();
+    if (f.includes("TV")) return 3;
+    if (f.includes("MOVIE") || f.includes("PELÍCULA")) return 2;
+    if (f.includes("OVA") || f.includes("ONA")) return 1;
+    return 0;
+  };
+
   const relevantes = juntos
     .map((r) => ({ r, puntos: puntuarCoincidencia(term, r.title) }))
     .filter(({ puntos }) => puntos >= MINIMO_COINCIDENCIA)
-    .sort((a, b) => b.puntos - a.puntos)
+    .sort(
+      (a, b) =>
+        b.puntos - a.puntos ||
+        pesoFormato(b.r.format) - pesoFormato(a.r.format) ||
+        (a.r.startYear ?? 9999) - (b.r.startYear ?? 9999)
+    )
     .map(({ r }) => r);
 
   const fuentes = [
