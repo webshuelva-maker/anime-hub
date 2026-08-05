@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v157",
+    fecha: "2026-08-05",
+    titulo: "Conectar se entiende, y tu nombre deja de perderse",
+    puntos: [
+      "Al cambiar de cuenta ya no se borra el nombre que tenías guardado.",
+      "En Conectar, ahora sabes qué pasa al marcar a alguien y cuánta gente te queda por ver.",
+      "Las fichas de perfil enseñan de un vistazo cuánto compartís.",
+    ],
+  },
+  {
     version: "v156",
     fecha: "2026-08-05",
     titulo: "Arreglos de cuentas y sesión",

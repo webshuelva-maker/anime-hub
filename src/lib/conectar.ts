@@ -134,3 +134,38 @@ export const MOTIVOS_DENUNCIA = [
   "Spam o estafa",
   "Otra cosa",
 ] as const;
+
+/**
+ * Cuánta gente has marcado que todavía no te ha contestado.
+ *
+ * Es un número, no una lista, y a propósito: enseñar A QUIÉN has marcado
+ * sin respuesta no aporta nada y convierte la pantalla en un registro de
+ * rechazos. Lo único que hace falta saber es que la cosa está en marcha.
+ */
+export async function esperandoRespuesta(): Promise<number> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return 0;
+
+  const { count: marcados } = await supabase
+    .from("social_decisions")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", auth.user.id)
+    .eq("decision", "interesa");
+
+  const { count: coincidencias } = await supabase
+    .from("social_matches")
+    .select("*", { count: "exact", head: true })
+    .or(`usuario_a.eq.${auth.user.id},usuario_b.eq.${auth.user.id}`);
+
+  return Math.max(0, (marcados ?? 0) - (coincidencias ?? 0));
+}
+
+/** Etiqueta para la afinidad, que si no es un número sin significado. */
+export function etiquetaAfinidad(afinidad: number): { texto: string; fuerza: number } {
+  if (afinidad >= 15) return { texto: "Muchísimo en común", fuerza: 1 };
+  if (afinidad >= 8) return { texto: "Bastante en común", fuerza: 0.75 };
+  if (afinidad >= 4) return { texto: "Algo en común", fuerza: 0.5 };
+  if (afinidad > 0) return { texto: "Algún gusto compartido", fuerza: 0.3 };
+  return { texto: "Sin gustos en común todavía", fuerza: 0.1 };
+}

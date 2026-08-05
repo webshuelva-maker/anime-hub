@@ -14,6 +14,8 @@ import {
   decidir,
   denunciar,
   descubrirPerfiles,
+  esperandoRespuesta,
+  etiquetaAfinidad,
   misCoincidencias,
   sincronizarGustos,
 } from "@/lib/conectar";
@@ -44,6 +46,20 @@ export function DescubrirPerfiles() {
   const [cargando, setCargando] = useState(true);
   const [decidiendo, setDecidiendo] = useState(false);
   const [nuevaCoincidencia, setNuevaCoincidencia] = useState<PerfilDescubierto | null>(null);
+  /*
+   * Qué acaba de pasar al pulsar.
+   *
+   * Faltaba por completo: dabas a "Me interesa", la tarjeta se cambiaba
+   * por la siguiente y no había ni una señal de que hubiera ocurrido
+   * algo. Ni de que la otra persona tiene que marcarte a ti para que
+   * pase nada. Sin esto, el botón parecía roto.
+   */
+  const [ultimaAccion, setUltimaAccion] = useState<{
+    alias: string;
+    decision: "interesa" | "paso";
+  } | null>(null);
+  const [pendientes, setPendientes] = useState(0);
+  const [vistos, setVistos] = useState(0);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
   const [denunciando, setDenunciando] = useState(false);
   const [motivoDenuncia, setMotivoDenuncia] = useState<string | null>(null);
@@ -55,9 +71,14 @@ export function DescubrirPerfiles() {
   const cargar = async () => {
     setCargando(true);
     try {
-      const [lista, matches] = await Promise.all([descubrirPerfiles(), misCoincidencias()]);
+      const [lista, matches, enEspera] = await Promise.all([
+        descubrirPerfiles(),
+        misCoincidencias(),
+        esperandoRespuesta(),
+      ]);
       setPerfiles(lista);
       setCoincidencias(matches);
+      setPendientes(enEspera);
     } finally {
       setCargando(false);
     }
@@ -78,6 +99,7 @@ export function DescubrirPerfiles() {
   const responder = async (decision: "interesa" | "paso") => {
     if (!actual || decidiendo) return;
     setDecidiendo(true);
+    setUltimaAccion(null);
     const objetivo = actual;
     try {
       const hayCoincidencia = await decidir(objetivo.user_id, decision);
@@ -89,12 +111,19 @@ export function DescubrirPerfiles() {
       }
 
       setPerfiles((prev) => prev.filter((p) => p.user_id !== objetivo.user_id));
+      setVistos((n) => n + 1);
 
       if (hayCoincidencia) {
         playSuccess();
         vibrar([12, 60, 12]);
         setNuevaCoincidencia(objetivo);
         setCoincidencias(await misCoincidencias());
+      } else {
+        // Se dice qué ha pasado y, si has marcado, que ahora toca
+        // esperar. El aviso se queda hasta que decidas sobre la
+        // siguiente persona, no se va solo a los dos segundos.
+        setUltimaAccion({ alias: objetivo.alias, decision });
+        if (decision === "interesa") setPendientes((n) => n + 1);
       }
     } finally {
       setDecidiendo(false);
@@ -156,6 +185,65 @@ export function DescubrirPerfiles() {
         Gente ordenada por lo que compartís. Cuanto más se parezcan vuestros gustos, antes aparece.
       </p>
 
+      {/* Cuántos quedan y cuántos esperan respuesta. Antes no había forma
+          de saber si ibas por el primero o por el último. */}
+      {!cargando && (perfiles.length > 0 || pendientes > 0) && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+          {perfiles.length > 0 && (
+            <span>
+              {vistos + 1} de {vistos + perfiles.length}
+            </span>
+          )}
+          {pendientes > 0 && (
+            <span className="ice-text">
+              {pendientes} {pendientes === 1 ? "esperando respuesta" : "esperando respuesta"}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Qué ha pasado con la persona anterior. Se queda hasta que
+          decidas sobre la siguiente. */}
+      <AnimatePresence mode="wait">
+        {ultimaAccion && (
+          <motion.div
+            key={ultimaAccion.alias + ultimaAccion.decision}
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.32, ease: SUAVE }}
+            className="overflow-hidden"
+          >
+            <div
+              className="mt-4 rounded-xl border px-4 py-3"
+              style={
+                ultimaAccion.decision === "interesa"
+                  ? {
+                      borderColor: "color-mix(in srgb, var(--ice) 35%, transparent)",
+                      background: "color-mix(in srgb, var(--ice) 8%, transparent)",
+                    }
+                  : { borderColor: "var(--panel-border)" }
+              }
+            >
+              {ultimaAccion.decision === "interesa" ? (
+                <p className="text-sm leading-snug text-foreground">
+                  Le has dicho que sí a{" "}
+                  <span className="ice-text font-medium">{ultimaAccion.alias}</span>.{" "}
+                  <span className="text-muted">
+                    No se le avisa. Si te marca a ti también, os aparecerá la coincidencia a los
+                    dos.
+                  </span>
+                </p>
+              ) : (
+                <p className="text-sm leading-snug text-muted">
+                  Has pasado de {ultimaAccion.alias}. No volverá a salirte y no se entera de nada.
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* --- La ficha de turno ------------------------------------------- */}
       <div className="mt-6">
         <AnimatePresence mode="wait">
@@ -177,17 +265,51 @@ export function DescubrirPerfiles() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -16, scale: 0.98 }}
               transition={{ duration: 0.38, ease: SUAVE }}
-              className="panel rounded-2xl p-6"
+              className="panel overflow-hidden rounded-2xl"
             >
-              <div className="flex items-center gap-4">
-                <Avatar avatarId={actual.avatar_id ?? ""} size="lg" rounded="full" />
-                <div className="min-w-0">
-                  <p className="font-heading text-xl font-semibold">{actual.alias}</p>
-                  <p className="text-sm text-muted">
-                    {actual.edad} años · {actual.gender}
-                  </p>
+              {/* Cabecera con un resplandor cuya intensidad es la
+                  afinidad: lo primero que se ve ya dice cuánto encajáis,
+                  antes de leer una palabra. */}
+              <div
+                className="relative px-6 pb-5 pt-7"
+                style={{
+                  background: `radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--ice) ${Math.round(
+                    etiquetaAfinidad(actual.afinidad).fuerza * 22
+                  )}%, transparent), transparent 70%)`,
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.4, ease: SUAVE }}
+                  >
+                    <Avatar avatarId={actual.avatar_id ?? ""} size="xl" rounded="full" />
+                  </motion.div>
+                  <div className="min-w-0">
+                    <p className="font-heading text-2xl font-bold leading-tight">{actual.alias}</p>
+                    <p className="mt-0.5 text-sm text-muted">
+                      {actual.edad} años · {actual.gender}
+                    </p>
+                    <p
+                      className="mt-2 inline-block rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                      style={{
+                        borderColor: `color-mix(in srgb, var(--ice) ${Math.round(
+                          etiquetaAfinidad(actual.afinidad).fuerza * 60
+                        )}%, transparent)`,
+                        color:
+                          etiquetaAfinidad(actual.afinidad).fuerza > 0.4
+                            ? "var(--ice)"
+                            : "var(--muted)",
+                      }}
+                    >
+                      {etiquetaAfinidad(actual.afinidad).texto}
+                    </p>
+                  </div>
                 </div>
               </div>
+
+              <div className="px-6 pb-6">
 
               {/* Lo que tenéis en común va ANTES que la descripción: es el
                   motivo por el que esta persona ha salido, y es lo único
@@ -238,7 +360,11 @@ export function DescubrirPerfiles() {
                 </p>
               )}
 
-              <div className="mt-6 flex gap-3">
+              <p className="mt-6 text-center text-[11px] leading-snug text-muted">
+                Si marcáis los dos, se abre la coincidencia. Nadie se entera de lo que marques
+                salvo que sea mutuo.
+              </p>
+              <div className="mt-3 flex gap-3">
                 <motion.button
                   type="button"
                   onClick={() => responder("paso")}
@@ -280,6 +406,7 @@ export function DescubrirPerfiles() {
                 >
                   Denunciar
                 </button>
+              </div>
               </div>
             </motion.div>
           ) : (
@@ -338,8 +465,8 @@ export function DescubrirPerfiles() {
             ))}
           </div>
           <p className="mt-4 text-[11px] leading-snug text-muted">
-            El chat todavía no está montado: es lo siguiente. Por ahora las coincidencias se
-            guardan y os esperan aquí.
+            El chat es lo siguiente que llega. Vuestras coincidencias se guardan y os esperarán
+            aquí: no hay que volver a marcarse.
           </p>
         </motion.div>
       )}

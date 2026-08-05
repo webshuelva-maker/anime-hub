@@ -49,16 +49,36 @@ function localUpdatedAt(): number {
  */
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
+/*
+ * Mientras se está BAJANDO el estado de la nube, no se sube nada.
+ *
+ * Sin este cerrojo había una carrera que borraba datos de verdad: al
+ * cambiar de cuenta se limpia el navegador y, durante el segundo que
+ * tarda en llegar la respuesta de Supabase, la app cree que esa persona
+ * no tiene nada guardado. Si en ese hueco algo llamaba a guardar —y el
+ * perfil se guarda solo medio segundo después de cualquier cambio—, se
+ * subía ese vacío a la nube y se cargaba el nombre que sí estaba
+ * guardado. Por eso el nombre no "se olvidaba": se BORRABA.
+ */
+let bajandoDeLaNube = false;
+
 export function scheduleCloudPush(): void {
   if (typeof window === "undefined" || !hasSupabase()) return;
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {
+    if (bajandoDeLaNube) {
+      // Se reintenta en vez de descartarse: lo que el usuario acabe de
+      // escribir tiene que acabar guardándose igual.
+      scheduleCloudPush();
+      return;
+    }
     void pushCloudState();
   }, 1500);
 }
 
 export async function pushCloudState(): Promise<void> {
   if (typeof window === "undefined" || !hasSupabase()) return;
+  if (bajandoDeLaNube) return;
 
   try {
     const supabase = createClient();
@@ -88,6 +108,7 @@ export async function pushCloudState(): Promise<void> {
 export async function pullCloudState(): Promise<boolean> {
   if (typeof window === "undefined" || !hasSupabase()) return false;
 
+  bajandoDeLaNube = true;
   try {
     const supabase = createClient();
     const { data: auth } = await supabase.auth.getUser();
@@ -148,6 +169,8 @@ export async function pullCloudState(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  } finally {
+    bajandoDeLaNube = false;
   }
 }
 

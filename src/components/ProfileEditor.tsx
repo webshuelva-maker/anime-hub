@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { DEFAULT_PREFERENCES, getPreferences, savePreferences } from "@/lib/storage";
+import {
+  DEFAULT_PREFERENCES,
+  PREFERENCES_CHANGED_EVENT,
+  getPreferences,
+  savePreferences,
+} from "@/lib/storage";
 import { UserPreferences } from "@/types/news";
 import { AVATAR_OPTIONS } from "@/data/options";
 import { AvatarPicker, Avatar, PhotoUploadButton } from "./AvatarPicker";
@@ -23,16 +28,47 @@ export function ProfileEditor() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [savedSnapshot, setSavedSnapshot] = useState<string>(JSON.stringify(DEFAULT_PREFERENCES));
   const [saved, setSaved] = useState(false);
+  // Espejo en una referencia para poder consultarlo desde el escuchador de
+  // cambios sin volver a montarlo en cada renderizado.
+  const savedSnapshotRef = useRef("");
   const [account, setAccount] = useState<AccountProfile | null | "loading">(() =>
     process.env.NEXT_PUBLIC_SUPABASE_URL ? "loading" : null
   );
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    savedSnapshotRef.current = savedSnapshot;
+  }, [savedSnapshot]);
+
+  useEffect(() => {
     const loaded = getPreferences();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(loaded);
     setSavedSnapshot(JSON.stringify(loaded));
+
+    /*
+     * Volver a leer cuando el estado cambia por debajo.
+     *
+     * Antes esto se leía UNA vez, al montar. Y al cambiar de cuenta, la
+     * bajada de la nube tarda un momento en llegar: para cuando llegaba
+     * con el nombre guardado, esta pantalla ya se había quedado con la
+     * copia vacía de antes. Peor todavía, al tocar cualquier cosa se
+     * guardaba esa copia vacía encima del nombre recién recuperado.
+     *
+     * Si hay cambios sin guardar no se pisa nada: sería quitarle de las
+     * manos lo que está escribiendo.
+     */
+    const alCambiar = () => {
+      const fuera = getPreferences();
+      setPrefs((actuales) =>
+        JSON.stringify(actuales) === savedSnapshotRef.current ? fuera : actuales
+      );
+      setSavedSnapshot((snap) =>
+        JSON.stringify(getPreferences()) === snap ? snap : JSON.stringify(fuera)
+      );
+    };
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, alCambiar);
+    return () => window.removeEventListener(PREFERENCES_CHANGED_EVENT, alCambiar);
   }, []);
 
   useEffect(() => {
