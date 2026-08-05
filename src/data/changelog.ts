@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v173",
+    fecha: "2026-08-05",
+    titulo: "Buscador en Mensajes",
+    puntos: [
+      "Busca una conversación por nombre, o encuentra ese mensaje que recuerdas a medias.",
+      "La onda de los audios avanza de verdad mientras escuchas, también en equipos justos.",
+    ],
+  },
+  {
     version: "v165",
     fecha: "2026-08-05",
     titulo: "Notas de voz",

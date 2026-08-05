@@ -527,3 +527,50 @@ export function duracionLegible(ms: number): string {
   const total = Math.round(ms / 1000);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Buscar dentro de las conversaciones                               */
+/* ------------------------------------------------------------------ */
+
+export interface ResultadoBusqueda {
+  mensaje_id: string;
+  con_user_id: string;
+  texto: string;
+  creado_en: string;
+  mio: boolean;
+}
+
+/**
+ * Busca un texto en TODAS tus conversaciones.
+ *
+ * No hace falta ninguna función especial en la base de datos: las
+ * políticas ya impiden leer mensajes de conversaciones ajenas, así que
+ * esta consulta solo puede devolver los tuyos por mucho que se retuerza
+ * desde fuera.
+ *
+ * Las notas de voz no aparecen: no hay texto que buscar. Se dice en la
+ * pantalla para que nadie piense que se le ha perdido algo.
+ */
+export async function buscarEnMensajes(termino: string): Promise<ResultadoBusqueda[]> {
+  const limpio = termino.trim();
+  if (limpio.length < 2) return [];
+
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
+  const { data } = await supabase
+    .from("social_messages")
+    .select("id, usuario_a, usuario_b, autor_id, texto, creado_en")
+    .ilike("texto", `%${limpio.replace(/[%_]/g, "")}%`)
+    .order("creado_en", { ascending: false })
+    .limit(40);
+
+  return ((data as Mensaje[]) ?? []).map((m) => ({
+    mensaje_id: m.id,
+    con_user_id: m.usuario_a === auth.user!.id ? m.usuario_b : m.usuario_a,
+    texto: m.texto,
+    creado_en: m.creado_en,
+    mio: m.autor_id === auth.user!.id,
+  }));
+}

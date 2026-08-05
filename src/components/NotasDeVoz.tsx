@@ -224,11 +224,12 @@ function formaDeOnda(semilla: string, barras: number): number[] {
  */
 function Onda({
   niveles,
-  progreso,
+  capaRef,
   className = "",
 }: {
   niveles: number[];
-  progreso: number;
+  /** Referencia a la capa de color, para moverla sin pasar por React. */
+  capaRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
 }) {
   const barras = (color: string, opacidad: number) => (
@@ -253,43 +254,48 @@ function Onda({
     </div>
   );
 
-  const recorte = `inset(0 ${Math.max(0, 100 - progreso * 100)}% 0 0)`;
-
   return (
-    // Más baja (h-5 en vez de h-6): una onda alta llama la atención por
-    // encima del propio mensaje, y aquí es un detalle, no el asunto.
     <div className={`relative h-5 w-full ${className}`}>
       {barras("var(--muted)", 0.3)}
-      <div
-        className="absolute inset-0"
-        style={{
-          clipPath: recorte,
-          WebkitClipPath: recorte,
-          /*
-           * SIN transición, y esto era el fallo de "solo avanza al
-           * pausar".
-           *
-           * Había una transición de 80 ms sobre el recorte. Se puso
-           * cuando el progreso llegaba cuatro veces por segundo, para
-           * disimular los saltos. Pero ahora se actualiza en CADA
-           * fotograma (cada ~16 ms): el navegador arrancaba una
-           * transición nueva antes de terminar la anterior, una y otra
-           * vez, así que el recorte no llegaba nunca a moverse. Al
-           * pausar dejaban de llegar cambios, la última transición sí
-           * podía completarse y la barra pegaba el salto de golpe —
-           * justo lo que se veía.
-           *
-           * Actualizando cada fotograma la transición sobra: el
-           * movimiento ya es continuo por sí solo.
-           */
-        }}
-      >
+      <div ref={capaRef} className="absolute inset-0" style={{ clipPath: "inset(0 100% 0 0)" }}>
         {/* Lo ya escuchado: platino en vez de azul hielo saturado, que
             es lo que daba el aire de aplicación de videojuegos. */}
         {barras("var(--platinum)", 0.92)}
       </div>
     </div>
   );
+}
+
+/**
+ * Mueve la onda escribiendo el recorte DIRECTAMENTE en el elemento.
+ *
+ * ---------------------------------------------------------------------
+ * POR QUÉ NO SE HACE CON ESTADO DE REACT (tercer intento, y el bueno)
+ *
+ * Los dos arreglos anteriores fueron por el camino equivocado: primero
+ * quitar una transición CSS, después dejar de fiarse de currentTime.
+ * Ninguno era la causa.
+ *
+ * La causa es el COSTE. La onda son 64 barras dibujadas dos veces: 128
+ * elementos. Guardando el avance en estado de React, cada fotograma
+ * obligaba a recalcular y volver a escribir esos 128 elementos, sesenta
+ * veces por segundo. En un equipo holgado se disimula; en uno justo, el
+ * navegador no llega y se salta casi todos los repintados — así que la
+ * onda se quedaba quieta mientras sonaba y solo se ponía al día al
+ * pausar, que es cuando cesa la presión y da tiempo a pintar. Exactamente
+ * lo que se veía.
+ *
+ * Escribiendo el recorte a mano sobre el elemento, React no interviene:
+ * no hay recálculo ni comparación de 128 elementos, solo una propiedad
+ * que cambia. Eso el navegador lo hace en la tarjeta gráfica y le sobra
+ * tiempo hasta en el equipo más justo.
+ * ---------------------------------------------------------------------
+ */
+function pintarProgreso(capa: HTMLDivElement | null, progreso: number) {
+  if (!capa) return;
+  const recorte = `inset(0 ${Math.max(0, 100 - progreso * 100)}% 0 0)`;
+  capa.style.clipPath = recorte;
+  capa.style.setProperty("-webkit-clip-path", recorte);
 }
 
 /* ================= Grabar ================= */
@@ -638,6 +644,7 @@ function RevisarNota({
   // reiniciarlo en cada fotograma.
   const progresoRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const capaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const audio = new Audio(url);
@@ -645,6 +652,7 @@ function RevisarNota({
       setSonando(false);
       setProgreso(0);
       progresoRef.current = 0;
+      pintarProgreso(capaRef.current, 0);
     };
     audioRef.current = audio;
     return () => {
@@ -680,6 +688,11 @@ function RevisarNota({
     const desde = progresoRef.current * total * 1000;
     let currentTimeSirve = false;
 
+    // El contador de tiempo sí pasa por React, pero como mucho cinco
+    // veces por segundo: es texto, y a nadie le hace falta ver las
+    // centésimas.
+    let ultimoTexto = 0;
+
     const paso = () => {
       const audio = audioRef.current;
       if (audio && total > 0) {
@@ -689,7 +702,13 @@ function RevisarNota({
           : (desde + (performance.now() - inicio)) / 1000;
         const p = Math.min(1, segundos / total);
         progresoRef.current = p;
-        setProgreso(p);
+        // La onda, a mano y en cada fotograma.
+        pintarProgreso(capaRef.current, p);
+        const ahora = performance.now();
+        if (ahora - ultimoTexto > 200) {
+          ultimoTexto = ahora;
+          setProgreso(p);
+        }
       }
       cuadro = requestAnimationFrame(paso);
     };
@@ -729,7 +748,7 @@ function RevisarNota({
       </button>
 
       <span className="flex h-6 flex-1 items-center overflow-hidden">
-        <Onda niveles={barras} progreso={progreso} />
+        <Onda niveles={barras} capaRef={capaRef} />
       </span>
 
       <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
@@ -779,6 +798,7 @@ export function NotaDeVoz({
   const [cargando, setCargando] = useState(false);
   const [velocidad, setVelocidad] = useState<number>(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const capaRef = useRef<HTMLDivElement | null>(null);
 
   /*
    * El progreso se lee en cada fotograma, no con el aviso "timeupdate"
@@ -805,6 +825,8 @@ export function NotaDeVoz({
     const desde = progresoRef.current;
     let currentTimeSirve = false;
 
+    let ultimoTexto = 0;
+
     const paso = () => {
       const audio = audioRef.current;
       if (audio) {
@@ -818,7 +840,12 @@ export function NotaDeVoz({
             : desde * total + (performance.now() - inicio) / 1000;
           const p = Math.min(1, segundos / total);
           progresoRef.current = p;
-          setProgreso(p);
+          pintarProgreso(capaRef.current, p);
+          const ahora = performance.now();
+          if (ahora - ultimoTexto > 200) {
+            ultimoTexto = ahora;
+            setProgreso(p);
+          }
         }
       }
       cuadro = requestAnimationFrame(paso);
@@ -851,6 +878,8 @@ export function NotaDeVoz({
     audio.onended = () => {
       setSonando(false);
       setProgreso(0);
+      progresoRef.current = 0;
+      pintarProgreso(capaRef.current, 0);
     };
     audioRef.current = audio;
     return audio;
@@ -877,6 +906,8 @@ export function NotaDeVoz({
     const total = duracionMs ? duracionMs / 1000 : audio.duration;
     if (total && Number.isFinite(total)) {
       audio.currentTime = proporcion * total;
+      progresoRef.current = proporcion;
+      pintarProgreso(capaRef.current, proporcion);
       setProgreso(proporcion);
     }
   };
@@ -953,7 +984,7 @@ export function NotaDeVoz({
         tabIndex={0}
         className="relative flex h-7 flex-1 cursor-pointer items-center"
       >
-        <Onda niveles={onda} progreso={progreso} />
+        <Onda niveles={onda} capaRef={capaRef} />
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-0.5">
