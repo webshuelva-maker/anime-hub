@@ -13,6 +13,7 @@ import { genreLabel } from "@/lib/genreNames";
 import { siteConfig } from "@/config/site";
 import { FavoriteAnimeInput } from "./FavoriteAnimeInput";
 import { caratulasDe } from "@/lib/conectar";
+import { rellenarAfinidadPendiente } from "@/lib/afinidadTitulos";
 
 /**
  * Pantalla de Afinidad: SOLO lo que la app ha aprendido de ti.
@@ -46,6 +47,16 @@ function strengthLabel(pct: number): string {
 function FavoritosConCaratula() {
   const [titulos, setTitulos] = useState<string[]>([]);
   const [caratulas, setCaratulas] = useState<Record<string, string>>({});
+  /*
+   * Para qué lista de títulos se ha terminado ya de preguntar.
+   *
+   * Se guarda la lista y no un simple sí/no para no tener que ponerlo a
+   * "no" a mano cuando cambian los favoritos: si la lista es otra, esta
+   * comparación ya da falso sola. Sirve para dejar de esperar cuando la
+   * carátula sencillamente no existe — antes el hueco se quedaba
+   * latiendo indefinidamente y parecía una imagen que no carga.
+   */
+  const [resueltoPara, setResueltoPara] = useState("");
 
   useEffect(() => {
     const leer = () => setTitulos(getPreferences().favoriteTitles ?? []);
@@ -62,9 +73,14 @@ function FavoritosConCaratula() {
   useEffect(() => {
     if (titulos.length === 0) return;
     let vivo = true;
-    void caratulasDe(titulos).then((c) => {
-      if (vivo) setCaratulas((prev) => ({ ...prev, ...c }));
-    });
+    const clave = titulos.join("|");
+    void caratulasDe(titulos)
+      .then((c) => {
+        if (vivo) setCaratulas((prev) => ({ ...prev, ...c }));
+      })
+      .finally(() => {
+        if (vivo) setResueltoPara(clave);
+      });
     return () => {
       vivo = false;
     };
@@ -77,6 +93,8 @@ function FavoritosConCaratula() {
       </p>
     );
   }
+
+  const resuelto = resueltoPara === titulos.join("|");
 
   return (
     <div className="flex flex-wrap gap-3">
@@ -92,6 +110,13 @@ function FavoritosConCaratula() {
             {caratulas[t] ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={caratulas[t]} alt="" className="h-full w-full object-cover" loading="lazy" />
+            ) : resuelto ? (
+              // Sin carátula disponible: se enseña la inicial en vez de
+              // un rectángulo vacío, para que se vea que la serie está
+              // guardada y no que la pantalla se ha quedado a medias.
+              <div className="flex h-full w-full items-center justify-center bg-panel-soft">
+                <span className="font-heading text-lg text-muted">{t.slice(0, 1)}</span>
+              </div>
             ) : (
               <div className="h-full w-full animate-pulse bg-panel-border/40" />
             )}
@@ -173,6 +198,30 @@ export function PreferencesEditor() {
     setPrefs(getPreferences());
     setMemories(getRenMemory());
     setReady(true);
+  }, []);
+
+  /*
+   * Recupera los estudios de las series que ya tenías guardadas.
+   *
+   * Durante mucho tiempo, marcar un favorito apuntaba sus géneros pero
+   * mandaba los estudios vacíos, y como esta sección solo se pinta si
+   * hay algún estudio con puntos, se quedaba en blanco: desde fuera
+   * parecía que el apartado hubiera desaparecido. Esto lo rellena una
+   * sola vez con lo que ya está guardado, sin que haya que volver a
+   * marcar nada.
+   *
+   * Va aparte del efecto de arriba y sin bloquear el pintado: la
+   * pantalla sale al instante con lo que haya y, cuando llega la
+   * respuesta, aparecen los estudios.
+   */
+  useEffect(() => {
+    let vivo = true;
+    void rellenarAfinidadPendiente().then((huboCambios) => {
+      if (vivo && huboCambios) setPrefs(getPreferences());
+    });
+    return () => {
+      vivo = false;
+    };
   }, []);
 
   const handleForgetSeries = (title: string) => {

@@ -80,6 +80,47 @@ function escapar(t: string): string {
 }
 
 /**
+ * Formas alternativas de buscar un título cuando el nombre completo no
+ * da resultado en AniList.
+ *
+ * Los títulos oficiales largos son justo los que peor buscan: el
+ * subtítulo entero ("Re:ZERO -Starting Life in Another World-",
+ * "Mushoku Tensei: Jobless Reincarnation") mete tantas palabras que el
+ * buscador de AniList puede no dar ninguna coincidencia, aunque la serie
+ * esté ahí de sobra. Recortando el subtítulo se encuentra a la primera.
+ *
+ * Se devuelven de más específica a menos, sin repetir y sin la original
+ * (que ya se ha probado antes de llamar aquí).
+ */
+export function variantesDeBusqueda(titulo: string): string[] {
+  const base = titulo.trim();
+  const salida: string[] = [];
+
+  const meter = (v: string) => {
+    const limpio = v.replace(/\s+/g, " ").trim();
+    // Menos de cuatro letras no identifica nada: "Re" encontraría
+    // cualquier cosa, y una coincidencia falsa es peor que ninguna.
+    if (limpio.length < 4) return;
+    if (limpio.toLowerCase() === base.toLowerCase()) return;
+    if (salida.some((s) => s.toLowerCase() === limpio.toLowerCase())) return;
+    salida.push(limpio);
+  };
+
+  // "Re:ZERO -Starting Life in Another World-" → "Re:ZERO"
+  meter(base.replace(/[-–—]\s*[^-–—]+\s*[-–—]?\s*$/, ""));
+  // "Mushoku Tensei: Jobless Reincarnation" → "Mushoku Tensei"
+  meter(base.split(/[:：]/)[0]);
+  // Sin paréntesis ni corchetes: "(TV)", "[2024]", "(Season 2)"
+  meter(base.replace(/[([{][^)\]}]*[)\]}]/g, ""));
+  // Sin marcas de temporada al final: "Season 2", "2nd Season", "Part 2"
+  meter(base.replace(/\b((\d+(st|nd|rd|th)?\s+)?season|part|cour|temporada)\s*\d*\s*$/i, ""));
+  // Último recurso: solo las tres primeras palabras.
+  meter(base.split(/\s+/).slice(0, 3).join(" "));
+
+  return salida.slice(0, 3);
+}
+
+/**
  * Traduce los enlaces externos de AniList a los nombres de plataforma
  * que usa la app.
  *
