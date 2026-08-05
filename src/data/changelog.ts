@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v161",
+    fecha: "2026-08-05",
+    titulo: "Conectar, ordenado",
+    puntos: [
+      "Descubrir, Mensajes y Tu perfil pasan a ser tres pestañas en vez de tres bloques apilados.",
+      "Los mensajes sin leer se ven en la pestaña, estés donde estés.",
+      "El chat ya se abre de verdad a pantalla completa, sin la página asomando por detrás.",
+    ],
+  },
+  {
     version: "v160",
     fecha: "2026-08-05",
     titulo: "Conectar, con otra cara",

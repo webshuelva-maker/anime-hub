@@ -10,7 +10,7 @@ import { SelectableChip } from "./SelectableChip";
 import { DateOfBirthPicker } from "./DateOfBirthPicker";
 import { CheckBox } from "./CheckBox";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { DescubrirPerfiles } from "./DescubrirPerfiles";
+import { ConectarShell } from "./ConectarShell";
 import { playError, playSuccess } from "@/lib/sound";
 
 /**
@@ -306,16 +306,20 @@ export function SocialOnboarding() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="pb-10"
+        className=""
       >
-        {/* El descubrimiento es lo que se viene a hacer aquí, así que va
-            primero. Los datos del perfil y la salida quedan debajo. */}
-        <DescubrirPerfiles />
-
-        <div className="mx-auto max-w-2xl px-4 sm:px-6">
-        <div className="panel mt-2 rounded-2xl p-6">
+        {/*
+          Tres asuntos distintos en tres pestañas, en vez de apilados en
+          la misma página. Lo de "Tu perfil" se le pasa al contenedor como
+          contenido de su pestaña: sigue viviendo aquí, que es donde está
+          la lógica de borrarlo.
+        */}
+        <ConectarShell
+          perfil={
+            <div>
+        <div className="panel rounded-2xl p-6">
           <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted">
-            Tu perfil
+            Cómo te ven
           </h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-4">
@@ -333,16 +337,13 @@ export function SocialOnboarding() {
           </dl>
         </div>
 
-        <motion.button
+        <button
           type="button"
           onClick={() => setConfirmingLeave(true)}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.96 }}
-          transition={{ type: "spring", stiffness: 400, damping: 22 }}
-          className="mt-6 rounded-full border border-rumor/40 px-4 py-2 text-sm font-medium text-rumor transition-colors hover:bg-rumor/10 hover:border-rumor/70"
+          className="pulsable mt-6 rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted hover:border-rumor/50 hover:text-rumor"
         >
-          Salir del apartado social y borrar este perfil
-        </motion.button>
+          Salir de Conectar y borrar este perfil
+        </button>
 
         <ConfirmDialog
           open={confirmingLeave}
@@ -352,7 +353,9 @@ export function SocialOnboarding() {
           onConfirm={handleLeave}
           onCancel={() => setConfirmingLeave(false)}
         />
-        </div>
+            </div>
+          }
+        />
       </motion.div>
     );
   }

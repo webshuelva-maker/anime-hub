@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Avatar } from "./AvatarPicker";
-import { ChatConversacion } from "./ChatConversacion";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { playClick, playError, playSuccess, playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
 import {
-  Coincidencia,
   MOTIVOS_DENUNCIA,
   PerfilDescubierto,
   bloquear,
@@ -18,7 +16,6 @@ import {
   cuantosTeEsperan,
   esperandoRespuesta,
   etiquetaAfinidad,
-  misCoincidencias,
   sincronizarGustos,
 } from "@/lib/conectar";
 
@@ -42,9 +39,8 @@ import {
 
 const SUAVE = [0.16, 1, 0.3, 1] as const;
 
-export function DescubrirPerfiles() {
+export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => void }) {
   const [perfiles, setPerfiles] = useState<PerfilDescubierto[]>([]);
-  const [coincidencias, setCoincidencias] = useState<Coincidencia[]>([]);
   const [cargando, setCargando] = useState(true);
   const [decidiendo, setDecidiendo] = useState(false);
   const [nuevaCoincidencia, setNuevaCoincidencia] = useState<PerfilDescubierto | null>(null);
@@ -63,7 +59,6 @@ export function DescubrirPerfiles() {
   const [pendientes, setPendientes] = useState(0);
   /** Gente que ya te ha marcado y a la que aún no has contestado. */
   const [teEsperan, setTeEsperan] = useState(0);
-  const [chatCon, setChatCon] = useState<Coincidencia | null>(null);
   const [menuSeguridad, setMenuSeguridad] = useState(false);
   const [vistos, setVistos] = useState(0);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
@@ -77,14 +72,12 @@ export function DescubrirPerfiles() {
   const cargar = async () => {
     setCargando(true);
     try {
-      const [lista, matches, enEspera, teQuieren] = await Promise.all([
+      const [lista, enEspera, teQuieren] = await Promise.all([
         descubrirPerfiles(),
-        misCoincidencias(),
         esperandoRespuesta(),
         cuantosTeEsperan(),
       ]);
       setPerfiles(lista);
-      setCoincidencias(matches);
       setPendientes(enEspera);
       setTeEsperan(teQuieren);
     } finally {
@@ -126,7 +119,6 @@ export function DescubrirPerfiles() {
         playSuccess();
         vibrar([12, 60, 12]);
         setNuevaCoincidencia(objetivo);
-        setCoincidencias(await misCoincidencias());
       } else {
         // Se dice qué ha pasado y, si has marcado, que ahora toca
         // esperar. El aviso se queda hasta que decidas sobre la
@@ -181,19 +173,7 @@ export function DescubrirPerfiles() {
     : [];
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <div className="flex items-baseline justify-between gap-3">
-        <h1 className="font-heading text-2xl font-bold">Conectar</h1>
-        {coincidencias.length > 0 && (
-          <span className="ice-text text-sm">
-            {coincidencias.length}{" "}
-            {coincidencias.length === 1 ? "coincidencia" : "coincidencias"}
-          </span>
-        )}
-      </div>
-      <p className="mt-1 text-sm text-muted">
-        Gente ordenada por lo que compartís. Cuanto más se parezcan vuestros gustos, antes aparece.
-      </p>
+    <div>
 
       {/* Gente que ya te ha marcado. Sus fichas salen las primeras, así
           que esto es "tienes coincidencias a un toque". */}
@@ -530,83 +510,6 @@ export function DescubrirPerfiles() {
         </AnimatePresence>
       </div>
 
-      {/* --- Coincidencias ------------------------------------------------ */}
-      {coincidencias.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.1, ease: SUAVE }}
-          className="panel mt-6 rounded-2xl p-5"
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Habéis coincidido
-          </p>
-          <div className="mt-3 flex flex-col gap-2">
-            {coincidencias.map((c, i) => (
-              <motion.button
-                key={c.user_id}
-                type="button"
-                onClick={() => {
-                  playClick();
-                  setChatCon(c);
-                }}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.2), ease: SUAVE }}
-                className="flex items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors duration-200 hover:bg-panel-soft/60"
-              >
-                <Avatar avatarId={c.avatar_id ?? ""} size="sm" rounded="full" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                      {c.alias}
-                    </span>
-                    {c.sin_leer > 0 && (
-                      <span className="accent-gradient shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white">
-                        {c.sin_leer}
-                      </span>
-                    )}
-                  </span>
-                  <span className="block truncate text-[11px] text-muted">
-                    {c.ultimo_texto ?? "Todavía no os habéis escrito"}
-                  </span>
-                </span>
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* --- La conversación ---------------------------------------------- */}
-      <AnimatePresence>
-        {chatCon && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-[58] flex items-center justify-center px-4 py-6"
-            style={{
-              background: "color-mix(in srgb, var(--background) 97%, transparent)",
-            }}
-          >
-            <div className="w-full max-w-lg">
-              <ChatConversacion
-                con={chatCon}
-                onCerrar={() => {
-                  setChatCon(null);
-                  void cargar();
-                }}
-                onSalirDeLaLista={() => {
-                  setChatCon(null);
-                  void cargar();
-                }}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* --- Aviso de coincidencia nueva ---------------------------------- */}
       <AnimatePresence>
         {nuevaCoincidencia && (
@@ -647,22 +550,18 @@ export function DescubrirPerfiles() {
               </p>
               <button
                 type="button"
-                onClick={async () => {
-                  const alias = nuevaCoincidencia.alias;
+                onClick={() => {
                   setNuevaCoincidencia(null);
-                  const lista = await misCoincidencias();
-                  setCoincidencias(lista);
-                  const c = lista.find((x) => x.alias === alias);
-                  if (c) setChatCon(c);
+                  onIrAMensajes?.();
                 }}
-                className="accent-gradient mt-6 w-full rounded-full py-2.5 text-sm font-semibold text-white"
+                className="accent-gradient pulsable mt-6 w-full rounded-full py-2.5 text-sm font-semibold text-white"
               >
                 Escribirle ahora
               </button>
               <button
                 type="button"
                 onClick={() => setNuevaCoincidencia(null)}
-                className="mt-2 w-full rounded-full border border-panel-border py-2.5 text-sm text-muted transition-colors duration-200 hover:text-foreground"
+                className="pulsable mt-2 w-full rounded-full border border-panel-border py-2.5 text-sm text-muted hover:text-foreground"
               >
                 Seguir mirando
               </button>
