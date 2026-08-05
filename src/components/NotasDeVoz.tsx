@@ -142,12 +142,19 @@ function repartirEnBarras(niveles: number[], barras = BARRAS): number[] {
     }
     salida.push(cuenta > 0 ? suma / cuenta : 0);
   }
-  return salida;
-}
 
-/** Altura en píxeles de una barra, con un mínimo para que nunca desaparezca. */
-function alturaDeBarra(nivel: number): number {
-  return 3 + Math.min(1, nivel) * 19;
+  /*
+   * Se estira para que la barra más alta llegue arriba del todo.
+   *
+   * Una voz normal a medio metro del micrófono se mueve por valores
+   * bajos, y al hacer la media de cada tramo bajan todavía más. Sin
+   * esto, una nota perfectamente audible se veía como una línea casi
+   * plana y parecía que la onda no funcionaba. El tope mínimo evita que
+   * una nota grabada en silencio se convierta en un montón de ruido
+   * amplificado.
+   */
+  const maximo = Math.max(0.12, ...salida);
+  return salida.map((n) => Math.min(1, n / maximo));
 }
 
 /* ================= Grabar ================= */
@@ -250,6 +257,21 @@ export function GrabadorDeVoz({
 
       pararRef.current = (guardar: boolean) => {
         const duracion = Date.now() - inicioRef.current;
+        /*
+         * Se para el medidor ANTES que nada.
+         *
+         * Este era el motivo de que la onda saliera plana al revisar: el
+         * cronómetro seguía corriendo después de parar la grabación, y
+         * como el micrófono ya estaba cerrado medía silencio. Cada 100 ms
+         * volvía a escribir la onda con ceros y borraba la forma real que
+         * se acababa de calcular. La onda buena estaba bien hecha, duraba
+         * una décima de segundo.
+         */
+        if (intervalo) {
+          clearInterval(intervalo);
+          intervalo = null;
+        }
+
         grabadora.onstop = () => {
           pista?.getTracks().forEach((t) => t.stop());
           void contexto?.close().catch(() => {});
@@ -340,6 +362,19 @@ export function GrabadorDeVoz({
 
   const restante = MAX_NOTA_MS - ms;
 
+  /*
+   * La onda siempre tiene el mismo número de barras.
+   *
+   * Al principio hay menos medidas que barras, así que se rellena por
+   * delante con silencio. Si no, las pocas barras iniciales se repartían
+   * todo el ancho y luego se iban encogiendo según llegaban más: la onda
+   * "respiraba" de forma rarísima durante los primeros segundos.
+   */
+  const ondaEnVivo = [
+    ...Array.from({ length: Math.max(0, BARRAS - niveles.length) }, () => 0),
+    ...niveles.slice(-BARRAS),
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -362,20 +397,26 @@ export function GrabadorDeVoz({
         {duracionLegible(ms)}
       </span>
 
-      {/* La onda real de tu voz, no una animación decorativa. */}
-      <span className="flex h-6 flex-1 items-center justify-end gap-[3px] overflow-hidden">
-        {niveles.map((n, i) => (
-          <motion.span
+      {/* La onda real de tu voz, no una animación decorativa.
+          Se escala en vertical (transform) en vez de cambiar la altura:
+          animar la altura de cuarenta barras obliga al navegador a
+          recalcular la maquetación en cada fotograma, y eso es justo lo
+          que se veía lento y a tirones. El escalado lo lleva la tarjeta
+          gráfica y va suelto. */}
+      <span className="flex h-6 flex-1 items-center gap-[3px] overflow-hidden">
+        {ondaEnVivo.map((n, i) => (
+          <span
             key={i}
-            layout
-            className="w-[3px] shrink-0 rounded-full"
+            className="min-w-0 flex-1 rounded-full"
             style={{
-              background: i > niveles.length - 6 ? "var(--rumor)" : "var(--ice)",
-              opacity: 0.35 + (i / Math.max(1, niveles.length)) * 0.65,
+              height: 22,
+              background: i >= ondaEnVivo.length - 4 ? "var(--rumor)" : "var(--ice)",
+              opacity: 0.35 + (i / ondaEnVivo.length) * 0.65,
+              transform: `scaleY(${Math.max(0.09, Math.min(1, n))})`,
+              transformOrigin: "center",
+              transition: "transform 110ms linear, background-color 200ms linear",
+              willChange: "transform",
             }}
-            initial={{ height: 3 }}
-            animate={{ height: alturaDeBarra(n) }}
-            transition={{ duration: 0.12, ease: "easeOut" }}
           />
         ))}
       </span>
@@ -489,13 +530,16 @@ function RevisarNota({
         {barras.map((n, i) => {
           const alcanzada = i / barras.length <= progreso;
           return (
-            <motion.span
+            <span
               key={i}
-              className="w-[3px] flex-1 rounded-full"
-              style={{ background: alcanzada ? "var(--ice)" : "var(--panel-border)" }}
-              initial={{ height: 3 }}
-              animate={{ height: alturaDeBarra(n) }}
-              transition={{ duration: 0.3, delay: i * 0.008, ease: SUAVE }}
+              className="min-w-0 flex-1 rounded-full"
+              style={{
+                height: 22,
+                background: alcanzada ? "var(--ice)" : "var(--panel-border)",
+                transform: `scaleY(${Math.max(0.09, Math.min(1, n))})`,
+                transformOrigin: "center",
+                transition: "background-color 140ms linear",
+              }}
             />
           );
         })}
@@ -680,20 +724,25 @@ export function NotaDeVoz({
         {Array.from({ length: 26 }).map((_, i) => {
           // Alturas fijas por posición: la misma nota se ve siempre igual
           // en vez de cambiar de forma en cada dibujado.
-          const alto = 5 + ((i * 13) % 15);
+          const alto = (5 + ((i * 13) % 15)) / 20;
           const alcanzada = i / 26 <= progreso;
           // La barra que se está reproduciendo ahora mismo da un saltito,
           // así se ve de un vistazo por dónde va.
           const activa = sonando && Math.floor(progreso * 26) === i;
           return (
-            <motion.span
+            <span
               key={i}
-              className="flex-1 rounded-full"
-              animate={{
-                height: activa ? alto + 5 : alto,
+              className="min-w-0 flex-1 rounded-full"
+              style={{
+                height: 20,
                 background: alcanzada ? "var(--ice)" : "var(--panel-border)",
+                transform: `scaleY(${Math.min(1, activa ? alto * 1.35 : alto)})`,
+                transformOrigin: "center",
+                // Corto y lineal: con una curva suave y 26 barras, el
+                // saltito de la barra activa se arrastraba por detrás del
+                // sonido y parecía que iba a destiempo.
+                transition: "transform 90ms linear, background-color 120ms linear",
               }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
             />
           );
         })}
