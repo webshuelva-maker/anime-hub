@@ -14,7 +14,7 @@ import {
   bloquear,
   denunciar,
   enviarMensaje,
-  escucharConversacion,
+  engancharConversacion,
   marcarConversacionLeida,
   mensajesCon,
 } from "@/lib/conectar";
@@ -77,6 +77,10 @@ export function ChatConversacion({
   const [fallo, setFallo] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [enLinea, setEnLinea] = useState(false);
+  const [escribiendo, setEscribiendo] = useState(false);
+  const engancheRef = useRef<{ avisarQueEscribo: () => void; cerrar: () => void } | null>(null);
+  const finEscribirRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
   const [denunciando, setDenunciando] = useState(false);
   const [motivoDenuncia, setMotivoDenuncia] = useState<string | null>(null);
@@ -85,7 +89,6 @@ export function ChatConversacion({
 
   useEffect(() => {
     let vivo = true;
-    let dejarDeEscuchar: (() => void) | null = null;
 
     (async () => {
       const supabase = createClient();
@@ -99,18 +102,32 @@ export function ChatConversacion({
       setCargando(false);
       void marcarConversacionLeida(con.user_id);
 
-      dejarDeEscuchar = escucharConversacion(auth.user.id, con.user_id, (m) => {
-        setMensajes((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-        if (m.autor_id !== auth.user!.id) {
-          vibrar(8);
-          void marcarConversacionLeida(con.user_id);
-        }
+      engancheRef.current = engancharConversacion(auth.user.id, con.user_id, {
+        alLlegarMensaje: (m) => {
+          setMensajes((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+          // Si llega un mensaje, es que ha terminado de escribir.
+          setEscribiendo(false);
+          if (m.autor_id !== auth.user!.id) {
+            vibrar(8);
+            void marcarConversacionLeida(con.user_id);
+          }
+        },
+        alCambiarPresencia: setEnLinea,
+        alEscribirElOtro: () => {
+          setEscribiendo(true);
+          // El aviso no dice cuándo PARA de escribir, así que se apaga
+          // solo: si en tres segundos no llega otro, es que ha dejado de
+          // teclear (o ha borrado la frase y se ha ido).
+          if (finEscribirRef.current) clearTimeout(finEscribirRef.current);
+          finEscribirRef.current = setTimeout(() => setEscribiendo(false), 3000);
+        },
       });
     })();
 
     return () => {
       vivo = false;
-      dejarDeEscuchar?.();
+      engancheRef.current?.cerrar();
+      if (finEscribirRef.current) clearTimeout(finEscribirRef.current);
     };
   }, [con.user_id]);
 
@@ -173,13 +190,38 @@ export function ChatConversacion({
           ‹
         </button>
 
-        <Avatar avatarId={con.avatar_id ?? ""} size="sm" rounded="full" />
+        <div className="relative shrink-0">
+          <Avatar avatarId={con.avatar_id ?? ""} size="sm" rounded="full" />
+          {/* El punto solo aparece cuando está de verdad: no hay estado
+              "ausente" inventado ni "visto hace X", que es un dato que
+              nadie ha pedido publicar. */}
+          <AnimatePresence>
+            {enLinea && (
+              <motion.span
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: SUAVE }}
+                className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background"
+                style={{ background: "var(--ice)" }}
+              />
+            )}
+          </AnimatePresence>
+        </div>
 
         <div className="min-w-0 flex-1">
           <p className="truncate font-heading text-[15px] font-semibold leading-tight">
             {con.alias}
           </p>
-          <p className="text-[11px] text-muted">{con.edad} años</p>
+          <p className="h-4 text-[11px] leading-4">
+            {escribiendo ? (
+              <span className="ice-text">escribiendo…</span>
+            ) : enLinea ? (
+              <span className="ice-text">en línea</span>
+            ) : (
+              <span className="text-muted">{con.edad} años</span>
+            )}
+          </p>
         </div>
 
         {/* Las herramientas de seguridad viven aquí dentro: a un toque y
@@ -337,6 +379,35 @@ export function ChatConversacion({
             })}
           </div>
         )}
+        {/* Los tres puntos, al final del hilo y donde estaría el mensaje
+            que viene. La altura está reservada siempre, así que aparecer
+            y desaparecer no da un salto a la conversación. */}
+        <div className="h-7 px-4">
+          <AnimatePresence>
+            {escribiendo && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: SUAVE }}
+                className="flex items-center gap-2 pl-11"
+              >
+                <span className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <motion.span
+                      key={i}
+                      className="h-1.5 w-1.5 rounded-full bg-muted"
+                      animate={{ opacity: [0.25, 1, 0.25] }}
+                      transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
+                    />
+                  ))}
+                </span>
+                <span className="text-[11px] text-muted">{con.alias} está escribiendo</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         <div ref={finRef} />
       </div>
 
@@ -359,7 +430,10 @@ export function ChatConversacion({
           <textarea
             ref={cajaRef}
             value={texto}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              setTexto(e.target.value);
+              if (e.target.value.trim()) engancheRef.current?.avisarQueEscribo();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

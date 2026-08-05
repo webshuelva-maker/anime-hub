@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v162",
+    fecha: "2026-08-05",
+    titulo: "Conectar con cara",
+    puntos: [
+      "Los animes que compartís se ven con su carátula, y el fondo de cada ficha es un mosaico de ellas.",
+      "En el chat sabes si la otra persona está en línea y cuándo está escribiendo.",
+    ],
+  },
+  {
     version: "v161",
     fecha: "2026-08-05",
     titulo: "Conectar, ordenado",

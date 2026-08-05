@@ -13,6 +13,7 @@ import {
   decidir,
   denunciar,
   descubrirPerfiles,
+  caratulasDe,
   cuantosTeEsperan,
   esperandoRespuesta,
   etiquetaAfinidad,
@@ -60,6 +61,8 @@ export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => voi
   /** Gente que ya te ha marcado y a la que aún no has contestado. */
   const [teEsperan, setTeEsperan] = useState(0);
   const [menuSeguridad, setMenuSeguridad] = useState(false);
+  /** Carátula por título compartido, cuando AniList la conoce. */
+  const [caratulas, setCaratulas] = useState<Record<string, string>>({});
   const [vistos, setVistos] = useState(0);
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
   const [denunciando, setDenunciando] = useState(false);
@@ -163,6 +166,20 @@ export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => voi
     setAvisoDenuncia(null);
     playSuccess();
   };
+
+  // Las carátulas de la persona que se está viendo. Se piden al cambiar
+  // de ficha, no todas de golpe al cargar la tanda: la mayoría de las
+  // fichas nunca llegan a verse porque se decide antes.
+  useEffect(() => {
+    if (!actual || actual.favoritos_comunes.length === 0) return;
+    let vivo = true;
+    void caratulasDe(actual.favoritos_comunes).then((c) => {
+      if (vivo) setCaratulas((prev) => ({ ...prev, ...c }));
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [actual]);
 
   const enComun = actual
     ? [
@@ -287,6 +304,10 @@ export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => voi
               {/* Cabecera con un resplandor cuya intensidad es la
                   afinidad: lo primero que se ve ya dice cuánto encajáis,
                   antes de leer una palabra. */}
+              {/* Mosaico de las carátulas que compartís, muy bajado, detrás
+                  de la cabecera. Es lo que hace que la ficha se vea de una
+                  app de anime y no de un formulario: en vez de decir que
+                  compartís tres series, se ven. */}
               <div
                 className="relative px-6 pb-5 pt-7"
                 style={{
@@ -295,7 +316,34 @@ export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => voi
                   )}%, transparent), transparent 70%)`,
                 }}
               >
-                <div className="flex items-center gap-4">
+                {Object.keys(caratulas).length > 0 && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 flex overflow-hidden"
+                    style={{
+                      // Se desvanece hacia abajo para que el texto de la
+                      // ficha siempre se lea sobre fondo limpio.
+                      maskImage: "linear-gradient(to bottom, black 0%, transparent 92%)",
+                      WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 92%)",
+                    }}
+                  >
+                    {actual.favoritos_comunes
+                      .filter((t) => caratulas[t])
+                      .slice(0, 4)
+                      .map((t) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={t}
+                          src={caratulas[t]}
+                          alt=""
+                          className="h-full flex-1 object-cover opacity-[0.18]"
+                          loading="lazy"
+                        />
+                      ))}
+                  </div>
+                )}
+
+                <div className="relative flex items-center gap-4">
                   <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -358,7 +406,9 @@ export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => voi
                           delay: Math.min(0.06 + i * 0.03, 0.28),
                           ease: SUAVE,
                         }}
-                        className="rounded-full border px-2.5 py-1 text-xs"
+                        className={`flex items-center gap-2 rounded-full border text-xs ${
+                          caratulas[c.texto] ? "py-1 pl-1 pr-3" : "px-2.5 py-1"
+                        }`}
                         style={
                           c.fuerte
                             ? {
@@ -369,6 +419,15 @@ export function DescubrirPerfiles({ onIrAMensajes }: { onIrAMensajes?: () => voi
                             : { borderColor: "var(--panel-border)", color: "var(--muted)" }
                         }
                       >
+                        {caratulas[c.texto] && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={caratulas[c.texto]}
+                            alt=""
+                            className="h-6 w-6 shrink-0 rounded-full object-cover"
+                            loading="lazy"
+                          />
+                        )}
                         {c.texto}
                       </motion.span>
                     ))}

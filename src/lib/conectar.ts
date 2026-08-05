@@ -258,18 +258,42 @@ export async function marcarConversacionLeida(otro: string): Promise<void> {
 }
 
 /**
- * Escucha los mensajes nuevos de una conversación. Devuelve la función
- * para dejar de escuchar.
+ * Se engancha a una conversación: mensajes nuevos, quién está delante y
+ * quién está escribiendo. Devuelve con qué avisar de que TÚ escribes, y
+ * cómo desengancharse.
+ *
+ * Las tres cosas van por el MISMO canal a propósito. Cada canal abierto
+ * es una conexión que hay que mantener viva, y tres conexiones para una
+ * sola conversación es tirar batería en el móvil sin ganar nada.
+ *
+ * Ni "en línea" ni "escribiendo" se guardan en ninguna tabla: viajan por
+ * el canal y desaparecen. Es información de este segundo, y guardar un
+ * registro de cuándo está cada uno conectado sería construir un historial
+ * de los hábitos de la gente sin ningún motivo.
  */
-export function escucharConversacion(
+export interface EngancheConversacion {
+  /** Avisa a la otra persona de que estás escribiendo. */
+  avisarQueEscribo: () => void;
+  cerrar: () => void;
+}
+
+export function engancharConversacion(
   yo: string,
   otro: string,
-  alLlegar: (m: Mensaje) => void
-): () => void {
+  manejadores: {
+    alLlegarMensaje: (m: Mensaje) => void;
+    alCambiarPresencia: (enLinea: boolean) => void;
+    alEscribirElOtro: () => void;
+  }
+): EngancheConversacion {
   const supabase = createClient();
   const { a, b } = pareja(yo, otro);
-  const canal = supabase
-    .channel(`chat-${a}-${b}`)
+
+  const canal = supabase.channel(`chat-${a}-${b}`, {
+    config: { presence: { key: yo } },
+  });
+
+  canal
     .on(
       "postgres_changes",
       {
@@ -282,12 +306,72 @@ export function escucharConversacion(
         const m = payload.new as Mensaje;
         // El filtro del canal solo admite una columna, así que la otra
         // mitad de la pareja se comprueba aquí.
-        if (m.usuario_b === b) alLlegar(m);
+        if (m.usuario_b === b) manejadores.alLlegarMensaje(m);
       }
     )
-    .subscribe();
+    .on("presence", { event: "sync" }, () => {
+      const estado = canal.presenceState();
+      manejadores.alCambiarPresencia(Boolean(estado[otro]?.length));
+    })
+    .on("broadcast", { event: "escribiendo" }, ({ payload }) => {
+      if (payload?.de === otro) manejadores.alEscribirElOtro();
+    })
+    .subscribe((estado) => {
+      if (estado === "SUBSCRIBED") {
+        void canal.track({ en: Date.now() });
+      }
+    });
 
-  return () => {
-    void supabase.removeChannel(canal);
+  /*
+   * El aviso de "estoy escribiendo" se manda como mucho una vez cada dos
+   * segundos. Sin freno saldría uno por cada tecla pulsada, que es
+   * decenas de mensajes por frase para enseñar exactamente lo mismo.
+   */
+  let ultimoAviso = 0;
+
+  return {
+    avisarQueEscribo: () => {
+      const ahora = Date.now();
+      if (ahora - ultimoAviso < 2000) return;
+      ultimoAviso = ahora;
+      void canal.send({ type: "broadcast", event: "escribiendo", payload: { de: yo } });
+    },
+    cerrar: () => {
+      void supabase.removeChannel(canal);
+    },
   };
+}
+
+/**
+ * Carátulas de una lista de títulos, para enseñar en común algo más que
+ * texto gris. Se recuerdan en memoria mientras dure la visita: en
+ * Conectar los mismos animes salen una y otra vez.
+ */
+const caratulasVistas = new Map<string, string | null>();
+
+export async function caratulasDe(titulos: string[]): Promise<Record<string, string>> {
+  const salida: Record<string, string> = {};
+  const porPedir: string[] = [];
+
+  for (const t of titulos) {
+    const guardada = caratulasVistas.get(t.toLowerCase());
+    if (guardada === undefined) porPedir.push(t);
+    else if (guardada) salida[t] = guardada;
+  }
+  if (porPedir.length === 0) return salida;
+
+  try {
+    const res = await fetch(`/api/caratulas?titulos=${encodeURIComponent(porPedir.join("|"))}`);
+    const json = (await res.json()) as { caratulas?: Record<string, string> };
+    for (const t of porPedir) {
+      const url = json.caratulas?.[t] ?? null;
+      // Se recuerda también cuando NO hay carátula: si no, cada visita
+      // volvería a preguntar por los títulos que AniList no conoce.
+      caratulasVistas.set(t.toLowerCase(), url);
+      if (url) salida[t] = url;
+    }
+  } catch {
+    // Sin carátulas, las etiquetas de texto siguen ahí.
+  }
+  return salida;
 }
