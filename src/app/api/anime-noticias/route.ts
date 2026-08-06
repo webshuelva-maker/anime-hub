@@ -5,6 +5,8 @@ import {
   type JikanNewsItem,
 } from "@/lib/jikan";
 import { nucleoDeTitulo } from "@/lib/coincidenciaTitulos";
+import { noticiasDesdeMal } from "@/lib/malDirecto";
+import { traducirNoticias } from "@/lib/traducirArchivo";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -113,7 +115,50 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const { ok, noticias, motivo } = await getJikanNewsConEstado(ficha.malId, 8);
+    let { ok, noticias, motivo } = await getJikanNewsConEstado(ficha.malId, 8);
+    let via = "jikan";
+
+    /*
+     * PLAN B: leer la página de MyAnimeList directamente.
+     *
+     * Su API (Jikan) arrastra un fallo abierto de errores 504
+     * intermitentes porque no consigue hablar con MyAnimeList. Cuando
+     * eso pasa, la web de MyAnimeList sigue en pie perfectamente, así
+     * que se lee de ahí — que es justo lo que hace Jikan por dentro.
+     *
+     * Solo cuando la API ha fallado, nunca antes: su API es más estable
+     * de interpretar que un HTML que pueden rediseñar cuando quieran, y
+     * es mejor vecino usar la vía que han hecho para esto.
+     */
+    if (!ok) {
+      const directo = await noticiasDesdeMal(ficha.malId, 8);
+      if (directo.ok && directo.noticias.length > 0) {
+        ok = true;
+        noticias = directo.noticias;
+        motivo = null;
+        via = "web de MyAnimeList";
+      } else if (directo.motivo) {
+        // Se cuentan los dos fracasos: saber que han fallado LAS DOS
+        // vías, y por qué cada una, es lo que evita otra ronda de
+        // adivinanzas.
+        motivo = `${motivo} · lectura directa: ${directo.motivo}`;
+      }
+    }
+
+    /*
+     * Al español SIEMPRE, antes de guardar en caché.
+     *
+     * Esta era la única parte de la app donde aparecía texto en inglés.
+     * Traducir aquí y no en el navegador hace que la traducción se
+     * guarde junto con las noticias, así que solo se paga una vez por
+     * serie y no en cada visita.
+     */
+    let traducidas = false;
+    if (ok && noticias.length > 0) {
+      const r = await traducirNoticias(noticias);
+      noticias = r.noticias;
+      traducidas = r.traducidas;
+    }
 
     /*
      * Solo se guarda lo que ES una respuesta.
@@ -154,6 +199,8 @@ export async function GET(req: NextRequest) {
         serie: ficha.title,
         malUrl: ficha.url,
         archivoUrl: archivoEnMal,
+        via,
+        traducidas,
         fallo: !ok,
         motivo: ok ? null : `${motivo ?? "desconocido"} · id ${ficha.malId}`,
       },

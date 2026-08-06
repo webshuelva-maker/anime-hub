@@ -13,8 +13,10 @@ import { motion } from "framer-motion";
  * siguiente temporada, cuándo se anunció la fecha…).
  *
  * Se enseña separado y con su origen a la vista, porque no son las
- * noticias del feed: son de otra fuente, en inglés, y llevan a MAL en
- * vez de a un medio en español.
+ * noticias del feed: son de otra fuente y llevan a MyAnimeList en vez de
+ * a un medio en español. Llegan traducidas al español, igual que el
+ * resto del feed: esta era la única parte de la app donde aparecía texto
+ * en inglés.
  */
 
 interface NoticiaMal {
@@ -46,6 +48,7 @@ export function NoticiasDeArchivo({
   const [fallo, setFallo] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [archivoUrl, setArchivoUrl] = useState<string | null>(null);
+  const [traducidas, setTraducidas] = useState(false);
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -65,12 +68,14 @@ export function NoticiasDeArchivo({
           fallo?: boolean;
           motivo?: string | null;
           archivoUrl?: string | null;
+          traducidas?: boolean;
         };
         if (vivo) {
           setNoticias(json.noticias ?? []);
           setFallo(Boolean(json.fallo));
           setMotivo(json.motivo ?? null);
           setArchivoUrl(json.archivoUrl ?? null);
+          setTraducidas(Boolean(json.traducidas));
         }
       } catch {
         if (vivo) {
@@ -156,7 +161,13 @@ export function NoticiasDeArchivo({
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
           Noticias anteriores sobre esta serie
         </p>
-        <p className="text-[10px] text-muted">Archivo de MyAnimeList · en inglés</p>
+        {/* Ya no dice "en inglés": el archivo llega traducido igual que
+            el resto del feed. Se sigue diciendo de dónde viene, porque
+            estas noticias no son de los medios que sigue la app y
+            llevan a MyAnimeList en vez de a un medio en español. */}
+        <p className="text-[10px] text-muted">
+          Archivo de MyAnimeList{traducidas ? " · traducido" : ""}
+        </p>
       </div>
 
       <div className="panel divide-y divide-panel-border overflow-hidden rounded-2xl">

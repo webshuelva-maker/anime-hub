@@ -34,6 +34,14 @@ export function claveIA(): string | null {
 
 /** Dirección del endpoint compatible con el formato de OpenAI. */
 export function urlIA(): string {
+  /*
+   * Se puede cambiar por variable de entorno. Sirve para apuntar a un
+   * proxy propio o a otro proveedor compatible, y para poder probar en
+   * local todo lo que depende del traductor sin gastar cuota real ni
+   * necesitar clave.
+   */
+  if (process.env.IA_URL) return process.env.IA_URL;
+
   return proveedorIA() === "gemini"
     ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
     : "https://api.groq.com/openai/v1/chat/completions";
