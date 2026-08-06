@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v198",
+    fecha: "2026-08-06",
+    titulo: "Las llamadas conectan",
+    puntos: [
+      "Arreglado el «conectando…» que no terminaba nunca.",
+      "Y si de verdad no se puede conectar, ahora te lo dice en vez de dejarte esperando.",
+    ],
+  },
+  {
     version: "v197",
     fecha: "2026-08-06",
     titulo: "Llamadas de voz",

@@ -77,6 +77,17 @@ if (process.env.NEXT_PUBLIC_TURN_URL) {
 /** Cuánto se deja sonar antes de darla por no contestada. */
 const TIMBRE_MS = 35_000;
 
+/*
+ * Cuánto se espera a que la conexión cuaje una vez aceptada.
+ *
+ * Antes no había tope: si los dos navegadores no conseguían encontrarse,
+ * la pantalla se quedaba en "conectando" indefinidamente y la única
+ * salida era colgar a mano sin saber si iba a funcionar en un segundo.
+ * Veinte segundos es de sobra —lo normal es uno o dos— y así el fallo se
+ * dice en vez de disimularse.
+ */
+const ESPERA_CONEXION_MS = 20_000;
+
 let info: InfoLlamada = {
   estado: "inactiva",
   otroId: null,
@@ -106,6 +117,23 @@ let ctxAudio: AudioContext | null = null;
  * pasa sobre todo en conexiones rápidas.
  */
 let candidatosEnEspera: RTCIceCandidateInit[] = [];
+let temporizadorConexion: ReturnType<typeof setTimeout> | null = null;
+
+function cancelarEsperaDeConexion() {
+  if (temporizadorConexion) {
+    clearTimeout(temporizadorConexion);
+    temporizadorConexion = null;
+  }
+}
+
+function esperarConexion() {
+  cancelarEsperaDeConexion();
+  temporizadorConexion = setTimeout(() => {
+    if (info.estado === "conectando" || info.estado === "llamando") {
+      terminar("No se ha podido establecer la conexión");
+    }
+  }, ESPERA_CONEXION_MS);
+}
 
 function avisar() {
   for (const o of oyentes) o({ ...info });
@@ -137,18 +165,73 @@ type Señal =
   | { tipo: "colgar"; de: string; motivo: string }
   | { tipo: "rechazo"; de: string };
 
-async function enviarSeñal(aQuien: string, señal: Señal) {
+/*
+ * ---------------------------------------------------------------------
+ * POR QUÉ SE MANTIENE UN CANAL ABIERTO (arreglo del "conectando" eterno)
+ *
+ * La primera versión abría un canal de Supabase NUEVO por cada mensaje,
+ * esperaba a que se suscribiera, mandaba y lo cerraba. Con la oferta y
+ * la respuesta —que son dos mensajes sueltos— colaba. Con los candidatos
+ * de red, no: WebRTC genera entre diez y treinta en los primeros
+ * segundos, uno detrás de otro, y cada uno estaba abriendo y cerrando su
+ * propia conexión.
+ *
+ * El resultado es exactamente lo que se veía: la oferta y la respuesta
+ * llegaban (por eso la llamada pasaba a "conectando"), pero los
+ * candidatos llegaban tarde, desordenados o no llegaban. Y sin
+ * candidatos los dos navegadores no encuentran el camino, así que la
+ * conexión se queda a medias para siempre.
+ *
+ * Ahora se abre UN canal hacia la otra persona al empezar la llamada y
+ * se usa para todo hasta colgar. Lo que se genere antes de que el canal
+ * esté listo se guarda en una cola y sale en cuanto lo esté, en orden.
+ * ---------------------------------------------------------------------
+ */
+let canalSalida: RealtimeChannel | null = null;
+let destinoSalida: string | null = null;
+let canalListo = false;
+let colaDeEnvio: Señal[] = [];
+
+function abrirCanalSalida(aQuien: string) {
+  if (canalSalida && destinoSalida === aQuien) return;
+  cerrarCanalSalida();
+
+  destinoSalida = aQuien;
+  canalListo = false;
+
   const supabase = createClient();
-  const canal = supabase.channel(`llamadas-${aQuien}`);
-  await new Promise<void>((listo) => {
-    canal.subscribe((estado) => {
-      if (estado === "SUBSCRIBED") listo();
-    });
+  canalSalida = supabase.channel(`llamadas-${aQuien}`);
+  canalSalida.subscribe((estado) => {
+    if (estado !== "SUBSCRIBED") return;
+    canalListo = true;
+    const pendientes = colaDeEnvio;
+    colaDeEnvio = [];
+    for (const señal of pendientes) {
+      void canalSalida?.send({ type: "broadcast", event: "señal", payload: señal });
+    }
   });
-  await canal.send({ type: "broadcast", event: "señal", payload: señal });
-  // Se cierra en cuanto se manda: mantener abierto un canal por cada
-  // persona a la que llamas sería dejar conexiones colgando.
-  setTimeout(() => void supabase.removeChannel(canal), 1200);
+}
+
+function cerrarCanalSalida() {
+  if (canalSalida) {
+    void createClient().removeChannel(canalSalida);
+  }
+  canalSalida = null;
+  destinoSalida = null;
+  canalListo = false;
+  colaDeEnvio = [];
+}
+
+async function enviarSeñal(aQuien: string, señal: Señal) {
+  abrirCanalSalida(aQuien);
+
+  if (!canalListo) {
+    // Todavía no está suscrito: a la cola, que sale sola en cuanto lo
+    // esté. Perder un candidato es perder un camino posible.
+    colaDeEnvio.push(señal);
+    return;
+  }
+  await canalSalida?.send({ type: "broadcast", event: "señal", payload: señal });
 }
 
 /**
@@ -183,6 +266,10 @@ async function manejarSeñal(s: Señal) {
       void enviarSeñal(s.de, { tipo: "rechazo", de: miId! });
       return;
     }
+    // Se abre ya el canal de vuelta: los candidatos empiezan a salir en
+    // cuanto se prepara la conexión, y si el canal no está listo se
+    // pierden.
+    abrirCanalSalida(s.de);
     await prepararConexion(s.de);
     await pc!.setRemoteDescription(new RTCSessionDescription(s.sdp));
     await aplicarCandidatosEnEspera();
@@ -200,6 +287,7 @@ async function manejarSeñal(s: Señal) {
     await pc.setRemoteDescription(new RTCSessionDescription(s.sdp));
     await aplicarCandidatosEnEspera();
     cambiar({ estado: "conectando" });
+    esperarConexion();
     return;
   }
 
@@ -265,11 +353,31 @@ async function prepararConexion(otroId: string) {
     medirNivel(e.streams[0]);
   };
 
+  /*
+   * Se miran los DOS estados, el de la conexión y el del ICE.
+   *
+   * No todos los navegadores actualizan connectionState igual de pronto
+   * —Safari y algunos Android se quedan cortos—, así que fiarlo todo a
+   * uno deja llamadas que están sonando pero la pantalla sigue diciendo
+   * "conectando".
+   */
+  pc.oniceconnectionstatechange = () => {
+    if (!pc) return;
+    const e = pc.iceConnectionState;
+    if (e === "connected" || e === "completed") {
+      cancelarEsperaDeConexion();
+      arrancarCronometro();
+      if (info.estado !== "en-curso") cambiar({ estado: "en-curso" });
+    }
+    if (e === "failed") terminar("No se ha podido establecer la conexión");
+  };
+
   pc.onconnectionstatechange = () => {
     if (!pc) return;
     if (pc.connectionState === "connected") {
+      cancelarEsperaDeConexion();
       arrancarCronometro();
-      cambiar({ estado: "en-curso" });
+      if (info.estado !== "en-curso") cambiar({ estado: "en-curso" });
     }
     if (pc.connectionState === "failed") {
       /*
@@ -369,6 +477,7 @@ export async function llamarA(otroId: string, alias: string, avatar: string | nu
 export async function aceptarLlamada() {
   if (!pc || !info.otroId || !miId) return;
   cambiar({ estado: "conectando" });
+  esperarConexion();
 
   if (!(await pedirMicrofono())) return;
   micro!.getTracks().forEach((t) => pc!.addTrack(t, micro!));
@@ -401,6 +510,8 @@ export function alternarMicrofono(): boolean {
 }
 
 function terminar(motivo: string | null) {
+  cancelarEsperaDeConexion();
+  cerrarCanalSalida();
   if (temporizadorTimbre) {
     clearTimeout(temporizadorTimbre);
     temporizadorTimbre = null;
