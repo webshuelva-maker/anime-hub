@@ -52,6 +52,13 @@ const CABECERAS_NAVEGADOR = {
  */
 const ES_NOTICIA = /^(https?:\/\/(www\.)?myanimelist\.net)?\/news\/\d+/i;
 
+/**
+ * Tamaño máximo, en caracteres, de lo que puede ser el bloque de UNA
+ * noticia. Por encima de esto ya no es una noticia, es la página entera
+ * con su menú de navegación.
+ */
+const LIMITE_BLOQUE = 700;
+
 /** Señales de que lo que ha llegado no es la página, sino un muro. */
 function pareceBloqueo(html: string): boolean {
   const h = html.toLowerCase();
@@ -98,7 +105,7 @@ function limpiar(t: string): string {
  * terminaba con la hora otra vez.
  */
 function limpiarResumen(textoBloque: string, titulo: string): string {
-  return limpiar(
+  const salida = limpiar(
     textoBloque
       // El propio titular, para que no se repita dentro del resumen.
       .replace(titulo, " ")
@@ -111,7 +118,26 @@ function limpiarResumen(textoBloque: string, titulo: string): string {
       .replace(/\bread more\b/gi, " ")
       // Separadores sueltos que quedan tras los recortes.
       .replace(/\s*\|\s*/g, " ")
-  ).slice(0, 240);
+  );
+
+  /*
+   * Red de seguridad: si lo que ha salido es el MENÚ de MyAnimeList, se
+   * tira.
+   *
+   * Aunque el bloque venga acotado, un cambio de maquetación puede
+   * volver a colar la navegación de la web. Y un resumen que pone
+   * "Details Characters & Staff Episodes Videos Stats…" no solo no
+   * informa: encima se traduce y se cuela en la pantalla con toda la
+   * pinta de ser contenido de verdad. Mejor sin resumen que con basura.
+   */
+  const esMenu =
+    /characters?\s*&\s*staff/i.test(salida) ||
+    /interest stacks/i.test(salida) ||
+    /more info/i.test(salida) ||
+    // Las migas de pan del tipo "Inicio > Anime > ..." llevan flechas.
+    (salida.match(/>/g) ?? []).length >= 2;
+
+  return esMenu ? "" : salida.slice(0, 240);
 }
 
 export interface ResultadoDirecto {
@@ -175,19 +201,42 @@ export async function noticiasDesdeMal(malId: number, limite = 8): Promise<Resul
       vistas.add(limpia);
 
       /*
-       * El resumen y la fecha viven en el bloque que envuelve al enlace.
-       * Se sube un par de niveles y se lee su texto, en vez de depender
-       * de nombres de clase concretos.
+       * El bloque de ESA noticia, y solo de esa.
+       *
+       * Antes se cogía `closest("div").parent()`, que subía a un
+       * contenedor enorme abarcando media página. Resultado: el resumen
+       * se traía el menú entero de MyAnimeList ("Details, Characters &
+       * Staff, Episodes, Videos…") y, peor todavía, la fecha era la
+       * misma para TODAS las noticias, porque cogía la primera que
+       * encontraba en ese contenedor compartido.
+       *
+       * Ahora se sube desde el enlace de uno en uno y se para en cuanto
+       * el bloque tiene texto suficiente para llevar un resumen pero
+       * sigue siendo pequeño. Un bloque que se pasa de tamaño ya no es
+       * la noticia: es la página.
        */
-      const bloque = $(el).closest("div").parent();
-      const textoBloque = limpiar(bloque.text());
+      let bloque = $(el).parent();
+      for (let nivel = 0; nivel < 4; nivel++) {
+        const largo = limpiar(bloque.text()).length;
+        if (largo > titulo.length + 40 && largo < LIMITE_BLOQUE) break;
+        const padre = bloque.parent();
+        if (!padre.length) break;
+        bloque = padre;
+      }
 
-      const resumen = limpiarResumen(textoBloque, titulo);
+      const textoBloque = limpiar(bloque.text());
+      // Si aun así el bloque es descomunal, no se saca resumen de ahí:
+      // mejor una noticia sin resumen que una con el menú de la web
+      // pegado.
+      const resumen =
+        textoBloque.length < LIMITE_BLOQUE ? limpiarResumen(textoBloque, titulo) : "";
 
       noticias.push({
         title: titulo,
         url: limpia.startsWith("http") ? limpia : `https://myanimelist.net${limpia}`,
-        date: fechaISO(textoBloque),
+        // Solo se acepta la fecha si sale del bloque acotado: sacada del
+        // contenedor grande, todas las noticias acababan con la misma.
+        date: textoBloque.length < LIMITE_BLOQUE ? fechaISO(textoBloque) : null,
         excerpt: resumen,
       });
     });

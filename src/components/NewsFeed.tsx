@@ -39,6 +39,9 @@ let yaSeMostroLaPortada = false;
  */
 const caratulasConocidas = new Map<string, string>();
 
+/** Curva de entrada, la misma que usa el resto de la app. */
+const SUAVE = [0.16, 1, 0.3, 1] as const;
+
 export function NewsFeed() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [openItemId, setOpenItemId] = useState<string | null>(() =>
@@ -809,7 +812,21 @@ export function NewsFeed() {
         )}
 
         {status === "live" && searchResults && (
-          <div>
+          /*
+             Los resultados ENTRAN, no aparecen de golpe.
+
+             La ficha de la serie ya se animaba por dentro, pero el bloque
+             entero —cabecera, ficha, noticias— se plantaba de golpe al
+             sustituir al feed, y ese corte seco es lo que se siente
+             tosco. Un desvanecido corto con un desplazamiento mínimo
+             basta: lo justo para que el ojo entienda que la pantalla ha
+             cambiado, sin hacer esperar a nadie.
+          */
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: SUAVE }}
+          >
             <div className="mb-4 flex items-center justify-between">
               <p className="font-heading text-xs font-semibold uppercase tracking-[0.2em] text-muted">
                 Resultados para &quot;{searchTerm}&quot;
@@ -837,7 +854,14 @@ export function NewsFeed() {
                     gasta ni una petición. */}
                 <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} malId={malId} />
                 {casiResultados.length > 0 && (
-                  <div className="mt-8">
+                  /*
+                     Estas noticias son de OTRAS series parecidas, no de
+                     la buscada. Iban pegadas al archivo y se leían como
+                     si fueran continuación de él. Con más aire y una
+                     línea de separación se entiende de un vistazo que
+                     empieza otra cosa.
+                  */
+                  <div className="mt-12 border-t border-panel-border pt-8">
                     <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
                       Puede que tenga que ver
                     </p>
@@ -874,7 +898,7 @@ export function NewsFeed() {
                 ))}
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {status === "live" && !searchResults && (
