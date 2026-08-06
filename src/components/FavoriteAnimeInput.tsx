@@ -153,11 +153,83 @@ export function FavoriteAnimeInput() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
+            // "layout" hace que el recuadro cambie de alto animándose al
+            // pasar de una línea ("Buscando…") a la lista de resultados,
+            // en vez de dar el estirón de golpe.
+            layout
             className="panel absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-xl border border-panel-border shadow-xl shadow-black/40"
           >
-            {buscando && resultados.length === 0 && (
-              <p className="px-3 py-3 text-xs text-muted">Buscando…</p>
-            )}
+            {/*
+               El contenido cambia con un CRUCE, no de golpe.
+
+               El desplegable ya entraba animado, pero por dentro el
+               "Buscando…" se sustituía por la lista entera de una
+               tacada: el recuadro pegaba un estirón y los resultados
+               aparecían de golpe. Es el momento más visible de toda la
+               búsqueda y era el único sin transición.
+
+               "mode: wait" hace que lo viejo termine de irse antes de
+               que entre lo nuevo, y animar la altura evita el salto del
+               recuadro al pasar de una línea a seis resultados.
+            */}
+            <AnimatePresence mode="wait" initial={false}>
+              {buscando && resultados.length === 0 && (
+                <motion.p
+                  key="buscando"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  className="px-3 py-3 text-xs text-muted"
+                >
+                  Buscando…
+                </motion.p>
+              )}
+
+              {resultados.length > 0 && (
+                <motion.div
+                  key="resultados"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.16 }}
+                >
+                  {resultados.map((r, i) => (
+                    <motion.button
+                      key={r.id}
+                      type="button"
+                      onClick={() => añadir(r)}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      // Escalonado corto y con tope: con ocho resultados,
+                      // esperar a que entre el último sería más molesto
+                      // que el salto que se quería evitar.
+                      transition={{ duration: 0.22, delay: Math.min(i * 0.035, 0.18) }}
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-panel-soft"
+                    >
+                      {r.coverImage ? (
+                        <Image
+                          src={r.coverImage}
+                          alt=""
+                          width={32}
+                          height={44}
+                          unoptimized
+                          className="h-11 w-8 flex-shrink-0 rounded object-cover"
+                        />
+                      ) : (
+                        <span className="h-11 w-8 flex-shrink-0 rounded bg-panel-soft" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-foreground">{r.title}</span>
+                        <span className="text-[11px] text-muted">
+                          {[r.format, r.startYear].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                    </motion.button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {!buscando && aviso && resultados.length === 0 && (
               <div className="px-3 py-3">
@@ -173,33 +245,6 @@ export function FavoriteAnimeInput() {
               </div>
             )}
 
-            {resultados.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => añadir(r)}
-                className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-panel-soft"
-              >
-                {r.coverImage ? (
-                  <Image
-                    src={r.coverImage}
-                    alt=""
-                    width={32}
-                    height={44}
-                    unoptimized
-                    className="h-11 w-8 flex-shrink-0 rounded object-cover"
-                  />
-                ) : (
-                  <span className="h-11 w-8 flex-shrink-0 rounded bg-panel-soft" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-foreground">{r.title}</span>
-                  <span className="text-[11px] text-muted">
-                    {[r.format, r.startYear].filter(Boolean).join(" · ")}
-                  </span>
-                </span>
-              </button>
-            ))}
           </motion.div>
         )}
       </AnimatePresence>

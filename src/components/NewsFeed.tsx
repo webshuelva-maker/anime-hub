@@ -26,7 +26,14 @@ import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCa
 import { runExclusive, waitWhileBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { playSuccess, playToggle, playArranque, playEntrada, playResultados } from "@/lib/sound";
+import {
+  playSuccess,
+  playToggle,
+  playArranque,
+  playEntrada,
+  playResultados,
+  fondoAlPrimerGesto,
+} from "@/lib/sound";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -177,6 +184,17 @@ export function NewsFeed() {
     playArranque();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * El fondo sonoro (acorde grave + notas sueltas) se engancha al primer
+   * gesto de la persona: un clic, un toque o una tecla.
+   *
+   * No arranca antes porque los navegadores bloquean el audio que
+   * empieza solo, y forzarlo es lo que hace aparecer el icono de "esta
+   * pestaña hace ruido". Esperando al primer gesto suena igual, sin
+   * pelearse con nadie. Y respeta el interruptor de sonido de Ajustes.
+   */
+  useEffect(() => fondoAlPrimerGesto(), []);
 
   /* Al desaparecer la pantalla de carga, la melodía se cierra. */
   const sonoEntrada = useRef(false);

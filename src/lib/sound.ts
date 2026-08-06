@@ -236,3 +236,79 @@ export function arrancarAmbiente() {
 
   ambiente = { osc, gain };
 }
+
+/**
+ * Melodía de fondo: notas sueltas sobre el acorde de ambiente.
+ *
+ * El ambiente solo es un acorde sostenido; esto le pone encima una nota
+ * de vez en cuando, para que haya algo que seguir sin que llegue a ser
+ * una canción. Las notas salen de una escala pentatónica, que es la que
+ * no tiene intervalos ásperos: cualquier orden suena bien, así que no
+ * hace falta componer nada y nunca se repite igual.
+ *
+ * Los huecos entre notas son largos y desiguales (de 4 a 11 segundos) a
+ * propósito. Un patrón regular se convierte en un tictac y acaba
+ * cansando; uno irregular se percibe como algo vivo de fondo.
+ */
+const PENTATONICA = [523.25, 587.33, 698.46, 783.99, 880.0, 1046.5];
+let melodia: ReturnType<typeof setTimeout> | null = null;
+
+function siguienteNota() {
+  if (!isEnabled()) return pararMelodia();
+
+  const nota = PENTATONICA[Math.floor(Math.random() * PENTATONICA.length)];
+  // Muy floja y muy filtrada: tiene que quedar por debajo de todo lo
+  // demás, incluida cualquier otra pestaña con música.
+  tone(nota, 2.6, 0.018, "sine", 0, 2000);
+  // Y a veces una quinta por encima, aún más floja, como un eco.
+  if (Math.random() < 0.4) tone(nota * 1.5, 3.0, 0.009, "sine", 0.6, 2000);
+
+  melodia = setTimeout(siguienteNota, 4000 + Math.random() * 7000);
+}
+
+export function arrancarMelodia() {
+  if (melodia || !isEnabled()) return;
+  melodia = setTimeout(siguienteNota, 3000);
+}
+
+export function pararMelodia() {
+  if (melodia) clearTimeout(melodia);
+  melodia = null;
+}
+
+/**
+ * Enciende el fondo sonoro entero (acorde + melodía) en cuanto la
+ * persona toca algo por primera vez.
+ *
+ * Se espera a ese primer gesto porque los navegadores bloquean el audio
+ * que arranca solo, y forzarlo es lo que hace que salga el icono de
+ * "esta pestaña hace ruido". Con esperar al primer clic o tecla, arranca
+ * sin pelearse con nadie.
+ *
+ * Devuelve una función para desengancharlo.
+ */
+export function fondoAlPrimerGesto(): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const arrancar = () => {
+    quitar();
+    if (!isEnabled()) return;
+    arrancarAmbiente();
+    arrancarMelodia();
+  };
+
+  const quitar = () => {
+    window.removeEventListener("pointerdown", arrancar);
+    window.removeEventListener("keydown", arrancar);
+  };
+
+  window.addEventListener("pointerdown", arrancar, { once: true });
+  window.addEventListener("keydown", arrancar, { once: true });
+  return quitar;
+}
+
+/** Apaga el fondo entero. */
+export function pararFondo() {
+  pararMelodia();
+  pararAmbiente();
+}

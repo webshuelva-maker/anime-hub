@@ -5,6 +5,7 @@ import {
   type JikanNewsItem,
 } from "@/lib/jikan";
 import { nucleoDeTitulo } from "@/lib/coincidenciaTitulos";
+import { searchAnimeDatabase } from "@/lib/anilist";
 import { noticiasDesdeMal } from "@/lib/malDirecto";
 import { traducirNoticias } from "@/lib/traducirArchivo";
 
@@ -73,6 +74,28 @@ export async function GET(req: NextRequest) {
     if (Number.isFinite(malIdDado) && malIdDado > 0) {
       ficha = { malId: malIdDado, title: titulo, url: null };
     } else {
+      /*
+       * PRIMERO ANILIST, y solo después MyAnimeList.
+       *
+       * AniList publica el identificador de MyAnimeList de cada obra, y
+       * su servicio funciona. Preguntarle a MyAnimeList "¿cuál es tu
+       * identificador para esta serie?" cuando MyAnimeList es
+       * precisamente lo que está caído era garantizar el fallo: se
+       * quedaba aquí, devolvía "no responde" y NI SIQUIERA llegaba a
+       * intentar leer su página, que es el plan B que existe justo para
+       * estos momentos.
+       *
+       * Con esto, el archivo solo depende de MyAnimeList para lo único
+       * que solo él tiene: las noticias.
+       */
+      const enAniList = await searchAnimeDatabase(titulo);
+      const conMal = enAniList.results.find((r) => r.malId);
+      if (conMal?.malId) {
+        ficha = { malId: conMal.malId, title: conMal.title, url: null };
+      }
+    }
+
+    if (!ficha && !(Number.isFinite(malIdDado) && malIdDado > 0)) {
       const r = await searchJikanAnimeConEstado(titulo);
       motivoBusqueda = r.motivo;
       if (r.ficha) ficha = { malId: r.ficha.malId, title: r.ficha.title, url: r.ficha.url };

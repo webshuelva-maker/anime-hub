@@ -9,7 +9,14 @@ import { DEFAULT_PREFERENCES, clearPreferences, getPreferences, savePreferences 
 import { SelectableChip } from "./SelectableChip";
 import { TimePicker } from "./TimePicker";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { playError, playToggle, arrancarAmbiente, pararAmbiente, ambienteActivo } from "@/lib/sound";
+import {
+  playError,
+  playToggle,
+  arrancarAmbiente,
+  arrancarMelodia,
+  pararFondo,
+  ambienteActivo,
+} from "@/lib/sound";
 
 /**
  * Ajustes de la app. Antes vivía dentro de la página de Afinidad, mezclado
@@ -178,17 +185,19 @@ export function SettingsEditor() {
           <div>
             <p className="text-sm font-medium">Ambiente de fondo</p>
             <p className="text-xs text-muted">
-              Un acorde grave y muy flojo mientras navegas. Se apaga al cerrar la página.
+              Un acorde grave con notas sueltas encima, muy flojo, mientras navegas. Empieza al
+              primer clic y se apaga al cerrar la página.
             </p>
           </div>
           <button
             type="button"
             onClick={() => {
               if (ambienteEncendido) {
-                pararAmbiente();
+                pararFondo();
                 setAmbienteEncendido(false);
               } else {
                 arrancarAmbiente();
+                arrancarMelodia();
                 setAmbienteEncendido(true);
               }
               playToggle();
