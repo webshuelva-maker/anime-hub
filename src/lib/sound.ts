@@ -198,6 +198,82 @@ function tone(
   osc.stop(start + duration + 0.08);
 }
 
+/**
+ * Un soplo de ruido filtrado. La otra mitad de lo que faltaba.
+ *
+ * ---------------------------------------------------------------------
+ * POR QUÉ NO BASTABA CON LA REVERBERACIÓN
+ *
+ * Añadirles sala los puso en un espacio, pero el material seguía siendo
+ * el mismo: un oscilador, que es una onda perfecta y por eso suena a
+ * aparato. En el mundo real ningún sonido es una onda pura — una tecla,
+ * una tela, un roce, todos llevan algo de ruido, y es ese ruido lo que
+ * el oído reconoce como "algo físico" en vez de "un pitido".
+ *
+ * Esto genera medio segundo de ruido y lo pasa por un filtro de banda,
+ * que se queda con una franja estrecha de frecuencias. Mezclado por
+ * debajo de una nota, deja de oírse como ruido y se convierte en el
+ * cuerpo del sonido: es la diferencia entre un bip y un toque.
+ * ---------------------------------------------------------------------
+ */
+function soplo(
+  duracion: number,
+  volumen: number,
+  centro: number,
+  opciones: { reverb?: number; pan?: number; delay?: number; q?: number } = {}
+) {
+  const audioCtx = getContext();
+  const b = getBuses();
+  if (!audioCtx || !b || !isEnabled()) return;
+
+  const { reverb = 0.4, pan = 0, delay = 0, q = 1.4 } = opciones;
+
+  const muestras = Math.max(1, Math.floor(audioCtx.sampleRate * duracion));
+  const buffer = audioCtx.createBuffer(1, muestras, audioCtx.sampleRate);
+  const datos = buffer.getChannelData(0);
+  for (let i = 0; i < muestras; i++) datos[i] = Math.random() * 2 - 1;
+
+  const fuente = audioCtx.createBufferSource();
+  fuente.buffer = buffer;
+
+  const filtro = audioCtx.createBiquadFilter();
+  filtro.type = "bandpass";
+  filtro.frequency.value = centro;
+  filtro.Q.value = q;
+
+  const gain = audioCtx.createGain();
+  const start = audioCtx.currentTime + delay;
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(volumen, start + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duracion);
+
+  fuente.connect(filtro);
+  filtro.connect(gain);
+
+  let salida: AudioNode = gain;
+  if (pan !== 0 && typeof audioCtx.createStereoPanner === "function") {
+    const panner = audioCtx.createStereoPanner();
+    panner.pan.value = pan;
+    gain.connect(panner);
+    salida = panner;
+  }
+
+  const directo = audioCtx.createGain();
+  directo.gain.value = 1 - reverb * 0.35;
+  salida.connect(directo);
+  directo.connect(b.master);
+
+  if (reverb > 0) {
+    const envio = audioCtx.createGain();
+    envio.gain.value = reverb;
+    salida.connect(envio);
+    envio.connect(b.sala);
+  }
+
+  fuente.start(start);
+  fuente.stop(start + duracion + 0.05);
+}
+
 /** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
 /*
  * ---------------------------------------------------------------------
@@ -260,17 +336,19 @@ export function playError() {
 /** Muy suave, casi subliminal — pasar el ratón por encima de algo interactivo. */
 export function playHover() {
   /*
-   * Casi inaudible y muy filtrado: se dispara decenas de veces al mover
-   * el ratón, así que cualquier cosa con filo se vuelve insoportable a
-   * los diez segundos.
+   * Ya no es una nota: es un ROCE.
    *
-   * Aquí la sala hace más que en ningún otro sitio. Un toque tan corto y
-   * tan flojo, seco, se percibe como un chasquido del altavoz; con una
-   * cola pequeña detrás se convierte en un roce. Y la nota sube
-   * ligerísimamente mientras suena, que es lo que le quita el aire de
-   * pitido.
+   * Era un tono puro cortísimo, y un tono puro es una onda perfecta que
+   * el oído reconoce como aparato. Este suena decenas de veces al mover
+   * el ratón, así que es justo donde más canta.
+   *
+   * Ahora es un soplo de ruido filtrado muy agudo, con una nota apenas
+   * insinuada por debajo para que tenga altura. Se percibe como pasar el
+   * dedo por una superficie, no como un pitido, y a este volumen casi no
+   * se oye — se nota.
    */
-  tone(1046.5, 0.14, 0.014, "sine", 0, 2400, { reverb: 0.55, glideA: 1120 });
+  soplo(0.11, 0.016, 3200, { reverb: 0.5, q: 0.9 });
+  tone(1318.5, 0.16, 0.006, "sine", 0.005, 2600, { reverb: 0.6, glideA: 1400 });
 }
 
 /**
@@ -393,7 +471,9 @@ export function arrancarAmbiente() {
   gain.gain.setValueAtTime(0, audioCtx.currentTime);
   // Entra en seis segundos: si apareciera de golpe se notaría, y todo el
   // sentido de un fondo es que no se note.
-  gain.gain.linearRampToValueAtTime(0.02, audioCtx.currentTime + 6);
+  // Bajado de 0,02 a 0,013: es un fondo, y en cuanto se distingue
+  // deja de serlo para convertirse en algo que suena.
+  gain.gain.linearRampToValueAtTime(0.013, audioCtx.currentTime + 6);
 
   const filtro = audioCtx.createBiquadFilter();
   filtro.type = "lowpass";
@@ -510,11 +590,19 @@ export function pararFondo() {
  * despliega" también al oído.
  */
 export function playAbrirAsistente() {
-  // Se abre de izquierda a derecha también al oído: la primera nota cae
-  // un poco a la izquierda y la segunda a la derecha.
-  tone(440, 0.4, 0.045, "sine", 0, 1500, { reverb: 0.45, pan: -0.18 });
-  tone(659.25, 0.62, 0.03, "sine", 0.07, 1700, { reverb: 0.6, pan: 0.18 });
-  tone(880, 0.5, 0.012, "sine", 0.13, 2000, { reverb: 0.7 });
+  /*
+   * Un acorde en miniatura, no dos notas sueltas.
+   *
+   * Es la versión corta de lo que hace el sonido de arranque, que es el
+   * que sí le gustaba: notas que entran una detrás de otra y se quedan
+   * sonando juntas. Tres notas de la misma escala, cada una un poco más
+   * floja y más tardía que la anterior, y el soplo de aire delante
+   * haciendo de "se abre algo".
+   */
+  soplo(0.22, 0.02, 1800, { reverb: 0.55, pan: -0.2 });
+  tone(440, 0.7, 0.04, "sine", 0.02, 1400, { reverb: 0.5, pan: -0.18 });
+  tone(659.25, 0.85, 0.026, "sine", 0.1, 1600, { reverb: 0.6, pan: 0.05 });
+  tone(880, 1.0, 0.014, "sine", 0.19, 1900, { reverb: 0.75, pan: 0.2, detune: -4 });
 }
 
 /**
@@ -526,6 +614,11 @@ export function playAbrirAsistente() {
  * "se abre", sin que nadie tenga que pensarlo.
  */
 export function playCerrarAsistente() {
-  tone(659.25, 0.32, 0.036, "sine", 0, 1600, { reverb: 0.4, pan: 0.15 });
-  tone(440, 0.7, 0.026, "sine", 0.07, 1300, { reverb: 0.6, pan: -0.15, glideA: 415 });
+  // El mismo acorde al revés y apagándose: se percibe como algo que se
+  // recoge. La última nota baja de altura mientras suena, que es lo que
+  // remata la sensación de cierre.
+  tone(880, 0.4, 0.02, "sine", 0, 1900, { reverb: 0.5, pan: 0.2 });
+  tone(659.25, 0.5, 0.028, "sine", 0.06, 1600, { reverb: 0.55 });
+  tone(440, 0.9, 0.03, "sine", 0.13, 1200, { reverb: 0.65, pan: -0.18, glideA: 392 });
+  soplo(0.3, 0.012, 900, { reverb: 0.6, delay: 0.1 });
 }

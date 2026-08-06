@@ -71,6 +71,8 @@ export function NewsFeed() {
      cuatro años.
   */
   const [malIdArchivo, setMalIdArchivo] = useState<number | null>(null);
+  // Todas las entregas de la franquicia, para juntar sus archivos.
+  const [malIdsFranquicia, setMalIdsFranquicia] = useState<number[]>([]);
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const pendingItemsRef = useRef<NewsItem[]>([]);
@@ -750,13 +752,14 @@ export function NewsFeed() {
                 setSearchingAnime(true);
                 fetch(`/api/anime-search?q=${encodeURIComponent(term)}`)
                   .then((res) => res.json())
-                  .then((data: { results?: AnimeSearchResult[]; malId?: number | null; malIdArchivo?: number | null }) => {
+                  .then((data: { results?: AnimeSearchResult[]; malId?: number | null; malIdArchivo?: number | null; malIdsFranquicia?: number[] }) => {
                     setAnimeResults(data.results ?? []);
                     setMalId(data.malId ?? null);
                     // Acompaña a la animación de entrada: el cambio de
                     // pantalla se nota también sin mirar.
                     if ((data.results ?? []).length > 0) playResultados();
                     setMalIdArchivo(data.malIdArchivo ?? data.malId ?? null);
+                    setMalIdsFranquicia(data.malIdsFranquicia ?? []);
                   })
                   .catch(() => {
                     setAnimeResults([]);
@@ -881,7 +884,11 @@ export function NewsFeed() {
                 {/* Se va a buscar fuera SOLO aquí: cuando el feed no ha
                     encontrado nada. Mientras haya noticias propias no se
                     gasta ni una petición. */}
-                <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} malId={malIdArchivo ?? malId} />
+                <NoticiasDeArchivo
+                  titulo={animeResults[0]?.title ?? searchTerm}
+                  malId={malIdArchivo ?? malId}
+                  malIds={malIdsFranquicia}
+                />
               </>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

@@ -61,7 +61,20 @@ export async function GET(req: NextRequest) {
   // consulta de búsqueda: media espera menos y una petición menos contra
   // su límite.
   const malIdDado = Number(req.nextUrl.searchParams.get("malId") ?? "");
-  const clave = titulo.toLowerCase();
+
+  /*
+   * Los identificadores de TODAS las entregas de la franquicia. Se junta
+   * el historial de las cuatro, porque lo que se quiere leer es el de la
+   * serie, no el de una temporada suelta: entrando por la primera
+   * temporada salían noticias de hace cuatro años, y entrando por la
+   * última no salía nada de antes.
+   */
+  const malIds = (req.nextUrl.searchParams.get("malIds") ?? "")
+    .split(",")
+    .map((x) => Number(x.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .slice(0, 4);
+  const clave = malIds.length > 0 ? malIds.join("-") : titulo.toLowerCase();
   const guardado = cache.get(clave);
   if (guardado && guardado.hasta > Date.now()) {
     return NextResponse.json({ noticias: guardado.noticias, deCache: true });
@@ -138,8 +151,41 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    let { ok, noticias, motivo } = await getJikanNewsConEstado(ficha.malId, 8);
+    /*
+     * Se pide el archivo de TODAS las entregas de la franquicia y se
+     * juntan.
+     *
+     * Antes se pedía el de una sola, y cuál fuera cambiaba por completo
+     * lo que se leía: entrando por la primera temporada salían noticias
+     * de hace cuatro años, y entrando por la última no salía nada de lo
+     * anterior. Pero quien busca un anime quiere el historial DEL ANIME,
+     * no el de la temporada por la que entró.
+     *
+     * Van una detrás de otra y no todas a la vez, con un respiro entre
+     * medias: MyAnimeList permite tres peticiones por segundo, y lanzar
+     * cuatro de golpe es la forma segura de que se caigan la mitad.
+     */
+    const idsAConsultar = malIds.length > 0 ? malIds : [ficha.malId];
+
+    let noticias: Awaited<ReturnType<typeof getJikanNewsConEstado>>["noticias"] = [];
+    let ok = false;
+    let motivo: string | null = null;
     let via = "jikan";
+
+    for (let i = 0; i < idsAConsultar.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 420));
+      const parcial = await getJikanNewsConEstado(idsAConsultar[i], 8);
+
+      if (parcial.ok) {
+        // Basta con que UNA responda para dar la consulta por buena: es
+        // mejor enseñar el archivo de tres temporadas que no enseñar
+        // nada porque la cuarta se cayó.
+        ok = true;
+        noticias.push(...parcial.noticias);
+      } else if (!motivo) {
+        motivo = parcial.motivo;
+      }
+    }
 
     /*
      * PLAN B: leer la página de MyAnimeList directamente.
@@ -154,7 +200,7 @@ export async function GET(req: NextRequest) {
      * es mejor vecino usar la vía que han hecho para esto.
      */
     if (!ok) {
-      const directo = await noticiasDesdeMal(ficha.malId, 8);
+      const directo = await noticiasDesdeMal(idsAConsultar[0], 8);
       if (directo.ok && directo.noticias.length > 0) {
         ok = true;
         noticias = directo.noticias;
@@ -186,11 +232,28 @@ export async function GET(req: NextRequest) {
      * Las que no traen fecha van al final: sin fecha no se puede afirmar
      * que sean recientes, y colarlas arriba sería mentir.
      */
-    noticias = [...noticias].sort((a, b) => {
-      const fa = a.date ? Date.parse(a.date) : 0;
-      const fb = b.date ? Date.parse(b.date) : 0;
-      return fb - fa;
-    });
+    /*
+     * Se quitan las repetidas ANTES de ordenar: una misma noticia puede
+     * estar colgada de dos temporadas a la vez (el anuncio de una
+     * secuela suele aparecer en la anterior y en la nueva), y verla dos
+     * veces seguidas parece un fallo.
+     */
+    const vistas = new Set<string>();
+    noticias = noticias
+      .filter((n) => {
+        const clave = n.url || n.title;
+        if (!clave || vistas.has(clave)) return false;
+        vistas.add(clave);
+        return true;
+      })
+      .sort((a, b) => {
+        const fa = a.date ? Date.parse(a.date) : 0;
+        const fb = b.date ? Date.parse(b.date) : 0;
+        return fb - fa;
+      })
+      // Con cuatro temporadas pueden salir treinta y tantas: se enseñan
+      // las doce más recientes, que es lo que se viene a mirar.
+      .slice(0, 12);
 
     let traducidas = false;
     if (ok && noticias.length > 0) {

@@ -390,8 +390,10 @@ export function FirstLoadOverlay({
 
       {/* Botón de omitir: aparece una vez hay avance real de sobra (35%)
           — para entonces lo esencial ya suele estar listo. Deja entrar
-          ya, con lo que haya; seguir esperando trae más noticias
-          traducidas y personalizadas de una sentada. La explicación solo
+          ya, con lo que haya; seguir esperando trae más noticias y ya
+          ordenadas de una sentada. (El texto decía "traducidas", de
+          cuando las fuentes eran inglesas: desde que los medios son
+          españoles no se traduce nada aquí.) La explicación solo
           aparece al pasar el ratón, como una etiqueta flotante — así no
           hay texto pequeño permanente compitiendo con el resto. */}
       <AnimatePresence>
@@ -415,7 +417,7 @@ export function FirstLoadOverlay({
                   transition={{ duration: 0.25 }}
                   className="max-w-[190px] rounded-lg border border-panel-border bg-panel px-3 py-2 text-right text-[11px] leading-snug text-muted shadow-lg"
                 >
-                  Esperar un poco más trae más noticias ya traducidas y personalizadas
+                  Esperar un poco más trae más noticias, y ya ordenadas según tus gustos
                 </motion.span>
               )}
             </AnimatePresence>

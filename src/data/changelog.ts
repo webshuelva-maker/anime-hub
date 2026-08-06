@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v193",
+    fecha: "2026-08-06",
+    titulo: "El archivo entero, y sonidos con cuerpo",
+    puntos: [
+      "Buscando una serie ves el historial de noticias de todas sus temporadas juntas, entres por donde entres, de lo más reciente a lo más antiguo.",
+      "Los sonidos de pasar el ratón y de abrir y cerrar a Iris están rehechos con otro material.",
+      "En Ajustes puedes escuchar todos los sonidos seguidos para compararlos.",
+      "La música de fondo suena algo más baja.",
+    ],
+  },
+  {
     version: "v192",
     fecha: "2026-08-05",
     titulo: "Los sonidos, a la altura",

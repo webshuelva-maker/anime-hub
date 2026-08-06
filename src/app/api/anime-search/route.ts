@@ -22,6 +22,7 @@ async function buscarEn(
   malId: number | null;
   /** El de la entrega más reciente: es el que usa el archivo de noticias. */
   malIdArchivo: number | null;
+  malIdsFranquicia: number[];
   debug: string;
 }> {
   /*
@@ -189,10 +190,34 @@ async function buscarEn(
   }, null);
   const malIdArchivo = masReciente?.malId ?? malId;
 
+  /*
+   * TODAS las entregas de la franquicia, de la más nueva a la más vieja.
+   *
+   * Quedarse con la más reciente arreglaba medio problema: buscando la
+   * primera temporada dejabas de ver noticias de hace cuatro años. Pero
+   * seguía siendo una elección, y el archivo de una sola entrega se deja
+   * fuera lo que se publicó sobre las demás.
+   *
+   * Lo que se quiere leer es el historial DEL ANIME, no el de una de sus
+   * temporadas. Así que se mandan todos los identificadores y el archivo
+   * los junta: lo reciente arriba y lo antiguo abajo, dé igual por dónde
+   * se haya entrado.
+   *
+   * Se topa en cuatro porque cada uno es una consulta más a MyAnimeList,
+   * que permite tres por segundo.
+   */
+  const malIdsFranquicia = [...mismaFranquicia]
+    .sort((a, b) => (b.startYear ?? 0) - (a.startYear ?? 0))
+    .map((r) => r.malId)
+    .filter((id): id is number => typeof id === "number")
+    .filter((id, i, lista) => lista.indexOf(id) === i)
+    .slice(0, 4);
+
   return {
     resultados,
     malId,
     malIdArchivo,
+    malIdsFranquicia,
     debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes | malId: ${malId ?? "no"} (${deDonde}) | archivo: ${malIdArchivo ?? "no"}${masReciente ? ` (${masReciente.title})` : ""}`,
   };
 }
@@ -223,6 +248,7 @@ export async function GET(req: NextRequest) {
         results: segunda.resultados.slice(0, 10),
         malId: segunda.malId,
         malIdArchivo: segunda.malIdArchivo,
+        malIdsFranquicia: segunda.malIdsFranquicia,
         fuente: "segundo intento",
         terminoUsado: corta,
         debug: `1º "${term}" → 0 | 2º "${corta}" → ${segunda.debug}`,
@@ -236,6 +262,7 @@ export async function GET(req: NextRequest) {
     // ahorrarle una búsqueda contra MyAnimeList.
     malId: primera.malId,
     malIdArchivo: primera.malIdArchivo,
+    malIdsFranquicia: primera.malIdsFranquicia,
     fuente: primera.resultados.length > 0 ? "directa" : "ninguna",
     // El diagnóstico va SIEMPRE en la respuesta: llevamos varias vueltas
     // adivinando por qué una búsqueda vuelve vacía.

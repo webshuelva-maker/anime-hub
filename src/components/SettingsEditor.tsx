@@ -10,7 +10,15 @@ import { SelectableChip } from "./SelectableChip";
 import { TimePicker } from "./TimePicker";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
+  playAbrirAsistente,
+  playArranque,
+  playCerrarAsistente,
+  playClick,
   playError,
+  playHover,
+  playReceive,
+  playSend,
+  playSuccess,
   playToggle,
   arrancarAmbiente,
   arrancarMelodia,
@@ -213,6 +221,46 @@ export function SettingsEditor() {
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
             />
           </button>
+        </div>
+
+        {/*
+          Banco de pruebas de sonidos.
+
+          Existe por un motivo práctico: afinar un sonido a distancia es
+          imposible si la única forma de oírlo es provocarlo en su
+          contexto —pasar el ratón por un botón, abrir el asistente,
+          esperar a que llegue un mensaje—. Aquí se oyen todos seguidos y
+          se comparan, que es como se decide si uno desentona.
+        */}
+        <div className="mt-6 border-t border-panel-border pt-5">
+          <p className="text-sm font-medium">Escuchar los sonidos</p>
+          <p className="mt-0.5 text-xs leading-snug text-muted">
+            Púlsalos para compararlos entre sí. Están hechos para no imponerse, así que sube un
+            poco el volumen.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              { texto: "Pasar por encima", suena: playHover },
+              { texto: "Clic", suena: playClick },
+              { texto: "Desplegar", suena: playToggle },
+              { texto: "Confirmación", suena: playSuccess },
+              { texto: "Aviso", suena: playError },
+              { texto: "Abrir a Iris", suena: playAbrirAsistente },
+              { texto: "Cerrar a Iris", suena: playCerrarAsistente },
+              { texto: "Enviar mensaje", suena: playSend },
+              { texto: "Responde Iris", suena: playReceive },
+              { texto: "Arranque", suena: playArranque },
+            ].map((sonido) => (
+              <button
+                key={sonido.texto}
+                type="button"
+                onClick={sonido.suena}
+                className="pulsable rounded-full border border-panel-border px-3.5 py-1.5 text-xs text-muted hover:border-ice/40 hover:text-foreground"
+              >
+                {sonido.texto}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/*

@@ -38,10 +38,13 @@ function fecha(iso: string | null): string {
 export function NoticiasDeArchivo({
   titulo,
   malId = null,
+  malIds = [],
 }: {
   titulo: string;
   /** Si ya se conoce, evita que el servidor tenga que buscar la serie. */
   malId?: number | null;
+  /** Todas las entregas de la franquicia; se junta el archivo de todas. */
+  malIds?: number[];
 }) {
   const [noticias, setNoticias] = useState<NoticiaMal[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -50,6 +53,9 @@ export function NoticiasDeArchivo({
   const [archivoUrl, setArchivoUrl] = useState<string | null>(null);
   const [traducidas, setTraducidas] = useState(false);
   const [intento, setIntento] = useState(0);
+  // La lista en texto: un array nuevo en cada dibujado dispararía la
+  // consulta sin parar aunque los identificadores sean los mismos.
+  const clavesIds = malIds.join(",");
 
   useEffect(() => {
     let vivo = true;
@@ -61,7 +67,7 @@ export function NoticiasDeArchivo({
         const res = await fetch(
           `/api/anime-noticias?titulo=${encodeURIComponent(titulo)}${
             malId ? `&malId=${malId}` : ""
-          }`
+          }${clavesIds ? `&malIds=${clavesIds}` : ""}`
         );
         const json = (await res.json()) as {
           noticias?: NoticiaMal[];
@@ -91,7 +97,7 @@ export function NoticiasDeArchivo({
       vivo = false;
       clearTimeout(id);
     };
-  }, [titulo, malId, intento]);
+  }, [titulo, malId, clavesIds, intento]);
 
   if (cargando) {
     return (
