@@ -23,6 +23,23 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v191",
+    fecha: "2026-08-06",
+    titulo: "Sonido nuevo y el archivo de noticias, arreglado",
+    intro:
+      "Si acabas de actualizar y no notas ninguno de estos cambios, lo que se está ejecutando es una versión anterior: hay que volver a compilar la app.",
+    puntos: [
+      "Melodía al abrir la web, y un fondo sonoro con notas sueltas que empieza al primer clic. Se puede apagar en Ajustes.",
+      "Todos los sonidos de la interfaz son ahora más suaves: menos volumen, sin filo y con más cuerpo.",
+      "Abrir y cerrar a Iris suenan distinto entre sí.",
+      "Los resultados de búsqueda ya no aparecen de golpe: entran con una transición.",
+      "El archivo de noticias antiguas vuelve a funcionar aunque la API de MyAnimeList esté caída.",
+      "Las noticias del archivo llegan traducidas, ordenadas de más reciente a más antigua y con su fecha real.",
+      "Al buscar una serie con varias temporadas, el archivo trae las noticias de la temporada más reciente.",
+      "Quitada la sección «Puede que tenga que ver».",
+    ],
+  },
+  {
     version: "v183",
     fecha: "2026-08-05",
     titulo: "Cuando algo falla, ahora dice por qué",
