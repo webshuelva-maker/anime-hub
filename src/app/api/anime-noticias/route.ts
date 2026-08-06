@@ -153,6 +153,22 @@ export async function GET(req: NextRequest) {
      * guarde junto con las noticias, así que solo se paga una vez por
      * serie y no en cada visita.
      */
+    /*
+     * De la más reciente a la más antigua.
+     *
+     * MyAnimeList no siempre las devuelve ordenadas, y el archivo se
+     * consulta justo para enterarse de lo ÚLTIMO que se anunció. Que lo
+     * primero que se vea sea una noticia de hace cuatro años, con lo
+     * reciente enterrado abajo, es lo contrario de lo que hace falta.
+     * Las que no traen fecha van al final: sin fecha no se puede afirmar
+     * que sean recientes, y colarlas arriba sería mentir.
+     */
+    noticias = [...noticias].sort((a, b) => {
+      const fa = a.date ? Date.parse(a.date) : 0;
+      const fb = b.date ? Date.parse(b.date) : 0;
+      return fb - fa;
+    });
+
     let traducidas = false;
     if (ok && noticias.length > 0) {
       const r = await traducirNoticias(noticias);

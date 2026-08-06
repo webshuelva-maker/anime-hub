@@ -116,3 +116,123 @@ export function playReceive() {
   tone(523.25, 0.4, 0.05, "sine", 0, 1600);
   tone(784, 0.5, 0.03, "sine", 0.09, 1600);
 }
+
+/* ===================== Sonidos de ambiente ===================== */
+
+/**
+ * Melodía de arranque, sobre la pantalla de carga.
+ *
+ * Cuatro notas de un acorde mayor séptima (Do–Mi–Sol–Si), entrando una
+ * detrás de otra y solapándose, con el filtro muy cerrado y volúmenes
+ * bajísimos. Es la diferencia entre una firma sonora y un jingle: no
+ * llama la atención, se queda debajo.
+ *
+ * Sube y baja en volumen (la última nota es la más floja) para que se
+ * perciba como algo que se aleja, y no como un anuncio de que algo ha
+ * terminado.
+ */
+export function playArranque() {
+  tone(261.63, 1.6, 0.05, "sine", 0, 900);
+  tone(329.63, 1.5, 0.042, "sine", 0.16, 900);
+  tone(392.0, 1.4, 0.034, "sine", 0.32, 900);
+  tone(493.88, 1.8, 0.024, "sine", 0.52, 1100);
+}
+
+/**
+ * Al terminar de cargar y aparecer el contenido. Dos notas muy suaves
+ * que resuelven hacia arriba: cierra la melodía de arranque en vez de
+ * quedarse colgada.
+ */
+export function playEntrada() {
+  tone(523.25, 0.7, 0.035, "sine", 0, 1500);
+  tone(659.25, 0.9, 0.022, "sine", 0.1, 1500);
+}
+
+/**
+ * Cuando aparecen los resultados de una búsqueda. Una sola nota corta y
+ * clara, apenas audible: acompaña a la animación de entrada para que el
+ * cambio de pantalla se note también sin mirar.
+ */
+export function playResultados() {
+  tone(587.33, 0.45, 0.03, "sine", 0, 1600);
+}
+
+/*
+ * Ambiente de fondo: un acorde muy grave y muy flojo que respira.
+ *
+ * ---------------------------------------------------------------------
+ * POR QUÉ ESTÁ APAGADO POR DEFECTO
+ *
+ * Un sonido continuo es lo más fácil de convertir en molestia: quien
+ * llega a una web y oye un zumbido que no ha pedido, lo primero que hace
+ * es cerrarla o silenciar la pestaña. Además, muchos navegadores
+ * bloquean el audio que empieza solo, y forzarlo es justo lo que activa
+ * el icono de "esta página hace ruido".
+ *
+ * Así que existe, suena bien, y se enciende a mano. El interruptor de
+ * sonido de Ajustes lo apaga como a todo lo demás.
+ * ---------------------------------------------------------------------
+ */
+let ambiente: { osc: OscillatorNode[]; gain: GainNode } | null = null;
+
+export function ambienteActivo(): boolean {
+  return ambiente !== null;
+}
+
+export function pararAmbiente() {
+  if (!ambiente) return;
+  const audioCtx = getContext();
+  const { osc, gain } = ambiente;
+  ambiente = null;
+  if (!audioCtx) return;
+  // Se apaga en dos segundos, no de golpe: cortar un sonido continuo en
+  // seco produce un chasquido bastante desagradable.
+  gain.gain.cancelScheduledValues(audioCtx.currentTime);
+  gain.gain.setValueAtTime(gain.gain.value, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 2);
+  osc.forEach((o) => o.stop(audioCtx.currentTime + 2.1));
+}
+
+export function arrancarAmbiente() {
+  const audioCtx = getContext();
+  if (!audioCtx || !isEnabled() || ambiente) return;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, audioCtx.currentTime);
+  // Entra en seis segundos: si apareciera de golpe se notaría, y todo el
+  // sentido de un fondo es que no se note.
+  gain.gain.linearRampToValueAtTime(0.02, audioCtx.currentTime + 6);
+
+  const filtro = audioCtx.createBiquadFilter();
+  filtro.type = "lowpass";
+  filtro.frequency.value = 420;
+
+  // Un movimiento lentísimo del filtro hace que el acorde "respire" en
+  // vez de quedarse plano como un zumbido de nevera.
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.frequency.value = 0.05;
+  lfoGain.gain.value = 90;
+  lfo.connect(lfoGain);
+  lfoGain.connect(filtro.frequency);
+  lfo.start();
+
+  // Do y Sol graves, más una quinta por encima: sin tercera, para que no
+  // suene ni alegre ni triste y no compita con nada.
+  const osc = [130.81, 196.0, 261.63].map((f, i) => {
+    const o = audioCtx.createOscillator();
+    o.type = "sine";
+    o.frequency.value = f;
+    // Desafinar unos céntimos entre sí ensancha el sonido.
+    o.detune.value = i === 1 ? 4 : i === 2 ? -5 : 0;
+    o.connect(filtro);
+    o.start();
+    return o;
+  });
+  osc.push(lfo);
+
+  filtro.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  ambiente = { osc, gain };
+}

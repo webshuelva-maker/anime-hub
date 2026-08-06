@@ -26,7 +26,7 @@ import { getCachedTranslation, saveCachedTranslation } from "@/lib/translationCa
 import { runExclusive, waitWhileBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { playSuccess, playToggle } from "@/lib/sound";
+import { playSuccess, playToggle, playArranque, playEntrada, playResultados } from "@/lib/sound";
 
 type FeedStatus = "loading" | "live" | "offline" | "down";
 
@@ -56,6 +56,14 @@ export function NewsFeed() {
   const [searchingAnime, setSearchingAnime] = useState(false);
   // Identificador de MyAnimeList del mejor resultado, para el archivo.
   const [malId, setMalId] = useState<number | null>(null);
+  /*
+     El del archivo va aparte del de la ficha: la ficha enseña la obra
+     buscada, pero el archivo debe traer las noticias de la entrega MÁS
+     RECIENTE de la franquicia. Buscando "Mushoku Tensei" el mejor
+     resultado es la primera temporada, y su archivo son noticias de hace
+     cuatro años.
+  */
+  const [malIdArchivo, setMalIdArchivo] = useState<number | null>(null);
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const pendingItemsRef = useRef<NewsItem[]>([]);
@@ -154,6 +162,28 @@ export function NewsFeed() {
     // pantalla de carga para siempre.
     const safety = setTimeout(() => setShowInitialLoader(false), 18000);
     return () => clearTimeout(safety);
+  }, [showInitialLoader]);
+
+  /*
+   * La melodía de arranque, sobre la pantalla de carga.
+   *
+   * Se intenta al montar. Si el navegador lo bloquea por no haber habido
+   * todavía un gesto del usuario, no pasa nada: no se fuerza ni se
+   * reintenta. Insistir es lo que hace que una pestaña acabe con el
+   * icono de "esto hace ruido".
+   */
+  useEffect(() => {
+    if (!showInitialLoader) return;
+    playArranque();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* Al desaparecer la pantalla de carga, la melodía se cierra. */
+  const sonoEntrada = useRef(false);
+  useEffect(() => {
+    if (showInitialLoader || sonoEntrada.current) return;
+    sonoEntrada.current = true;
+    playEntrada();
   }, [showInitialLoader]);
 
   const loadNews = (silent = false, conPantalla = false) => {
@@ -574,29 +604,6 @@ export function NewsFeed() {
       .sort((a, b) => b.parecido - a.parecido || b.score - a.score);
   }, [ranked, searchTerm]);
 
-  /*
-   * Lo que se parece pero no llega al listón.
-   *
-   * Sirve para no dejar la pantalla en blanco cuando no hay coincidencia
-   * exacta: si buscas una serie y no hay noticias suyas, pero sí de una
-   * película o de un spin-off con parte del nombre, eso es mejor que un
-   * "nada por aquí". Va aparte y con su propio rótulo, para que quede
-   * claro que no es lo que has pedido exactamente.
-   */
-  const casiResultados = useMemo(() => {
-    if (!searchTerm || (searchResults && searchResults.length > 0)) return [];
-    return ranked
-      .map((r) => ({
-        ...r,
-        parecido: Math.max(
-          puntuarCoincidencia(searchTerm, r.item.title),
-          puntuarCoincidencia(searchTerm, r.item.relatedTitle)
-        ),
-      }))
-      .filter((r) => r.parecido >= 15 && r.parecido < MINIMO_COINCIDENCIA)
-      .sort((a, b) => b.parecido - a.parecido)
-      .slice(0, 6);
-  }, [ranked, searchTerm, searchResults]);
 
   const handleToggleLike = (itemId: string) => {
     const item = items.find((n) => n.id === itemId);
@@ -725,9 +732,13 @@ export function NewsFeed() {
                 setSearchingAnime(true);
                 fetch(`/api/anime-search?q=${encodeURIComponent(term)}`)
                   .then((res) => res.json())
-                  .then((data: { results?: AnimeSearchResult[]; malId?: number | null }) => {
+                  .then((data: { results?: AnimeSearchResult[]; malId?: number | null; malIdArchivo?: number | null }) => {
                     setAnimeResults(data.results ?? []);
                     setMalId(data.malId ?? null);
+                    // Acompaña a la animación de entrada: el cambio de
+                    // pantalla se nota también sin mirar.
+                    if ((data.results ?? []).length > 0) playResultados();
+                    setMalIdArchivo(data.malIdArchivo ?? data.malId ?? null);
                   })
                   .catch(() => {
                     setAnimeResults([]);
@@ -852,35 +863,7 @@ export function NewsFeed() {
                 {/* Se va a buscar fuera SOLO aquí: cuando el feed no ha
                     encontrado nada. Mientras haya noticias propias no se
                     gasta ni una petición. */}
-                <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} malId={malId} />
-                {casiResultados.length > 0 && (
-                  /*
-                     Estas noticias son de OTRAS series parecidas, no de
-                     la buscada. Iban pegadas al archivo y se leían como
-                     si fueran continuación de él. Con más aire y una
-                     línea de separación se entiende de un vistazo que
-                     empieza otra cosa.
-                  */
-                  <div className="mt-12 border-t border-panel-border pt-8">
-                    <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted">
-                      Puede que tenga que ver
-                    </p>
-                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                      {casiResultados.map(({ item, score }) => (
-                        <NewsCard
-                          key={item.id}
-                          item={item}
-                          pending={enrichingIds.has(item.id)}
-                          translating={translatingIds.has(item.id)}
-                          highlight={hasLearned && score > 0}
-                          liked={prefs.likedNewsIds.includes(item.id)}
-                          onToggleLike={() => handleToggleLike(item.id)}
-                          onOpenDetail={() => handleOpenDetail(item.id, item)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <NoticiasDeArchivo titulo={animeResults[0]?.title ?? searchTerm} malId={malIdArchivo ?? malId} />
               </>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

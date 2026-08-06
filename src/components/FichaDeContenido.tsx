@@ -90,7 +90,21 @@ export function FichaDeContenido({
    */
   if (cargando && resultados.length === 0) {
     return (
-      <div className="mb-8" aria-hidden>
+      /*
+         La silueta se DESVANECE al irse, en vez de desaparecer de golpe.
+         El cambio brusco de silueta a ficha es lo que se percibe como
+         "sale sin animación": aunque la ficha entre con su fundido, si
+         lo que había antes se corta en seco, el salto se nota igual.
+      */
+      <motion.div
+        key="silueta"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="mb-8"
+        aria-hidden
+      >
         <div className="panel flex gap-4 rounded-2xl p-5">
           <div className="h-36 w-24 flex-shrink-0 animate-pulse rounded-xl bg-panel-soft" />
           <div className="min-w-0 flex-1 space-y-2.5 py-1">
@@ -102,7 +116,7 @@ export function FichaDeContenido({
           </div>
         </div>
         <div className="mt-2 h-[42px] animate-pulse rounded-xl border border-panel-border" />
-      </div>
+      </motion.div>
     );
   }
 
@@ -113,13 +127,19 @@ export function FichaDeContenido({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.36, ease: SUAVE }}
+      key="ficha"
+      initial={{ opacity: 0, y: 12, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.42, ease: SUAVE }}
       className="mb-8"
     >
       {/* La principal, grande y sola. */}
-      <div className="panel flex gap-4 rounded-2xl p-5">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.36, delay: 0.06, ease: SUAVE }}
+        className="panel flex gap-4 rounded-2xl p-5"
+      >
         {principal.coverImage && (
           // eslint-disable-next-line @next/next/no-img-element -- fuente externa (AniList/MAL)
           <img
@@ -139,11 +159,16 @@ export function FichaDeContenido({
             </p>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Las demás entregas, recogidas. */}
       {otras.length > 0 && (
-        <div className="mt-2">
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, delay: 0.16, ease: SUAVE }}
+          className="mt-2"
+        >
           <button
             type="button"
             onClick={() => {
@@ -239,7 +264,7 @@ export function FichaDeContenido({
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
       )}
     </motion.div>
   );

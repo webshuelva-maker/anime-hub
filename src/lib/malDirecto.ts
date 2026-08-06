@@ -181,94 +181,83 @@ export async function noticiasDesdeMal(malId: number, limite = 8): Promise<Resul
     const vistas = new Set<string>();
     const noticias: JikanNewsItem[] = [];
 
-    $("a").each((_, el) => {
+    const meter = (titulo: string, href: string, fecha: string | null, resumen: string) => {
       if (noticias.length >= limite) return;
+      const abs = (href.startsWith("http") ? href : `https://myanimelist.net${href}`).split("?")[0];
+      if (vistas.has(abs)) return;
+      vistas.add(abs);
+      noticias.push({ title: titulo, url: abs, date: fecha, excerpt: resumen });
+    };
 
-      const href = $(el).attr("href") ?? "";
-      if (!ES_NOTICIA.test(href)) return;
+    /*
+     * PRIMERA ESTRATEGIA: los bloques de noticia, con sus partes.
+     *
+     * MyAnimeList envuelve cada noticia en un ".news-unit" y dentro
+     * separa el titular, el resumen y la fecha en elementos propios. Leer
+     * de ahí da exactamente lo que hace falta, sin mezclas.
+     *
+     * Esto iba SEGUNDO y ese era el fallo: primero se recorrían todos los
+     * enlaces de la página y se subía por el árbol buscando el texto de
+     * alrededor. Como esa vía "encontraba" algo, la buena no llegaba a
+     * ejecutarse nunca — y lo que encontraba era el menú entero de la web
+     * ("Details, Characters & Staff, Episodes…") de resumen, y la misma
+     * fecha para todas las noticias, porque la sacaba de un contenedor
+     * compartido. Ahora va primero.
+     */
+    $(".news-unit").each((_, bloque) => {
+      const b = $(bloque);
+      const enlace = b.find("a.title").first().length
+        ? b.find("a.title").first()
+        : b.find("a").filter((_, a) => limpiar($(a).text()).length >= 15).first();
 
-      const titulo = limpiar($(el).text());
-      /*
-       * En la página, cada noticia aparece enlazada VARIAS veces: la
-       * imagen, el titular y a veces un "leer más". Solo interesa el
-       * enlace que lleva el titular escrito, así que se descartan los
-       * que traen texto vacío o demasiado corto para ser un título.
-       */
-      if (titulo.length < 15) return;
+      const titulo = limpiar(enlace.text());
+      const href = enlace.attr("href");
+      if (!titulo || !href) return;
 
-      const limpia = href.split("?")[0];
-      if (vistas.has(limpia)) return;
-      vistas.add(limpia);
-
-      /*
-       * El bloque de ESA noticia, y solo de esa.
-       *
-       * Antes se cogía `closest("div").parent()`, que subía a un
-       * contenedor enorme abarcando media página. Resultado: el resumen
-       * se traía el menú entero de MyAnimeList ("Details, Characters &
-       * Staff, Episodes, Videos…") y, peor todavía, la fecha era la
-       * misma para TODAS las noticias, porque cogía la primera que
-       * encontraba en ese contenedor compartido.
-       *
-       * Ahora se sube desde el enlace de uno en uno y se para en cuanto
-       * el bloque tiene texto suficiente para llevar un resumen pero
-       * sigue siendo pequeño. Un bloque que se pasa de tamaño ya no es
-       * la noticia: es la página.
-       */
-      let bloque = $(el).parent();
-      for (let nivel = 0; nivel < 4; nivel++) {
-        const largo = limpiar(bloque.text()).length;
-        if (largo > titulo.length + 40 && largo < LIMITE_BLOQUE) break;
-        const padre = bloque.parent();
-        if (!padre.length) break;
-        bloque = padre;
-      }
-
-      const textoBloque = limpiar(bloque.text());
-      // Si aun así el bloque es descomunal, no se saca resumen de ahí:
-      // mejor una noticia sin resumen que una con el menú de la web
-      // pegado.
-      const resumen =
-        textoBloque.length < LIMITE_BLOQUE ? limpiarResumen(textoBloque, titulo) : "";
-
-      noticias.push({
-        title: titulo,
-        url: limpia.startsWith("http") ? limpia : `https://myanimelist.net${limpia}`,
-        // Solo se acepta la fecha si sale del bloque acotado: sacada del
-        // contenedor grande, todas las noticias acababan con la misma.
-        date: textoBloque.length < LIMITE_BLOQUE ? fechaISO(textoBloque) : null,
-        excerpt: resumen,
-      });
+      // El resumen y la fecha, cada uno de su elemento. Si no están, se
+      // quedan vacíos: es preferible a rellenarlos con lo que pille.
+      const resumen = limpiarResumen(limpiar(b.find(".news-unit-desc").first().text()), titulo);
+      const infoFecha = limpiar(b.find(".info").first().text());
+      meter(titulo, href, fechaISO(infoFecha || limpiar(b.text())), resumen);
     });
 
     /*
-     * SEGUNDA ESTRATEGIA, por si la primera no encontró nada.
+     * SEGUNDA ESTRATEGIA: por la forma de los enlaces.
      *
-     * Se buscan los bloques de noticia por su clase y se coge el primer
-     * enlace con texto de cada uno. Va después y no antes porque las
-     * clases de CSS son lo primero que cambia en un rediseño; esto es el
-     * plan B del plan B.
+     * Solo si la de arriba no ha dado nada, que es lo que pasaría el día
+     * que cambien esas clases de CSS. Aquí se sube desde el enlace hacia
+     * arriba, pero acotando: un bloque que se pasa de tamaño ya no es la
+     * noticia, es la página.
      */
     if (noticias.length === 0) {
-      $(".news-unit, .news-list .spaceit_pad, article").each((_, bloque) => {
+      $("a").each((_, el) => {
         if (noticias.length >= limite) return;
-        const enlace = $(bloque)
-          .find("a")
-          .filter((_, a) => limpiar($(a).text()).length >= 15)
-          .first();
-        const href = enlace.attr("href");
-        const titulo = limpiar(enlace.text());
-        if (!href || !titulo) return;
-        const abs = href.startsWith("http") ? href : `https://myanimelist.net${href}`;
-        if (vistas.has(abs)) return;
-        vistas.add(abs);
-        const texto = limpiar($(bloque).text());
-        noticias.push({
-          title: titulo,
-          url: abs.split("?")[0],
-          date: fechaISO(texto),
-          excerpt: limpiarResumen(texto, titulo),
-        });
+
+        const href = $(el).attr("href") ?? "";
+        if (!ES_NOTICIA.test(href)) return;
+
+        const titulo = limpiar($(el).text());
+        // Cada noticia aparece enlazada varias veces (la imagen, el
+        // titular); solo interesa la que lleva el titular escrito.
+        if (titulo.length < 15) return;
+
+        let bloque = $(el).parent();
+        for (let nivel = 0; nivel < 4; nivel++) {
+          const largo = limpiar(bloque.text()).length;
+          if (largo > titulo.length + 40 && largo < LIMITE_BLOQUE) break;
+          const padre = bloque.parent();
+          if (!padre.length) break;
+          bloque = padre;
+        }
+
+        const textoBloque = limpiar(bloque.text());
+        const cabe = textoBloque.length < LIMITE_BLOQUE;
+        meter(
+          titulo,
+          href,
+          cabe ? fechaISO(textoBloque) : null,
+          cabe ? limpiarResumen(textoBloque, titulo) : ""
+        );
       });
     }
 

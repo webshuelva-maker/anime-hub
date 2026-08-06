@@ -17,7 +17,13 @@ type Resultado = Awaited<ReturnType<typeof searchAnimeDatabase>>["results"][numb
 /** Pregunta a las tres bases y devuelve lo que encaja con el término. */
 async function buscarEn(
   term: string
-): Promise<{ resultados: Resultado[]; malId: number | null; debug: string }> {
+): Promise<{
+  resultados: Resultado[];
+  malId: number | null;
+  /** El de la entrega más reciente: es el que usa el archivo de noticias. */
+  malIdArchivo: number | null;
+  debug: string;
+}> {
   /*
    * Se pregunta a las TRES bases a la vez y se juntan los resultados.
    *
@@ -160,10 +166,34 @@ async function buscarEn(
   const malId = mejor?.malId ?? enMal?.id ?? null;
   const deDonde = mejor?.malId ? "anilist" : enMal ? "mal" : "no";
 
+  /*
+   * El identificador de la entrega MÁS RECIENTE de la franquicia.
+   *
+   * Va aparte del principal a propósito, porque sirven para cosas
+   * distintas. La ficha debe enseñar la obra que la persona ha buscado.
+   * Pero el ARCHIVO de noticias no: buscando "Mushoku Tensei" el mejor
+   * resultado es la primera temporada, y su archivo son noticias de hace
+   * cuatro años que ya no le importan a nadie. Las noticias que se
+   * quieren leer —el próximo estreno, el reparto recién anunciado— están
+   * en la temporada que se emite ahora.
+   *
+   * Se busca por eso la entrega del mismo núcleo de título con el año
+   * más alto. Si no hay ninguna mejor que la principal, se queda esta.
+   */
+  const mismaFranquicia = nucleoMejor
+    ? resultados.filter((r) => nucleoDeTitulo(r.title) === nucleoMejor && r.malId)
+    : [];
+  const masReciente = mismaFranquicia.reduce<Resultado | null>((mejorHastaAhora, r) => {
+    if (!mejorHastaAhora) return r;
+    return (r.startYear ?? 0) > (mejorHastaAhora.startYear ?? 0) ? r : mejorHastaAhora;
+  }, null);
+  const malIdArchivo = masReciente?.malId ?? malId;
+
   return {
     resultados,
     malId,
-    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes | malId: ${malId ?? "no"} (${deDonde})`,
+    malIdArchivo,
+    debug: `anilist: ${anilist.debug} | myanimelist: ${mal.length} | kitsu: ${kitsu.length} | ${juntos.length} juntos, ${resultados.length} relevantes | malId: ${malId ?? "no"} (${deDonde}) | archivo: ${malIdArchivo ?? "no"}${masReciente ? ` (${masReciente.title})` : ""}`,
   };
 }
 
@@ -192,6 +222,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         results: segunda.resultados.slice(0, 10),
         malId: segunda.malId,
+        malIdArchivo: segunda.malIdArchivo,
         fuente: "segundo intento",
         terminoUsado: corta,
         debug: `1º "${term}" → 0 | 2º "${corta}" → ${segunda.debug}`,
@@ -204,6 +235,7 @@ export async function GET(req: NextRequest) {
     // Lo lee la pantalla para pasárselo al archivo de noticias y
     // ahorrarle una búsqueda contra MyAnimeList.
     malId: primera.malId,
+    malIdArchivo: primera.malIdArchivo,
     fuente: primera.resultados.length > 0 ? "directa" : "ninguna",
     // El diagnóstico va SIEMPRE en la respuesta: llevamos varias vueltas
     // adivinando por qué una búsqueda vuelve vacía.

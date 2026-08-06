@@ -9,7 +9,7 @@ import { DEFAULT_PREFERENCES, clearPreferences, getPreferences, savePreferences 
 import { SelectableChip } from "./SelectableChip";
 import { TimePicker } from "./TimePicker";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { playError, playToggle } from "@/lib/sound";
+import { playError, playToggle, arrancarAmbiente, pararAmbiente, ambienteActivo } from "@/lib/sound";
 
 /**
  * Ajustes de la app. Antes vivía dentro de la página de Afinidad, mezclado
@@ -21,6 +21,13 @@ import { playError, playToggle } from "@/lib/sound";
 export function SettingsEditor() {
   const router = useRouter();
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  // Refleja si el ambiente está sonando AHORA. No va en preferencias: no
+  // se guarda entre visitas a propósito.
+  // Valor inicial leído del propio motor de sonido: si se vuelve a
+  // Ajustes con el ambiente ya sonando, el interruptor lo refleja. Se
+  // hace aquí y no en un efecto para no encadenar un redibujado de más.
+  const [ambienteEncendido, setAmbienteEncendido] = useState(() => ambienteActivo());
+
   const [savedSnapshot, setSavedSnapshot] = useState<string>(JSON.stringify(DEFAULT_PREFERENCES));
   const [saved, setSaved] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -151,6 +158,49 @@ export function SettingsEditor() {
             <motion.span
               className="block h-5 w-5 rounded-full bg-white"
               animate={{ x: prefs.soundEnabled ? 22 : 2 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </button>
+        </div>
+
+        {/*
+          Ambiente de fondo, APAGADO por defecto y con su propio
+          interruptor.
+
+          Un sonido continuo es lo más fácil de convertir en molestia:
+          quien oye un zumbido que no ha pedido silencia la pestaña. Va
+          aparte de los sonidos de interfaz porque son cosas distintas —
+          hay a quien le gustan los clics y no quiere un fondo sonando—,
+          y no se guarda en preferencias a propósito: dura lo que dure la
+          visita, para que nadie se encuentre con música al abrir la web.
+        */}
+        <div className="mt-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Ambiente de fondo</p>
+            <p className="text-xs text-muted">
+              Un acorde grave y muy flojo mientras navegas. Se apaga al cerrar la página.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (ambienteEncendido) {
+                pararAmbiente();
+                setAmbienteEncendido(false);
+              } else {
+                arrancarAmbiente();
+                setAmbienteEncendido(true);
+              }
+              playToggle();
+            }}
+            aria-pressed={ambienteEncendido}
+            className={`h-6 w-11 rounded-full transition-colors ${
+              ambienteEncendido ? "accent-gradient" : "bg-panel-border"
+            }`}
+          >
+            <motion.span
+              className="block h-5 w-5 rounded-full bg-white"
+              animate={{ x: ambienteEncendido ? 22 : 2 }}
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
             />
           </button>
