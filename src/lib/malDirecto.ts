@@ -42,8 +42,27 @@ const CABECERAS_NAVEGADOR = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-/** Reconoce la dirección de una noticia concreta de MyAnimeList. */
-const ES_NOTICIA = /myanimelist\.net\/news\/\d+/i;
+/**
+ * Reconoce la dirección de una noticia concreta de MyAnimeList.
+ *
+ * Acepta la forma absoluta y la RELATIVA. La primera versión solo
+ * aceptaba la absoluta y no reconoció nada: escribir enlaces internos en
+ * relativo es lo normal en cualquier web, y dar por hecho lo contrario
+ * fue una suposición mía sin comprobar.
+ */
+const ES_NOTICIA = /^(https?:\/\/(www\.)?myanimelist\.net)?\/news\/\d+/i;
+
+/** Señales de que lo que ha llegado no es la página, sino un muro. */
+function pareceBloqueo(html: string): boolean {
+  const h = html.toLowerCase();
+  return (
+    h.includes("just a moment") ||
+    h.includes("cf-browser-verification") ||
+    h.includes("challenge-platform") ||
+    h.includes("enable javascript and cookies") ||
+    h.includes("access denied")
+  );
+}
 
 /**
  * Fechas tal y como las escribe MyAnimeList: "Sep 6, 2019 5:30 PM EDT".
@@ -68,6 +87,31 @@ function fechaISO(texto: string): string | null {
 
 function limpiar(t: string): string {
   return t.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Deja solo el resumen, quitando todo lo que viene pegado en el bloque.
+ *
+ * Al leer el texto entero del bloque viene el titular, la fecha, la hora
+ * con su huso, quién lo publicó y cuántos comentarios tiene. Sin
+ * limpiarlo, el resumen empezaba por "Sep 6, 2025 by Sakana | ..." y
+ * terminaba con la hora otra vez.
+ */
+function limpiarResumen(textoBloque: string, titulo: string): string {
+  return limpiar(
+    textoBloque
+      // El propio titular, para que no se repita dentro del resumen.
+      .replace(titulo, " ")
+      // Fechas, con o sin hora y huso: "Sep 6, 2025 5:30 PM EDT".
+      .replace(/[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}(\s+\d{1,2}:\d{2}\s*(AM|PM)?(\s+[A-Z]{2,4})?)?/g, " ")
+      // Quién lo publica: "by Sakana |".
+      .replace(/\bby\s+\S+\s*\|?/gi, " ")
+      // Pies de página que no son resumen.
+      .replace(/\b\d+\s+Comments?\b/gi, " ")
+      .replace(/\bread more\b/gi, " ")
+      // Separadores sueltos que quedan tras los recortes.
+      .replace(/\s*\|\s*/g, " ")
+  ).slice(0, 240);
 }
 
 export interface ResultadoDirecto {
@@ -138,33 +182,7 @@ export async function noticiasDesdeMal(malId: number, limite = 8): Promise<Resul
       const bloque = $(el).closest("div").parent();
       const textoBloque = limpiar(bloque.text());
 
-      /*
-       * De ese bloque hay que quitar todo lo que no es resumen.
-       *
-       * Al leer el texto entero del bloque viene pegado el titular, la
-       * fecha, la hora con su huso, quién lo publicó y cuántos
-       * comentarios tiene. Sin limpiarlo, el resumen empezaba por
-       * "Sep 6, 2025 by Sakana | ..." y terminaba con la hora otra vez:
-       * ilegible, y encima la parte en inglés que sí sobreviviría a la
-       * traducción por ser nombres propios y fechas.
-       */
-      const resumen = limpiar(
-        textoBloque
-          // El propio titular, para que no se repita dentro del resumen.
-          .replace(titulo, " ")
-          // Fechas, con o sin hora y huso: "Sep 6, 2025 5:30 PM EDT".
-          .replace(
-            /[A-Z][a-z]{2}\s+\d{1,2},\s+\d{4}(\s+\d{1,2}:\d{2}\s*(AM|PM)?(\s+[A-Z]{2,4})?)?/g,
-            " "
-          )
-          // Quién lo publica: "by Sakana |".
-          .replace(/\bby\s+\S+\s*\|?/gi, " ")
-          // Pies de página que no son resumen.
-          .replace(/\b\d+\s+Comments?\b/gi, " ")
-          .replace(/\bread more\b/gi, " ")
-          // Separadores sueltos que quedan tras los recortes.
-          .replace(/\s*\|\s*/g, " ")
-      ).slice(0, 240);
+      const resumen = limpiarResumen(textoBloque, titulo);
 
       noticias.push({
         title: titulo,
@@ -174,13 +192,62 @@ export async function noticiasDesdeMal(malId: number, limite = 8): Promise<Resul
       });
     });
 
+    /*
+     * SEGUNDA ESTRATEGIA, por si la primera no encontró nada.
+     *
+     * Se buscan los bloques de noticia por su clase y se coge el primer
+     * enlace con texto de cada uno. Va después y no antes porque las
+     * clases de CSS son lo primero que cambia en un rediseño; esto es el
+     * plan B del plan B.
+     */
+    if (noticias.length === 0) {
+      $(".news-unit, .news-list .spaceit_pad, article").each((_, bloque) => {
+        if (noticias.length >= limite) return;
+        const enlace = $(bloque)
+          .find("a")
+          .filter((_, a) => limpiar($(a).text()).length >= 15)
+          .first();
+        const href = enlace.attr("href");
+        const titulo = limpiar(enlace.text());
+        if (!href || !titulo) return;
+        const abs = href.startsWith("http") ? href : `https://myanimelist.net${href}`;
+        if (vistas.has(abs)) return;
+        vistas.add(abs);
+        const texto = limpiar($(bloque).text());
+        noticias.push({
+          title: titulo,
+          url: abs.split("?")[0],
+          date: fechaISO(texto),
+          excerpt: limpiarResumen(texto, titulo),
+        });
+      });
+    }
+
     if (noticias.length === 0) {
       /*
-       * La página se ha leído pero no se ha reconocido nada. Casi
-       * siempre significa que han cambiado el diseño, y decirlo así
-       * ahorra buscar el fallo en la red.
+       * La página llegó pero no se reconoció nada dentro. Aquí NO vale
+       * un mensaje genérico: como este lector va contra el HTML de otra
+       * web, hay que decir QUÉ llegó, o afinarlo se vuelve un juego de
+       * adivinanzas a ciegas. Con estos cuatro datos se sabe si nos han
+       * puesto un muro, si la página vino vacía o si simplemente han
+       * cambiado el diseño.
        */
-      return { ok: false, noticias: [], motivo: "no se reconoció el contenido de MyAnimeList" };
+      const enlaces = $("a").length;
+      const conNews = $("a").filter((_, a) => ($(a).attr("href") ?? "").includes("/news/")).length;
+
+      if (pareceBloqueo(html)) {
+        return {
+          ok: false,
+          noticias: [],
+          motivo: "MyAnimeList devolvió una página de verificación en vez del contenido",
+        };
+      }
+
+      return {
+        ok: false,
+        noticias: [],
+        motivo: `no se reconoció el contenido (${Math.round(html.length / 1024)} KB, ${enlaces} enlaces, ${conNews} hacia noticias)`,
+      };
     }
 
     return { ok: true, noticias, motivo: null };
