@@ -168,10 +168,31 @@ export function SearchBar({
             transition={{ duration: 0.16, ease: "easeOut" }}
             className="panel absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-panel-border shadow-xl shadow-black/40"
           >
-            {suggestions.map((sug) => (
-              <button
+            {/*
+              Las sugerencias entran escalonadas, igual que en el buscador
+              de "Tus favoritos".
+
+              Aquí no había ninguna animación: el panel aparecía y dentro
+              ya estaba todo puesto. Con esto se ve de dónde sale cada
+              línea, y además tapa el momento en que llegan las de la base
+              de datos y se suman a las que ya había — que antes era un
+              parpadeo con la lista cambiando de golpe.
+
+              El escalón está topado: con seis sugerencias, un retraso sin
+              límite dejaría la última entrando cuando ya has movido el
+              ratón hasta ella.
+            */}
+            {suggestions.map((sug, i) => (
+              <motion.button
                 key={sug.titulo}
                 type="button"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.22,
+                  delay: Math.min(i * 0.035, 0.18),
+                  ease: [0.16, 1, 0.3, 1],
+                }}
                 onMouseDown={() => runSearch(sug.titulo)}
                 className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-panel-soft"
               >
@@ -198,11 +219,22 @@ export function SearchBar({
                       : [sug.formato, sug.anio].filter(Boolean).join(" · ") || "Base de datos"}
                   </span>
                 </span>
-              </button>
+              </motion.button>
             ))}
-            {loadingSuggestions && suggestions.length === 0 && (
-              <p className="px-4 py-3 text-xs text-muted">Buscando…</p>
-            )}
+            <AnimatePresence mode="wait" initial={false}>
+              {loadingSuggestions && suggestions.length === 0 && (
+                <motion.p
+                  key="buscando"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0.4, 1, 0.4] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ opacity: { duration: 1.3, repeat: Infinity, ease: "easeInOut" } }}
+                  className="px-4 py-3 text-xs text-muted"
+                >
+                  Buscando…
+                </motion.p>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

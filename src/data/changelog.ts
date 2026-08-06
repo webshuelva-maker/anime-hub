@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v192",
+    fecha: "2026-08-05",
+    titulo: "Los sonidos, a la altura",
+    puntos: [
+      "Todos los sonidos de la app suenan ahora en el mismo espacio: clics, avisos de Iris y todo lo demás dejan de sonar planos.",
+      "Al buscar en Noticias, las sugerencias entran una a una como en Tus favoritos.",
+    ],
+  },
+  {
     version: "v191",
     fecha: "2026-08-06",
     titulo: "Sonido nuevo y el archivo de noticias, arreglado",

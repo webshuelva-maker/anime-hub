@@ -30,6 +30,95 @@ function isEnabled(): boolean {
   }
 }
 
+/*
+ * ---------------------------------------------------------------------
+ * LA CAPA QUE FALTABA: EL ESPACIO
+ *
+ * Los sonidos de arranque sonaban caros y los de interacción no, aunque
+ * estaban hechos con las mismas herramientas. La diferencia no era el
+ * volumen ni el filtro: era que los de arranque duran uno o dos segundos
+ * y les da tiempo a desarrollarse, mientras que un clic dura dos
+ * décimas y se acaba antes de sonar a nada.
+ *
+ * Lo que iguala a los dos es la REVERBERACIÓN. Un sonido seco parece
+ * salir del altavoz; el mismo sonido con una cola de reverberación
+ * parece ocurrir en un sitio. Es exactamente lo que hace que un sonido
+ * de interfaz se perciba como "de aplicación cara": no es la nota, es la
+ * sala donde suena.
+ *
+ * No se descarga ningún archivo. La sala se fabrica aquí con ruido que
+ * se apaga: es la forma clásica de simular una reverberación, y suena
+ * bien de sobra para esto.
+ *
+ * Todo pasa por dos caminos: uno directo y otro a través de la sala. La
+ * mezcla se elige por sonido — un clic quiere poca (tiene que ser
+ * inmediato) y el aviso de Iris bastante más (tiene que sentirse
+ * lejano).
+ * ---------------------------------------------------------------------
+ */
+interface Buses {
+  master: GainNode;
+  sala: ConvolverNode;
+}
+
+let buses: Buses | null = null;
+
+function crearImpulso(audioCtx: AudioContext, segundos: number, caida: number): AudioBuffer {
+  const muestras = Math.floor(audioCtx.sampleRate * segundos);
+  const buffer = audioCtx.createBuffer(2, muestras, audioCtx.sampleRate);
+
+  for (let canal = 0; canal < 2; canal++) {
+    const datos = buffer.getChannelData(canal);
+    for (let i = 0; i < muestras; i++) {
+      // Ruido que se apaga siguiendo una curva. Los dos canales llevan
+      // ruido DISTINTO a propósito: es lo que hace que la cola suene
+      // ancha en vez de pegada al centro de la cabeza.
+      datos[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / muestras, caida);
+    }
+  }
+  return buffer;
+}
+
+function getBuses(): Buses | null {
+  const audioCtx = getContext();
+  if (!audioCtx) return null;
+  if (buses) return buses;
+
+  const master = audioCtx.createGain();
+  master.gain.value = 1;
+  master.connect(audioCtx.destination);
+
+  const sala = audioCtx.createConvolver();
+  sala.buffer = crearImpulso(audioCtx, 2.2, 2.6);
+
+  // La cola se filtra: una reverberación con agudos suena a lata. Al
+  // recortarlos queda ese "aire" oscuro que no se oye pero se nota.
+  const filtroSala = audioCtx.createBiquadFilter();
+  filtroSala.type = "lowpass";
+  filtroSala.frequency.value = 2600;
+
+  const nivelSala = audioCtx.createGain();
+  nivelSala.gain.value = 0.9;
+
+  sala.connect(filtroSala);
+  filtroSala.connect(nivelSala);
+  nivelSala.connect(master);
+
+  buses = { master, sala };
+  return buses;
+}
+
+interface OpcionesTono {
+  /** Cuánto se manda a la sala, de 0 a 1. */
+  reverb?: number;
+  /** Posición estéreo, de -1 a 1. */
+  pan?: number;
+  /** Desafinado en céntimos. Dos capas desafinadas suenan a instrumento. */
+  detune?: number;
+  /** Si se indica, la nota se desliza hasta esta frecuencia. */
+  glideA?: number;
+}
+
 function tone(
   freq: number,
   duration: number,
@@ -37,17 +126,30 @@ function tone(
   type: OscillatorType = "sine",
   delay = 0,
   /** Corta los agudos: es lo que separa un "bip" de una nota suave. */
-  lowpass?: number
+  lowpass?: number,
+  opciones: OpcionesTono = {}
 ) {
   const audioCtx = getContext();
-  if (!audioCtx || !isEnabled()) return;
+  const b = getBuses();
+  if (!audioCtx || !b || !isEnabled()) return;
+
+  const { reverb = 0.3, pan = 0, detune = 0, glideA } = opciones;
 
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.type = type;
   osc.frequency.value = freq;
+  osc.detune.value = detune;
 
   const start = audioCtx.currentTime + delay;
+
+  // Deslizamiento de altura. Muy poco y muy rápido, pero es lo que
+  // convierte una nota plana en algo que "se mueve".
+  if (glideA) {
+    osc.frequency.setValueAtTime(freq, start);
+    osc.frequency.exponentialRampToValueAtTime(glideA, start + duration * 0.6);
+  }
+
   // Ataque más lento (30ms en vez de 8ms): un sonido que "entra" en vez
   // de golpear. Es la diferencia entre una campanita cara y un pitido de
   // microondas, y era la queja con los sonidos de Ren.
@@ -57,18 +159,43 @@ function tone(
 
   osc.connect(gain);
 
+  let salida: AudioNode = gain;
+
   if (lowpass) {
     const filter = audioCtx.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.value = lowpass;
-    gain.connect(filter);
-    filter.connect(audioCtx.destination);
-  } else {
-    gain.connect(audioCtx.destination);
+    salida.connect(filter);
+    salida = filter;
+  }
+
+  // Panorama. Aunque sea poquísimo, que cada sonido no salga del mismo
+  // punto exacto ayuda a que no se perciban como pitidos de un aparato.
+  if (pan !== 0 && typeof audioCtx.createStereoPanner === "function") {
+    const panner = audioCtx.createStereoPanner();
+    panner.pan.value = pan;
+    salida.connect(panner);
+    salida = panner;
+  }
+
+  // Camino directo.
+  const directo = audioCtx.createGain();
+  directo.gain.value = 1 - reverb * 0.35;
+  salida.connect(directo);
+  directo.connect(b.master);
+
+  // Camino a la sala.
+  if (reverb > 0) {
+    const envio = audioCtx.createGain();
+    envio.gain.value = reverb;
+    salida.connect(envio);
+    envio.connect(b.sala);
   }
 
   osc.start(start);
-  osc.stop(start + duration + 0.05);
+  // Se deja sonar un poco más: la cola de la sala necesita que el
+  // oscilador no se corte justo al acabar la nota.
+  osc.stop(start + duration + 0.08);
 }
 
 /** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
@@ -95,23 +222,27 @@ function tone(
 
 /** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
 export function playClick() {
-  tone(659.25, 0.22, 0.06, "sine", 0, 1700);
-  tone(987.77, 0.18, 0.022, "sine", 0.02, 1700);
+  // Poca sala: un clic tiene que sentirse inmediato. Lo que le da cuerpo
+  // es la segunda capa desafinada, no la cola.
+  tone(659.25, 0.24, 0.055, "sine", 0, 1700, { reverb: 0.18, pan: -0.05 });
+  tone(659.25, 0.2, 0.018, "triangle", 0.005, 1500, { reverb: 0.18, detune: 7, pan: 0.05 });
+  tone(987.77, 0.3, 0.016, "sine", 0.02, 2000, { reverb: 0.35 });
 }
 
 /** Confirmación — guardar, dar a "me gusta", completar una acción. */
 export function playSuccess() {
   // Tercera mayor ascendente: se percibe como "hecho" sin necesidad de
-  // subir el volumen.
-  tone(587.33, 0.34, 0.055, "sine", 0, 1800);
-  tone(880.0, 0.42, 0.038, "sine", 0.07, 1800);
-  tone(1174.66, 0.36, 0.016, "sine", 0.12, 2000);
+  // subir el volumen. Ahora con sala, que es lo que hace que la última
+  // nota no se corte en seco sino que se quede flotando.
+  tone(587.33, 0.36, 0.05, "sine", 0, 1800, { reverb: 0.4, pan: -0.08 });
+  tone(880.0, 0.46, 0.034, "sine", 0.07, 1800, { reverb: 0.5 });
+  tone(1174.66, 0.6, 0.015, "sine", 0.12, 2200, { reverb: 0.65, pan: 0.1 });
 }
 
 /** Desplegar/plegar — acordeones, "ver más", abrir el chat de Ren. */
 export function playToggle() {
-  tone(493.88, 0.2, 0.05, "sine", 0, 1500);
-  tone(740.0, 0.16, 0.018, "sine", 0.025, 1500);
+  tone(493.88, 0.24, 0.045, "sine", 0, 1500, { reverb: 0.28 });
+  tone(740.0, 0.26, 0.016, "sine", 0.025, 1600, { reverb: 0.4, detune: -6 });
 }
 
 /**
@@ -122,16 +253,24 @@ export function playToggle() {
  * encaja" sin llegar a sonar a alarma.
  */
 export function playError() {
-  tone(207.65, 0.4, 0.06, "sine", 0, 700);
-  tone(233.08, 0.34, 0.03, "sine", 0.06, 700);
+  tone(207.65, 0.46, 0.055, "sine", 0, 700, { reverb: 0.3 });
+  tone(233.08, 0.4, 0.028, "sine", 0.06, 700, { reverb: 0.35, detune: 5 });
 }
 
 /** Muy suave, casi subliminal — pasar el ratón por encima de algo interactivo. */
 export function playHover() {
-  // Casi inaudible y muy filtrado: se dispara decenas de veces al mover
-  // el ratón, así que cualquier cosa con filo se vuelve insoportable a
-  // los diez segundos.
-  tone(1046.5, 0.09, 0.018, "sine", 0, 2200);
+  /*
+   * Casi inaudible y muy filtrado: se dispara decenas de veces al mover
+   * el ratón, así que cualquier cosa con filo se vuelve insoportable a
+   * los diez segundos.
+   *
+   * Aquí la sala hace más que en ningún otro sitio. Un toque tan corto y
+   * tan flojo, seco, se percibe como un chasquido del altavoz; con una
+   * cola pequeña detrás se convierte en un roce. Y la nota sube
+   * ligerísimamente mientras suena, que es lo que le quita el aire de
+   * pitido.
+   */
+  tone(1046.5, 0.14, 0.014, "sine", 0, 2400, { reverb: 0.55, glideA: 1120 });
 }
 
 /**
@@ -141,10 +280,11 @@ export function playHover() {
  * justo lo que sonaba a app gratuita.
  */
 export function playSend() {
-  tone(392, 0.42, 0.05, "sine", 0, 1300);
+  // Sala corta y hacia la izquierda: el mensaje "sale" de ti.
+  tone(392, 0.46, 0.045, "sine", 0, 1300, { reverb: 0.3, pan: -0.12 });
   // Una octava por debajo, apenas perceptible: da cuerpo, como la caja
   // de un instrumento.
-  tone(196, 0.5, 0.022, "sine", 0.03, 700);
+  tone(196, 0.6, 0.02, "sine", 0.03, 700, { reverb: 0.35, pan: -0.12 });
 }
 
 /**
@@ -153,11 +293,20 @@ export function playSend() {
  * que de una notificación.
  */
 export function playReceive() {
-  tone(523.25, 0.5, 0.048, "sine", 0, 1600);
-  tone(784, 0.62, 0.028, "sine", 0.09, 1600);
+  /*
+   * Este es el que más se nota del cambio, y es el que más lo pedía:
+   * llega solo, sin que hayas tocado nada, así que es el único sonido
+   * que la app te "dice". Con mucha sala se percibe como algo que ocurre
+   * en la habitación en vez de un aviso del sistema.
+   *
+   * Y cae a la derecha, al revés que el de enviar: tú a la izquierda,
+   * Iris a la derecha. No se piensa, pero se nota.
+   */
+  tone(523.25, 0.55, 0.042, "sine", 0, 1600, { reverb: 0.55, pan: 0.14 });
+  tone(784, 0.7, 0.026, "sine", 0.09, 1700, { reverb: 0.65, pan: 0.14, detune: -4 });
   // Tercera nota muy lejana y flojísima: hace que la respuesta "se
   // abra" en vez de terminar en seco.
-  tone(1046.5, 0.7, 0.012, "sine", 0.2, 2000);
+  tone(1046.5, 0.95, 0.011, "sine", 0.2, 2200, { reverb: 0.8, pan: 0.2 });
 }
 
 /* ===================== Sonidos de ambiente ===================== */
@@ -361,8 +510,11 @@ export function pararFondo() {
  * despliega" también al oído.
  */
 export function playAbrirAsistente() {
-  tone(440, 0.34, 0.05, "sine", 0, 1500);
-  tone(659.25, 0.46, 0.032, "sine", 0.07, 1600);
+  // Se abre de izquierda a derecha también al oído: la primera nota cae
+  // un poco a la izquierda y la segunda a la derecha.
+  tone(440, 0.4, 0.045, "sine", 0, 1500, { reverb: 0.45, pan: -0.18 });
+  tone(659.25, 0.62, 0.03, "sine", 0.07, 1700, { reverb: 0.6, pan: 0.18 });
+  tone(880, 0.5, 0.012, "sine", 0.13, 2000, { reverb: 0.7 });
 }
 
 /**
@@ -374,6 +526,6 @@ export function playAbrirAsistente() {
  * "se abre", sin que nadie tenga que pensarlo.
  */
 export function playCerrarAsistente() {
-  tone(659.25, 0.3, 0.04, "sine", 0, 1600);
-  tone(440, 0.44, 0.028, "sine", 0.07, 1400);
+  tone(659.25, 0.32, 0.036, "sine", 0, 1600, { reverb: 0.4, pan: 0.15 });
+  tone(440, 0.7, 0.026, "sine", 0.07, 1300, { reverb: 0.6, pan: -0.15, glideA: 415 });
 }
