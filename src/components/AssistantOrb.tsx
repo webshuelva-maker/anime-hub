@@ -511,8 +511,8 @@ export function AssistantOrb() {
       });
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
+  const handleSend = async (textoDirecto?: string) => {
+    const text = (textoDirecto ?? input).trim();
     if (!text || loading) return;
 
     const userMessage: Message = { role: "user", content: text, ts: Date.now() };
@@ -899,7 +899,7 @@ export function AssistantOrb() {
                 />
                 <motion.button
                   type="button"
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   whileTap={{ scale: 0.9 }}
                   disabled={loading || input.trim().length === 0}
                   aria-label="Enviar"
@@ -916,13 +916,17 @@ export function AssistantOrb() {
       </AnimatePresence>
 
       {/* Aviso proactivo: si hay novedades de algo que sigue, Iris se
-          asoma solo. Al pulsar "Cuéntamelo" se abre el chat con la
-          pregunta ya escrita, para no tener que teclearla. */}
+          asoma solo. Al pulsar "Cuéntamelo" se abre el chat y la
+          pregunta se manda ya sola: Iris te la acaba de hacer a ti, así
+          que no tiene sentido que tengas que volver a escribírsela. */}
       {!open && (
         <AvisoProactivo
           onAbrirChat={(texto) => {
             setOpen(true);
-            setInput(texto);
+            // Se manda directamente — antes solo dejaba la pregunta
+            // escrita en el campo, y el usuario tenía que pulsar enviar
+            // él mismo para una pregunta que ya le había hecho Iris.
+            handleSend(texto);
           }}
         />
       )}

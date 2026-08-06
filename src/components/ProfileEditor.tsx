@@ -506,6 +506,7 @@ export function ProfileEditor() {
         </p>
         <Link
           href="/novedades"
+          onClick={playToggle}
           className="mt-4 inline-block rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
         >
           Ver novedades →
@@ -519,6 +520,7 @@ export function ProfileEditor() {
         </p>
         <Link
           href="/ajustes"
+          onClick={playToggle}
           className="mt-4 inline-block rounded-full border border-panel-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-ice/40 hover:text-foreground"
         >
           Abrir ajustes →

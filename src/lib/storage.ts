@@ -23,6 +23,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   studioExamples: {},
   searchHistory: [],
   soundEnabled: true,
+  musicVolume: 70,
   animaciones: "sistema",
   updatedAt: null,
   lastSeenChangelog: null,

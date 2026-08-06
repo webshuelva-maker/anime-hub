@@ -93,4 +93,12 @@ export interface UserPreferences {
    * su versión sin animar mientras el resto del mundo veía la buena.
    */
   animaciones: "sistema" | "completas" | "minimas";
+  /**
+   * Volumen del ambiente de fondo (acorde + melodía), de 0 a 100. No
+   * afecta a los sonidos de interfaz (clics, confirmaciones…), que
+   * siguen su propio interruptor (soundEnabled). En 0 equivale a
+   * silenciada sin tener que apagar el interruptor de "Ambiente de
+   * fondo".
+   */
+  musicVolume: number;
 }

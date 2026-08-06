@@ -9,21 +9,15 @@ import { DEFAULT_PREFERENCES, clearPreferences, getPreferences, savePreferences 
 import { SelectableChip } from "./SelectableChip";
 import { TimePicker } from "./TimePicker";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { VolumeSlider } from "./VolumeSlider";
 import {
-  playAbrirAsistente,
-  playArranque,
-  playCerrarAsistente,
-  playClick,
   playError,
-  playHover,
-  playReceive,
-  playSend,
-  playSuccess,
   playToggle,
   arrancarAmbiente,
   arrancarMelodia,
   pararFondo,
   ambienteActivo,
+  setVolumenMusica,
 } from "@/lib/sound";
 
 /**
@@ -224,42 +218,25 @@ export function SettingsEditor() {
         </div>
 
         {/*
-          Banco de pruebas de sonidos.
-
-          Existe por un motivo práctico: afinar un sonido a distancia es
-          imposible si la única forma de oírlo es provocarlo en su
-          contexto —pasar el ratón por un botón, abrir el asistente,
-          esperar a que llegue un mensaje—. Aquí se oyen todos seguidos y
-          se comparan, que es como se decide si uno desentona.
+          Volumen de la música, aparte del interruptor de arriba: uno
+          apaga y enciende el ambiente entero, este solo controla lo
+          fuerte que suena. Se puede mover con el ambiente ya sonando —
+          setVolumenMusica lo aplica al momento — y también si está
+          apagado, para dejarlo bajo antes de encenderlo.
         */}
-        <div className="mt-6 border-t border-panel-border pt-5">
-          <p className="text-sm font-medium">Escuchar los sonidos</p>
-          <p className="mt-0.5 text-xs leading-snug text-muted">
-            Púlsalos para compararlos entre sí. Están hechos para no imponerse, así que sube un
-            poco el volumen.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {[
-              { texto: "Pasar por encima", suena: playHover },
-              { texto: "Clic", suena: playClick },
-              { texto: "Desplegar", suena: playToggle },
-              { texto: "Confirmación", suena: playSuccess },
-              { texto: "Aviso", suena: playError },
-              { texto: "Abrir a Iris", suena: playAbrirAsistente },
-              { texto: "Cerrar a Iris", suena: playCerrarAsistente },
-              { texto: "Enviar mensaje", suena: playSend },
-              { texto: "Responde Iris", suena: playReceive },
-              { texto: "Arranque", suena: playArranque },
-            ].map((sonido) => (
-              <button
-                key={sonido.texto}
-                type="button"
-                onClick={sonido.suena}
-                className="pulsable rounded-full border border-panel-border px-3.5 py-1.5 text-xs text-muted hover:border-ice/40 hover:text-foreground"
-              >
-                {sonido.texto}
-              </button>
-            ))}
+        <div className="mt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted">Volumen de la música</p>
+            <span className="w-9 text-right text-xs tabular-nums text-muted">{prefs.musicVolume}%</span>
+          </div>
+          <div className="mt-2">
+            <VolumeSlider
+              value={prefs.musicVolume}
+              onChange={(musicVolume) => {
+                setPrefs((p) => ({ ...p, musicVolume }));
+                setVolumenMusica(musicVolume);
+              }}
+            />
           </div>
         </div>
 

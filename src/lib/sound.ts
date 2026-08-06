@@ -31,6 +31,47 @@ function isEnabled(): boolean {
 }
 
 /*
+ * Volumen del ambiente de fondo (acorde + melodía), aparte del
+ * interruptor general de sonidos. Se guarda en memoria y no se relee de
+ * localStorage en cada nota: así el control de Ajustes puede moverlo
+ * mientras el ambiente ya está sonando y se oye al momento, sin esperar
+ * a que se guarden las preferencias (que van con medio segundo de
+ * retardo). Al cargar la página se coge una vez el valor guardado.
+ */
+let volumenMusicaCache: number | null = null;
+
+function getVolumenMusica(): number {
+  if (volumenMusicaCache !== null) return volumenMusicaCache;
+  if (typeof window === "undefined") return 1;
+  try {
+    const raw = window.localStorage.getItem("anime-hub:preferences");
+    const parsed = raw ? JSON.parse(raw) : null;
+    const valor = typeof parsed?.musicVolume === "number" ? parsed.musicVolume : 70;
+    volumenMusicaCache = Math.min(1, Math.max(0, valor / 100));
+    return volumenMusicaCache;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * Cambia el volumen del ambiente al vuelo — lo llama el control de
+ * Ajustes en cada movimiento, no solo cuando se guarda. Si el ambiente
+ * ya está sonando, su ganancia se desliza hasta el nuevo nivel en vez de
+ * saltar de golpe (un cambio brusco de volumen se nota como un clic).
+ */
+export function setVolumenMusica(porcentaje: number) {
+  volumenMusicaCache = Math.min(1, Math.max(0, porcentaje / 100));
+  if (!ambiente) return;
+  const audioCtx = getContext();
+  if (!audioCtx) return;
+  const nivel = NIVEL_BASE_AMBIENTE * volumenMusicaCache;
+  ambiente.gain.gain.cancelScheduledValues(audioCtx.currentTime);
+  ambiente.gain.gain.setValueAtTime(ambiente.gain.gain.value, audioCtx.currentTime);
+  ambiente.gain.gain.linearRampToValueAtTime(nivel, audioCtx.currentTime + 0.25);
+}
+
+/*
  * ---------------------------------------------------------------------
  * LA CAPA QUE FALTABA: EL ESPACIO
  *
@@ -463,6 +504,13 @@ export function pararAmbiente() {
   osc.forEach((o) => o.stop(audioCtx.currentTime + 2.1));
 }
 
+/**
+ * Volumen máximo del ambiente (con el control de Ajustes al 100%).
+ * Bajado de 0,02 a 0,013: es un fondo, y en cuanto se distingue deja de
+ * serlo para convertirse en algo que suena.
+ */
+const NIVEL_BASE_AMBIENTE = 0.013;
+
 export function arrancarAmbiente() {
   const audioCtx = getContext();
   if (!audioCtx || !isEnabled() || ambiente) return;
@@ -471,9 +519,7 @@ export function arrancarAmbiente() {
   gain.gain.setValueAtTime(0, audioCtx.currentTime);
   // Entra en seis segundos: si apareciera de golpe se notaría, y todo el
   // sentido de un fondo es que no se note.
-  // Bajado de 0,02 a 0,013: es un fondo, y en cuanto se distingue
-  // deja de serlo para convertirse en algo que suena.
-  gain.gain.linearRampToValueAtTime(0.013, audioCtx.currentTime + 6);
+  gain.gain.linearRampToValueAtTime(NIVEL_BASE_AMBIENTE * getVolumenMusica(), audioCtx.currentTime + 6);
 
   const filtro = audioCtx.createBiquadFilter();
   filtro.type = "lowpass";
@@ -528,12 +574,18 @@ let melodia: ReturnType<typeof setTimeout> | null = null;
 function siguienteNota() {
   if (!isEnabled()) return pararMelodia();
 
-  const nota = PENTATONICA[Math.floor(Math.random() * PENTATONICA.length)];
-  // Muy floja y muy filtrada: tiene que quedar por debajo de todo lo
-  // demás, incluida cualquier otra pestaña con música.
-  tone(nota, 2.6, 0.018, "sine", 0, 2000);
-  // Y a veces una quinta por encima, aún más floja, como un eco.
-  if (Math.random() < 0.4) tone(nota * 1.5, 3.0, 0.009, "sine", 0.6, 2000);
+  // Se sigue programando la siguiente nota aunque el volumen esté a 0:
+  // así, si se sube después, la melodía retoma el ritmo enseguida en vez
+  // de quedarse parada hasta la próxima vez que se active el ambiente.
+  const volumen = getVolumenMusica();
+  if (volumen > 0) {
+    const nota = PENTATONICA[Math.floor(Math.random() * PENTATONICA.length)];
+    // Muy floja y muy filtrada: tiene que quedar por debajo de todo lo
+    // demás, incluida cualquier otra pestaña con música.
+    tone(nota, 2.6, 0.018 * volumen, "sine", 0, 2000);
+    // Y a veces una quinta por encima, aún más floja, como un eco.
+    if (Math.random() < 0.4) tone(nota * 1.5, 3.0, 0.009 * volumen, "sine", 0.6, 2000);
+  }
 
   melodia = setTimeout(siguienteNota, 4000 + Math.random() * 7000);
 }

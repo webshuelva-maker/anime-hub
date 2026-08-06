@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v194",
+    fecha: "2026-08-06",
+    titulo: "El sonido de desplegar en todas partes, y volumen para la música",
+    puntos: [
+      "El sonido de desplegar ya suena también al abrir Novedades, Ajustes y el menú de Privacidad, donde antes se quedaba mudo.",
+      "En Ajustes hay un control para bajar o silenciar la música de fondo sin tener que apagarla del todo.",
+      "Quitado el banco de pruebas de sonidos de Ajustes.",
+      "Cuando Iris avisa de una novedad y le dices que sí, te lo cuenta directamente en vez de dejarte la pregunta escrita para que la mandes tú.",
+    ],
+  },
+  {
     version: "v193",
     fecha: "2026-08-06",
     titulo: "El archivo entero, y sonidos con cuerpo",
