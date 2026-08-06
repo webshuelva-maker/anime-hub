@@ -15,6 +15,7 @@ import { AvisoModeracion } from "@/components/AvisoModeracion";
 import { CloudSyncGate } from "@/components/CloudSyncGate";
 import { AmbientGlow } from "@/components/AmbientGlow";
 import { Movimiento } from "@/components/Movimiento";
+import { LlamadaDeVoz } from "@/components/LlamadaDeVoz";
 
 export const metadata: Metadata = {
   title: `${siteConfig.name} — ${siteConfig.tagline}`,
@@ -115,6 +116,9 @@ try{var enNoticias=location.pathname==='/'||location.pathname.indexOf('/noticias
         {/* Todo dentro: así ninguna animación de la app se salta el
             "Reducir movimiento" del sistema. */}
         <Movimiento>
+          {/* Va aquí y no dentro del chat: una llamada tiene que poder
+              entrar estés en la sección que estés. */}
+          <LlamadaDeVoz />
           <BanGate />
           <AvisoModeracion />
           <CloudSyncGate />

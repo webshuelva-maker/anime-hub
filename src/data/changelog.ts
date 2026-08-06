@@ -23,6 +23,17 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v197",
+    fecha: "2026-08-06",
+    titulo: "Llamadas de voz",
+    intro: "Ya podéis hablar de verdad.",
+    puntos: [
+      "Llama a quien hayas coincidido desde la propia conversación, y recibe llamadas estés donde estés en la app.",
+      "La voz va directa de un dispositivo a otro: no pasa por ningún servidor ni se graba.",
+      "Silenciar el micrófono y colgar, siempre a la vista.",
+    ],
+  },
+  {
     version: "v196",
     fecha: "2026-08-06",
     titulo: "Panel de denuncias para moderación",

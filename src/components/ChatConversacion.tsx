@@ -7,6 +7,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { playClick, playError, playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
 import { createClient } from "@/lib/supabase/client";
+import { llamarA } from "@/lib/llamadas";
 import { GrabadorDeVoz, NotaDeVoz, IconoMicrofono } from "./NotasDeVoz";
 import {
   Coincidencia,
@@ -317,6 +318,38 @@ export function ChatConversacion({
             )}
           </p>
         </div>
+
+        {/*
+          Llamar. Solo aparece si ya os habéis escrito.
+
+          No es una traba por gusto: una llamada entra sonando y ocupa la
+          pantalla entera del otro. Que eso solo pueda hacerlo alguien con
+          quien ya has cruzado mensajes —no cualquiera que coincida
+          contigo— es la diferencia entre una función y una vía para dar
+          la lata a desconocidos. Y basta UN mensaje de cualquiera de los
+          dos, así que no estorba a nadie que de verdad quiera hablar.
+        */}
+        {mensajes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              playToggle();
+              void llamarA(con.user_id, con.alias, con.avatar_id ?? null);
+            }}
+            aria-label={`Llamar a ${con.alias}`}
+            title={`Llamar a ${con.alias}`}
+            className="pulsable flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-soft hover:text-foreground"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
 
         {/* Las herramientas de seguridad viven aquí dentro: a un toque y
             siempre en el mismo sitio, pero sin gritar. */}
