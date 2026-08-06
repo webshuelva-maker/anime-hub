@@ -88,14 +88,26 @@ export function FichaDeContenido({
    * la ficha real. Cuando llega, ocupa ese hueco y no se mueve nada de
    * su sitio.
    */
-  if (cargando && resultados.length === 0) {
-    return (
-      /*
-         La silueta se DESVANECE al irse, en vez de desaparecer de golpe.
-         El cambio brusco de silueta a ficha es lo que se percibe como
-         "sale sin animación": aunque la ficha entre con su fundido, si
-         lo que había antes se corta en seco, el salto se nota igual.
-      */
+  const principal = resultados[0];
+  const otras = resultados.slice(1, 7);
+  const mostrarSilueta = cargando && resultados.length === 0;
+
+  /*
+   * TODO va dentro de un único AnimatePresence, y esto era el fallo.
+   *
+   * La silueta y la ficha ya tenían su animación de salida, pero se
+   * devolvían desde returns distintos, sin nada que las envolviera.
+   * AnimatePresence es lo único que puede retener un elemento mientras
+   * se va: sin él, la propiedad "exit" no se ejecuta NUNCA y React
+   * cambia una cosa por otra de golpe. Por eso en el buscador de
+   * favoritos —que sí lo tenía— se veía bien, y aquí no.
+   *
+   * "mode: wait" hace además que la silueta termine de desvanecerse
+   * antes de que entre la ficha, en vez de solaparse.
+   */
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {mostrarSilueta && (
       <motion.div
         key="silueta"
         initial={{ opacity: 0 }}
@@ -117,15 +129,9 @@ export function FichaDeContenido({
         </div>
         <div className="mt-2 h-[42px] animate-pulse rounded-xl border border-panel-border" />
       </motion.div>
-    );
-  }
+      )}
 
-  if (resultados.length === 0) return null;
-
-  const principal = resultados[0];
-  const otras = resultados.slice(1, 7);
-
-  return (
+      {principal && (
     <motion.div
       key="ficha"
       initial={{ opacity: 0, y: 12, scale: 0.985 }}
@@ -267,5 +273,7 @@ export function FichaDeContenido({
         </motion.div>
       )}
     </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

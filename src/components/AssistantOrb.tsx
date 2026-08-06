@@ -14,7 +14,14 @@ import { recordAnimeInterest } from "@/lib/learning";
 import { savePreferences } from "@/lib/storage";
 import { UserPreferences } from "@/types/news";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { playToggle, playSend, playReceive, playHover } from "@/lib/sound";
+import {
+  playToggle,
+  playSend,
+  playReceive,
+  playHover,
+  playAbrirAsistente,
+  playCerrarAsistente,
+} from "@/lib/sound";
 import { setBackgroundPaused, waitForTokenBudget, recordTokenUsage } from "@/lib/apiQueue";
 
 interface Message {
@@ -934,8 +941,18 @@ export function AssistantOrb() {
         <motion.button
           type="button"
           onClick={() => {
+            /*
+               Abrir y cerrar suenan distinto: las mismas notas, al
+               revés. Antes los dos usaban el sonido de desplegar y no se
+               distinguían.
+
+               El sonido va FUERA del actualizador de estado: React puede
+               llamar a esa función dos veces mientras comprueba cosas, y
+               el sonido se oiría duplicado.
+            */
+            if (open) playCerrarAsistente();
+            else playAbrirAsistente();
             setOpen((v) => !v);
-            playToggle();
           }}
           onMouseEnter={playHover}
           whileHover={{ scale: 1.06 }}

@@ -72,29 +72,66 @@ function tone(
 }
 
 /** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
+/*
+ * ---------------------------------------------------------------------
+ * SOBRE EL ACABADO DE ESTOS SONIDOS
+ *
+ * Los de aquí abajo eran los primeros que se hicieron, y se notaba al
+ * lado de los de ambiente: notas cortas, a bastante volumen y SIN
+ * filtrar. Un tono sin filtrar deja pasar todos sus agudos, y eso es
+ * exactamente lo que separa un "bip" de electrodoméstico de una nota
+ * suave. Encima sonaban al triple de volumen que el resto, así que
+ * pegaban un respingo en medio de un fondo tranquilo.
+ *
+ * Lo que se ha hecho con todos, sin cambiar cuándo suenan:
+ *  - Filtro de agudos, para quitarles el filo.
+ *  - Volumen bajado a un tercio: se oyen, no se imponen.
+ *  - Caída más larga, para que se apaguen en vez de cortarse.
+ *  - Una segunda nota por encima, mucho más floja, a distancia de
+ *    quinta o de octava. Es lo que da sensación de instrumento en vez de
+ *    generador de tonos, y cuesta una línea.
+ * ---------------------------------------------------------------------
+ */
+
+/** Clic normal — botones, cambiar de pestaña, seleccionar chips. */
 export function playClick() {
-  tone(720, 0.08, 0.2);
+  tone(659.25, 0.22, 0.06, "sine", 0, 1700);
+  tone(987.77, 0.18, 0.022, "sine", 0.02, 1700);
 }
 
 /** Confirmación — guardar, dar a "me gusta", completar una acción. */
 export function playSuccess() {
-  tone(600, 0.11, 0.2);
-  tone(900, 0.15, 0.18, "sine", 0.05);
+  // Tercera mayor ascendente: se percibe como "hecho" sin necesidad de
+  // subir el volumen.
+  tone(587.33, 0.34, 0.055, "sine", 0, 1800);
+  tone(880.0, 0.42, 0.038, "sine", 0.07, 1800);
+  tone(1174.66, 0.36, 0.016, "sine", 0.12, 2000);
 }
 
 /** Desplegar/plegar — acordeones, "ver más", abrir el chat de Ren. */
 export function playToggle() {
-  tone(500, 0.07, 0.17);
+  tone(493.88, 0.2, 0.05, "sine", 0, 1500);
+  tone(740.0, 0.16, 0.018, "sine", 0.025, 1500);
 }
 
-/** Aviso suave — errores de formulario, algo que no se ha podido hacer. */
+/**
+ * Aviso suave — errores de formulario, algo que no se ha podido hacer.
+ *
+ * Grave y muy filtrado a propósito: un error no debe sobresaltar. Dos
+ * notas a distancia de segunda, que es lo que se percibe como "algo no
+ * encaja" sin llegar a sonar a alarma.
+ */
 export function playError() {
-  tone(220, 0.14, 0.18, "triangle");
+  tone(207.65, 0.4, 0.06, "sine", 0, 700);
+  tone(233.08, 0.34, 0.03, "sine", 0.06, 700);
 }
 
 /** Muy suave, casi subliminal — pasar el ratón por encima de algo interactivo. */
 export function playHover() {
-  tone(1100, 0.035, 0.035);
+  // Casi inaudible y muy filtrado: se dispara decenas de veces al mover
+  // el ratón, así que cualquier cosa con filo se vuelve insoportable a
+  // los diez segundos.
+  tone(1046.5, 0.09, 0.018, "sine", 0, 2200);
 }
 
 /**
@@ -104,7 +141,10 @@ export function playHover() {
  * justo lo que sonaba a app gratuita.
  */
 export function playSend() {
-  tone(392, 0.32, 0.055, "sine", 0, 1400);
+  tone(392, 0.42, 0.05, "sine", 0, 1300);
+  // Una octava por debajo, apenas perceptible: da cuerpo, como la caja
+  // de un instrumento.
+  tone(196, 0.5, 0.022, "sine", 0.03, 700);
 }
 
 /**
@@ -113,8 +153,11 @@ export function playSend() {
  * que de una notificación.
  */
 export function playReceive() {
-  tone(523.25, 0.4, 0.05, "sine", 0, 1600);
-  tone(784, 0.5, 0.03, "sine", 0.09, 1600);
+  tone(523.25, 0.5, 0.048, "sine", 0, 1600);
+  tone(784, 0.62, 0.028, "sine", 0.09, 1600);
+  // Tercera nota muy lejana y flojísima: hace que la respuesta "se
+  // abra" en vez de terminar en seco.
+  tone(1046.5, 0.7, 0.012, "sine", 0.2, 2000);
 }
 
 /* ===================== Sonidos de ambiente ===================== */
@@ -311,4 +354,26 @@ export function fondoAlPrimerGesto(): () => void {
 export function pararFondo() {
   pararMelodia();
   pararAmbiente();
+}
+
+/**
+ * Abrir a Iris. Dos notas ascendentes, muy suaves: la interfaz "se
+ * despliega" también al oído.
+ */
+export function playAbrirAsistente() {
+  tone(440, 0.34, 0.05, "sine", 0, 1500);
+  tone(659.25, 0.46, 0.032, "sine", 0.07, 1600);
+}
+
+/**
+ * Cerrar a Iris. Las mismas dos notas, al revés y algo más flojas.
+ *
+ * Abrir y cerrar sonaban IGUAL (los dos usaban el sonido de desplegar),
+ * y eso es una ocasión perdida: invertir el orden de las notas es la
+ * forma más barata de que algo se perciba como "se guarda" en vez de
+ * "se abre", sin que nadie tenga que pensarlo.
+ */
+export function playCerrarAsistente() {
+  tone(659.25, 0.3, 0.04, "sine", 0, 1600);
+  tone(440, 0.44, 0.028, "sine", 0.07, 1400);
 }
