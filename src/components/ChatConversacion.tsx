@@ -18,11 +18,13 @@ import {
   reaccionesDe,
   bloquear,
   denunciar,
+  eliminarMensajeParaTodos,
   enviarMensaje,
   enviarNotaDeVoz,
   engancharConversacion,
   marcarConversacionLeida,
   mensajesCon,
+  ocultarMensajeParaMi,
 } from "@/lib/conectar";
 
 /**
@@ -103,6 +105,8 @@ export function ChatConversacion({
   const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
   const [denunciando, setDenunciando] = useState(false);
   const [motivoDenuncia, setMotivoDenuncia] = useState<string | null>(null);
+  const [menuMensajeAbierto, setMenuMensajeAbierto] = useState<string | null>(null);
+  const [confirmandoEliminarTodos, setConfirmandoEliminarTodos] = useState<Mensaje | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
   const cajaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -131,6 +135,13 @@ export function ChatConversacion({
             vibrar(8);
             void marcarConversacionLeida(con.user_id);
           }
+        },
+        // De momento solo llega por aquí un borrado "para todos": se
+        // sustituye el mensaje entero por la versión nueva (con
+        // eliminado_en puesto), así que la otra persona ve el cambio sin
+        // recargar nada.
+        alCambiarMensaje: (m) => {
+          setMensajes((prev) => prev.map((x) => (x.id === m.id ? m : x)));
         },
         alCambiarPresencia: setEnLinea,
         alEscribirElOtro: () => {
@@ -212,6 +223,44 @@ export function ChatConversacion({
     await bloquear(con.user_id);
     playToggle();
     onSalirDeLaLista();
+  };
+
+  /**
+   * Borrado "para mí": desaparece de la pantalla al momento y, si el
+   * servidor falla, se restaura — mejor que parpadee un instante a que
+   * el usuario crea que lo ha borrado y en realidad siga ahí.
+   */
+  const ocultarParaMi = async (m: Mensaje) => {
+    setMenuMensajeAbierto(null);
+    setMensajes((prev) => prev.filter((x) => x.id !== m.id));
+    playToggle();
+    const ok = await ocultarMensajeParaMi(m.id);
+    if (!ok) {
+      setMensajes((prev) =>
+        prev.some((x) => x.id === m.id)
+          ? prev
+          : [...prev, m].sort(
+              (a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime()
+            )
+      );
+      playError();
+    }
+  };
+
+  /** Borrado "para todos": solo sobre tus propios mensajes (ver ConfirmDialog). */
+  const confirmarEliminarParaTodos = async () => {
+    const m = confirmandoEliminarTodos;
+    setConfirmandoEliminarTodos(null);
+    if (!m) return;
+    const ok = await eliminarMensajeParaTodos(m.id);
+    if (ok) {
+      setMensajes((prev) =>
+        prev.map((x) => (x.id === m.id ? { ...x, eliminado_en: new Date().toISOString() } : x))
+      );
+      playToggle();
+    } else {
+      playError();
+    }
   };
 
   const enviarDenuncia = async () => {
@@ -413,7 +462,11 @@ export function ChatConversacion({
                                 {citado.autor_id === yo ? "Tú" : con.alias}
                               </span>
                               <span className="truncate opacity-80">
-                                {citado.audio_ruta ? "Nota de voz" : citado.texto}
+                                {citado.eliminado_en
+                                  ? "Mensaje eliminado"
+                                  : citado.audio_ruta
+                                  ? "Nota de voz"
+                                  : citado.texto}
                               </span>
                             </p>
                           );
@@ -431,95 +484,164 @@ export function ChatConversacion({
                           <span className="text-[10px] text-muted">{hora(m.creado_en)}</span>
                         </p>
                       )}
-                      {/*
-                        El contenido va en una caja que ocupa solo lo que
-                        mide el mensaje (w-fit), y no toda la fila. Así la
-                        barra de reacciones puede anclarse a SU borde y
-                        salir pegada al mensaje. Antes iba anclada al
-                        borde derecho de la fila entera, o sea al final de
-                        la pantalla: reaccionabas a una nota de voz de
-                        tres dedos de ancho y el menú te aparecía en la
-                        otra punta, sin relación visible con lo que
-                        estabas señalando.
-                      */}
-                      <div className="relative w-fit max-w-[85%]">
-                        {m.audio_ruta ? (
-                          <NotaDeVoz ruta={m.audio_ruta} duracionMs={m.audio_ms} mio={mio} />
-                        ) : (
-                          <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
-                            {m.texto}
-                          </p>
-                        )}
 
-                        {/* Barra que aparece al pasar por encima:
-                            reaccionar rápido o responder. En pantallas
-                            estrechas se coloca justo encima del mensaje,
-                            porque al lado no cabría. */}
-                        <div className="pointer-events-none absolute bottom-full right-0 z-10 mb-1 flex items-center gap-0.5 rounded-full border border-panel-border bg-panel p-0.5 opacity-0 shadow-lg transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 sm:bottom-auto sm:left-full sm:right-auto sm:top-1/2 sm:mb-0 sm:ml-2 sm:-translate-y-1/2">
-                          {REACCIONES_RAPIDAS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => reaccionar(m.id, emoji)}
-                              className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-sm hover:bg-panel-soft"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRespondiendoA(m);
-                              cajaRef.current?.focus();
-                              playToggle();
-                            }}
-                            aria-label="Responder a este mensaje"
-                            className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-xs text-muted hover:bg-panel-soft hover:text-foreground"
-                          >
-                            ↩
-                          </button>
-                        </div>
-                      </div>
+                      {m.eliminado_en ? (
+                        /* El contenido ya no está — ni el texto ni el audio se
+                           enseñan, ni se puede reaccionar o responder a algo
+                           que ya no existe. */
+                        <p className="flex items-center gap-1.5 text-[13px] italic text-muted">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 opacity-70">
+                            <path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-8 0v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          {mio ? "Has eliminado este mensaje" : "Mensaje eliminado"}
+                        </p>
+                      ) : (
+                        <>
+                          {/*
+                            El contenido va en una caja que ocupa solo lo que
+                            mide el mensaje (w-fit), y no toda la fila. Así la
+                            barra de reacciones puede anclarse a SU borde y
+                            salir pegada al mensaje. Antes iba anclada al
+                            borde derecho de la fila entera, o sea al final de
+                            la pantalla: reaccionabas a una nota de voz de
+                            tres dedos de ancho y el menú te aparecía en la
+                            otra punta, sin relación visible con lo que
+                            estabas señalando.
+                          */}
+                          <div className="relative w-fit max-w-[85%]">
+                            {m.audio_ruta ? (
+                              <NotaDeVoz ruta={m.audio_ruta} duracionMs={m.audio_ms} mio={mio} />
+                            ) : (
+                              <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground/90">
+                                {m.texto}
+                              </p>
+                            )}
 
-                      {/* Reacciones puestas. Las tuyas van marcadas, y
-                          volver a pulsar las quita. */}
-                      {(() => {
-                        const suyas = reacciones.filter((r) => r.mensaje_id === m.id);
-                        if (suyas.length === 0) return null;
-                        const porEmoji = new Map<string, { total: number; mia: boolean }>();
-                        for (const r of suyas) {
-                          const actualCuenta = porEmoji.get(r.emoji) ?? { total: 0, mia: false };
-                          porEmoji.set(r.emoji, {
-                            total: actualCuenta.total + 1,
-                            mia: actualCuenta.mia || r.usuario_id === yo,
-                          });
-                        }
-                        return (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {[...porEmoji.entries()].map(([emoji, info]) => (
+                            {/* Barra que aparece al pasar por encima:
+                                reaccionar rápido, responder o borrar. En
+                                pantallas estrechas se coloca justo encima
+                                del mensaje, porque al lado no cabría. */}
+                            <div className="pointer-events-none absolute bottom-full right-0 z-10 mb-1 flex items-center gap-0.5 rounded-full border border-panel-border bg-panel p-0.5 opacity-0 shadow-lg transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 sm:bottom-auto sm:left-full sm:right-auto sm:top-1/2 sm:mb-0 sm:ml-2 sm:-translate-y-1/2">
+                              {REACCIONES_RAPIDAS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => reaccionar(m.id, emoji)}
+                                  className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-sm hover:bg-panel-soft"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
                               <button
-                                key={emoji}
                                 type="button"
-                                onClick={() => reaccionar(m.id, emoji)}
-                                className="pulsable flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
-                                style={
-                                  info.mia
-                                    ? {
-                                        borderColor:
-                                          "color-mix(in srgb, var(--ice) 50%, transparent)",
-                                        background:
-                                          "color-mix(in srgb, var(--ice) 12%, transparent)",
-                                      }
-                                    : { borderColor: "var(--panel-border)" }
-                                }
+                                onClick={() => {
+                                  setRespondiendoA(m);
+                                  cajaRef.current?.focus();
+                                  playToggle();
+                                }}
+                                aria-label="Responder a este mensaje"
+                                className="pulsable flex h-7 w-7 items-center justify-center rounded-full text-xs text-muted hover:bg-panel-soft hover:text-foreground"
                               >
-                                <span>{emoji}</span>
-                                <span className="text-muted">{info.total}</span>
+                                ↩
                               </button>
-                            ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuMensajeAbierto((v) => (v === m.id ? null : m.id));
+                                  playToggle();
+                                }}
+                                aria-label="Más opciones de este mensaje"
+                                className={`pulsable flex h-7 w-7 items-center justify-center rounded-full text-xs ${
+                                  menuMensajeAbierto === m.id
+                                    ? "bg-panel-soft text-foreground"
+                                    : "text-muted hover:bg-panel-soft hover:text-foreground"
+                                }`}
+                              >
+                                ⋯
+                              </button>
+                            </div>
+
+                            {/* Menú de borrado, colgado del mismo botón. */}
+                            <AnimatePresence>
+                              {menuMensajeAbierto === m.id && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setMenuMensajeAbierto(null)}
+                                  />
+                                  <motion.div
+                                    initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.98 }}
+                                    transition={{ duration: 0.15, ease: SUAVE }}
+                                    className="panel absolute right-0 top-full z-20 mt-1 w-48 origin-top-right rounded-xl p-1.5 shadow-2xl shadow-black/50"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => ocultarParaMi(m)}
+                                      className="pulsable w-full rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-panel-soft"
+                                    >
+                                      Eliminar para mí
+                                    </button>
+                                    {mio && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setMenuMensajeAbierto(null);
+                                          setConfirmandoEliminarTodos(m);
+                                        }}
+                                        className="pulsable w-full rounded-lg px-3 py-2 text-left text-sm text-rumor hover:bg-panel-soft"
+                                      >
+                                        Eliminar para todos
+                                      </button>
+                                    )}
+                                  </motion.div>
+                                </>
+                              )}
+                            </AnimatePresence>
                           </div>
-                        );
-                      })()}
+
+                          {/* Reacciones puestas. Las tuyas van marcadas, y
+                              volver a pulsar las quita. */}
+                          {(() => {
+                            const suyas = reacciones.filter((r) => r.mensaje_id === m.id);
+                            if (suyas.length === 0) return null;
+                            const porEmoji = new Map<string, { total: number; mia: boolean }>();
+                            for (const r of suyas) {
+                              const actualCuenta = porEmoji.get(r.emoji) ?? { total: 0, mia: false };
+                              porEmoji.set(r.emoji, {
+                                total: actualCuenta.total + 1,
+                                mia: actualCuenta.mia || r.usuario_id === yo,
+                              });
+                            }
+                            return (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {[...porEmoji.entries()].map(([emoji, info]) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => reaccionar(m.id, emoji)}
+                                    className="pulsable flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+                                    style={
+                                      info.mia
+                                        ? {
+                                            borderColor:
+                                              "color-mix(in srgb, var(--ice) 50%, transparent)",
+                                            background:
+                                              "color-mix(in srgb, var(--ice) 12%, transparent)",
+                                          }
+                                        : { borderColor: "var(--panel-border)" }
+                                    }
+                                  >
+                                    <span>{emoji}</span>
+                                    <span className="text-muted">{info.total}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </>
+                      )}
 
                       {/* "Visto": solo bajo TU último mensaje, y solo si
                           lo ha leído. Puesto en cada mensaje sería ruido. */}
@@ -730,6 +852,15 @@ export function ChatConversacion({
         confirmLabel="Bloquear"
         onConfirm={confirmarBloqueo}
         onCancel={() => setConfirmandoBloqueo(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmandoEliminarTodos !== null}
+        title="¿Eliminar este mensaje para todos?"
+        message={`Se enseñará como "Mensaje eliminado" tanto a ti como a ${con.alias}. No se puede deshacer.`}
+        confirmLabel="Eliminar para todos"
+        onConfirm={confirmarEliminarParaTodos}
+        onCancel={() => setConfirmandoEliminarTodos(null)}
       />
 
       <AnimatePresence>

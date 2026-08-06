@@ -165,9 +165,11 @@ export function MensajesLista() {
                       c.sin_leer > 0 ? "text-foreground" : "text-muted"
                     }`}
                   >
-                    {c.ultimo_texto === null
+                    {c.ultimo_eliminado
+                      ? "Mensaje eliminado"
+                      : c.ultimo_texto === null
                       ? "Decid algo — nadie ha empezado todavía"
-                      : c.ultimo_texto.trim() === ""
+                      : c.ultimo_es_nota
                       ? "Nota de voz"
                       : c.ultimo_texto}
                   </span>

@@ -506,10 +506,11 @@ export function pararAmbiente() {
 
 /**
  * Volumen máximo del ambiente (con el control de Ajustes al 100%).
- * Bajado de 0,02 a 0,013: es un fondo, y en cuanto se distingue deja de
- * serlo para convertirse en algo que suena.
+ * Con 0,013 el 100% del control sonaba casi igual que un 60-70%: para
+ * que el máximo se sienta de verdad como un máximo hace falta más
+ * recorrido. Subido a 0,019 — sigue siendo un fondo, no una canción.
  */
-const NIVEL_BASE_AMBIENTE = 0.013;
+const NIVEL_BASE_AMBIENTE = 0.019;
 
 export function arrancarAmbiente() {
   const audioCtx = getContext();
@@ -582,9 +583,9 @@ function siguienteNota() {
     const nota = PENTATONICA[Math.floor(Math.random() * PENTATONICA.length)];
     // Muy floja y muy filtrada: tiene que quedar por debajo de todo lo
     // demás, incluida cualquier otra pestaña con música.
-    tone(nota, 2.6, 0.018 * volumen, "sine", 0, 2000);
+    tone(nota, 2.6, 0.026 * volumen, "sine", 0, 2000);
     // Y a veces una quinta por encima, aún más floja, como un eco.
-    if (Math.random() < 0.4) tone(nota * 1.5, 3.0, 0.009 * volumen, "sine", 0.6, 2000);
+    if (Math.random() < 0.4) tone(nota * 1.5, 3.0, 0.013 * volumen, "sine", 0.6, 2000);
   }
 
   melodia = setTimeout(siguienteNota, 4000 + Math.random() * 7000);

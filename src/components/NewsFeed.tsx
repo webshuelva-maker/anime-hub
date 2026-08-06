@@ -198,9 +198,27 @@ export function NewsFeed() {
    */
   useEffect(() => fondoAlPrimerGesto(), []);
 
-  /* Al desaparecer la pantalla de carga, la melodía se cierra. */
+  /*
+   * Al desaparecer la pantalla de carga, la melodía se cierra.
+   *
+   * EL FALLO: esto disparaba playEntrada() en cada visita a Noticias, no
+   * solo en la primera. showInitialLoader ya es false en cualquier
+   * navegación que no sea la primera del documento (ver más arriba), así
+   * que en cuanto este componente se remontaba (volver de Conectar, Tus
+   * gustos o Moderación) el guardián `showInitialLoader || sonoEntrada`
+   * dejaba pasar igualmente: sonoEntrada.current nace en false en cada
+   * instancia nueva. Resultado: sonaba playEntrada() justo encima del
+   * playToggle() del propio clic en el menú, y los dos se mezclaban.
+   *
+   * Con eraCargaInicial fijado en el primer render de ESTA instancia, un
+   * remontaje que nunca tuvo pantalla de carga (porque ya se enseñó
+   * antes en esta misma pestaña) no puede disparar el sonido de entrada
+   * nunca, por mucho que se navegue de un lado a otro.
+   */
+  const eraCargaInicial = useRef(showInitialLoader);
   const sonoEntrada = useRef(false);
   useEffect(() => {
+    if (!eraCargaInicial.current) return;
     if (showInitialLoader || sonoEntrada.current) return;
     sonoEntrada.current = true;
     playEntrada();

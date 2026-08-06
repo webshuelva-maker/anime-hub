@@ -23,6 +23,29 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v196",
+    fecha: "2026-08-06",
+    titulo: "Panel de denuncias para moderación",
+    intro:
+      "Antes las denuncias se podían crear desde Conectar pero nadie las leía desde la app. Ahora sí.",
+    puntos: [
+      "Nueva sección \"Denuncias\" en Moderación: motivo, quién denuncia y a quién, y la conversación de por medio si la hay (incluidas notas de voz, y los mensajes que se hayan borrado — para esto se guardaban).",
+      "Se puede sancionar directamente desde la propia denuncia, sin ir a buscar a la persona aparte.",
+      "Cada denuncia se puede marcar como resuelta o descartada, con una nota para el historial.",
+      "Aviso en el momento cuando entra una denuncia nueva, aunque el panel esté plegado.",
+    ],
+  },
+  {
+    version: "v195",
+    fecha: "2026-08-06",
+    titulo: "Borrar mensajes en Conectar, y dos arreglos de sonido",
+    puntos: [
+      "En Conectar ya puedes eliminar un mensaje: para ti solo, o para todos si es tuyo (se enseña como \"Mensaje eliminado\", pero el contenido no desaparece de verdad de la base — sigue existiendo por si hace falta para una denuncia).",
+      "Arreglado el choque de dos sonidos a la vez al entrar en Noticias desde cualquier otro apartado.",
+      "El volumen máximo de la música de fondo suena más alto que antes.",
+    ],
+  },
+  {
     version: "v194",
     fecha: "2026-08-06",
     titulo: "El sonido de desplegar en todas partes, y volumen para la música",

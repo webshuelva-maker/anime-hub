@@ -41,6 +41,8 @@ export interface Coincidencia {
   avatar_id: string | null;
   desde: string;
   ultimo_texto: string | null;
+  ultimo_es_nota: boolean;
+  ultimo_eliminado: boolean;
   ultimo_en: string | null;
   sin_leer: number;
 }
@@ -57,6 +59,9 @@ export interface Mensaje {
   /** Ruta dentro del cubo privado, si el mensaje es una nota de voz. */
   audio_ruta: string | null;
   audio_ms: number | null;
+  /** Si no es null, el mensaje se borró "para todos": se enseña como
+   *  "Mensaje eliminado" en vez de su contenido real. */
+  eliminado_en: string | null;
 }
 
 export interface Reaccion {
@@ -227,12 +232,27 @@ export async function mensajesCon(otro: string): Promise<Mensaje[]> {
   const { data } = await supabase
     .from("social_messages")
     .select(
-      "id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a, audio_ruta, audio_ms"
+      "id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a, audio_ruta, audio_ms, eliminado_en"
     )
     .eq("usuario_a", a)
     .eq("usuario_b", b)
     .order("creado_en", { ascending: true });
-  return (data as Mensaje[]) ?? [];
+
+  const mensajes = (data as Mensaje[]) ?? [];
+  if (mensajes.length === 0) return mensajes;
+
+  // Lo que he ocultado "para mí" no debe volver a aparecer, ni en esta
+  // conversación ni citado como respuesta a otro mensaje.
+  const { data: ocultos } = await supabase
+    .from("social_message_hidden")
+    .select("mensaje_id")
+    .eq("usuario_id", auth.user.id)
+    .in(
+      "mensaje_id",
+      mensajes.map((m) => m.id)
+    );
+  const idsOcultos = new Set((ocultos ?? []).map((o) => o.mensaje_id as string));
+  return idsOcultos.size === 0 ? mensajes : mensajes.filter((m) => !idsOcultos.has(m.id));
 }
 
 /** Devuelve el error en texto, o null si se envió. */
@@ -275,6 +295,39 @@ export async function marcarConversacionLeida(otro: string): Promise<void> {
 }
 
 /**
+ * Borra un mensaje "para mí": deja de aparecer en mi pantalla, sin tocar
+ * la fila ni afectar a lo que ve la otra persona. Es un gusto personal,
+ * no un borrado de verdad — por eso no hace falta ser el autor.
+ */
+export async function ocultarMensajeParaMi(mensajeId: string): Promise<boolean> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return false;
+  const { error } = await supabase
+    .from("social_message_hidden")
+    .insert({ mensaje_id: mensajeId, usuario_id: auth.user.id });
+  // Si ya estaba oculto (choque con la clave primaria), el resultado es
+  // el mismo que si hubiera funcionado: sigue sin verse.
+  return !error || error.code === "23505";
+}
+
+/**
+ * Borra un mensaje "para todos": solo funciona con TUS propios mensajes.
+ * El texto no desaparece de la base de datos — se marca como eliminado
+ * y la conversación lo enseña como "Mensaje eliminado" a los dos. Si el
+ * mensaje ya estaba eliminado o no es tuyo, el servidor simplemente no
+ * hace nada (la política del RPC lo filtra).
+ */
+export async function eliminarMensajeParaTodos(mensajeId: string): Promise<boolean> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("eliminar_mensaje_para_todos", {
+    objetivo: mensajeId,
+  });
+  if (error) return false;
+  return data === true;
+}
+
+/**
  * Se engancha a una conversación: mensajes nuevos, quién está delante y
  * quién está escribiendo. Devuelve con qué avisar de que TÚ escribes, y
  * cómo desengancharse.
@@ -299,6 +352,9 @@ export function engancharConversacion(
   otro: string,
   manejadores: {
     alLlegarMensaje: (m: Mensaje) => void;
+    /** Un mensaje ya existente cambia — de momento, solo pasa cuando se
+     *  borra "para todos" (eliminado_en pasa de null a una fecha). */
+    alCambiarMensaje: (m: Mensaje) => void;
     alCambiarPresencia: (enLinea: boolean) => void;
     alEscribirElOtro: () => void;
   }
@@ -324,6 +380,19 @@ export function engancharConversacion(
         // El filtro del canal solo admite una columna, así que la otra
         // mitad de la pareja se comprueba aquí.
         if (m.usuario_b === b) manejadores.alLlegarMensaje(m);
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "social_messages",
+        filter: `usuario_a=eq.${a}`,
+      },
+      (payload) => {
+        const m = payload.new as Mensaje;
+        if (m.usuario_b === b) manejadores.alCambiarMensaje(m);
       }
     )
     .on("presence", { event: "sync" }, () => {
@@ -549,7 +618,10 @@ export interface ResultadoBusqueda {
  * desde fuera.
  *
  * Las notas de voz no aparecen: no hay texto que buscar. Se dice en la
- * pantalla para que nadie piense que se le ha perdido algo.
+ * pantalla para que nadie piense que se le ha perdido algo. Los mensajes
+ * eliminados "para todos" tampoco: seguir pudiendo encontrarlos por
+ * búsqueda sería un borrado a medias. Y los que he ocultado "para mí" se
+ * quitan después, igual que en mensajesCon.
  */
 export async function buscarEnMensajes(termino: string): Promise<ResultadoBusqueda[]> {
   const limpio = termino.trim();
@@ -562,15 +634,31 @@ export async function buscarEnMensajes(termino: string): Promise<ResultadoBusque
   const { data } = await supabase
     .from("social_messages")
     .select("id, usuario_a, usuario_b, autor_id, texto, creado_en")
+    .is("eliminado_en", null)
     .ilike("texto", `%${limpio.replace(/[%_]/g, "")}%`)
     .order("creado_en", { ascending: false })
     .limit(40);
 
-  return ((data as Mensaje[]) ?? []).map((m) => ({
-    mensaje_id: m.id,
-    con_user_id: m.usuario_a === auth.user!.id ? m.usuario_b : m.usuario_a,
-    texto: m.texto,
-    creado_en: m.creado_en,
-    mio: m.autor_id === auth.user!.id,
-  }));
+  const mensajes = (data as Mensaje[]) ?? [];
+  if (mensajes.length === 0) return [];
+
+  const { data: ocultos } = await supabase
+    .from("social_message_hidden")
+    .select("mensaje_id")
+    .eq("usuario_id", auth.user.id)
+    .in(
+      "mensaje_id",
+      mensajes.map((m) => m.id)
+    );
+  const idsOcultos = new Set((ocultos ?? []).map((o) => o.mensaje_id as string));
+
+  return mensajes
+    .filter((m) => !idsOcultos.has(m.id))
+    .map((m) => ({
+      mensaje_id: m.id,
+      con_user_id: m.usuario_a === auth.user!.id ? m.usuario_b : m.usuario_a,
+      texto: m.texto,
+      creado_en: m.creado_en,
+      mio: m.autor_id === auth.user!.id,
+    }));
 }

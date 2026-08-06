@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AvisosPushToggle } from "./AvisosPushToggle";
 import { SancionesPanel } from "./SancionesPanel";
 import { ModeracionMiembros } from "./ModeracionMiembros";
+import { DenunciasPanel } from "./DenunciasPanel";
 import { playReceive, playSend } from "@/lib/sound";
 import {
   Ticket,
@@ -177,6 +178,10 @@ export function AdminSupportPanel() {
           Va plegado: la mayoría de las veces se entra aquí a contestar
           consultas, no a buscar gente. */}
       <ModeracionMiembros />
+
+      {/* Denuncias creadas desde Conectar. También plegado, y con su
+          propio aviso en vivo cuando entra una nueva. */}
+      <DenunciasPanel />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
       {/* Lista de tickets */}

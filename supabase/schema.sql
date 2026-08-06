@@ -1401,9 +1401,11 @@ create policy "Escribir en mis conversaciones"
     and public.puede_escribir(usuario_a, usuario_b)
   );
 
--- Nadie edita ni borra mensajes, ni los suyos: en una conversación entre
--- desconocidos, poder borrar lo que acabas de decir es poder acosar y
--- luego hacer desaparecer la prueba. Si hay denuncia, el mensaje sigue.
+-- Nadie EDITA mensajes, y nadie los borra de verdad de la base de datos
+-- — eso sigue igual. Lo que sí existe (más abajo, v194) es un borrado
+-- controlado por RPC: el autor puede marcar su propio mensaje como
+-- eliminado y que se enseñe como tal a los dos, pero el texto se queda
+-- en la fila por si hace falta para una denuncia.
 
 create or replace function public.marcar_conversacion_leida(otro uuid)
 returns void
@@ -1672,3 +1674,322 @@ alter table public.social_messages add constraint social_messages_contenido chec
   (audio_ruta is not null and char_length(trim(texto)) = 0)
   or char_length(trim(texto)) between 1 and 2000
 );
+
+-- ============================================================
+--  v194 — Borrar mensajes (para mí / para todos)
+-- ============================================================
+-- La regla de arriba sigue en pie: nadie edita ni borra un mensaje de
+-- verdad, porque en una conversación entre desconocidos poder borrar lo
+-- que acabas de decir es poder acosar y hacer desaparecer la prueba.
+-- Esto añade DOS formas de "borrar" que no chocan con eso:
+--
+--  - Para mí: el mensaje deja de aparecer en TU pantalla. Para la otra
+--    persona sigue ahí tal cual, y la fila no se toca — es un gusto de
+--    cada uno, no un borrado real.
+--  - Para todos: solo el propio autor, y solo de sus propios mensajes.
+--    Se enseña como "Mensaje eliminado" a los dos, pero el texto NO se
+--    borra de la fila: se marca con eliminado_en/eliminado_por y se
+--    oculta desde la aplicación. Si hay una denuncia de por medio, el
+--    contenido real sigue existiendo para quien tenga que revisarla.
+
+alter table public.social_messages
+  add column if not exists eliminado_en timestamptz,
+  add column if not exists eliminado_por uuid references auth.users on delete set null;
+
+-- RPC en vez de una política de UPDATE abierta a propósito: así solo se
+-- puede tocar eliminado_en/eliminado_por, nunca el texto ni el audio de
+-- un mensaje ya enviado, así alguien manipule la petición a mano.
+create or replace function public.eliminar_mensaje_para_todos(objetivo uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  update public.social_messages
+     set eliminado_en = now(),
+         eliminado_por = auth.uid()
+   where id = objetivo
+     and autor_id = auth.uid()
+     and eliminado_en is null
+  returning true;
+$$;
+
+-- "Para mí": una fila por persona que oculta un mensaje concreto de su
+-- propia vista. Solo se puede ocultar un mensaje de una conversación en
+-- la que de verdad se participa — comprobado en la propia política, no
+-- solo confiando en lo que mande el cliente.
+create table if not exists public.social_message_hidden (
+  mensaje_id uuid references public.social_messages on delete cascade not null,
+  usuario_id uuid references auth.users on delete cascade not null,
+  oculto_en timestamptz default now() not null,
+  primary key (mensaje_id, usuario_id)
+);
+
+alter table public.social_message_hidden enable row level security;
+
+drop policy if exists "Ocultar mensajes de mis conversaciones" on public.social_message_hidden;
+create policy "Ocultar mensajes de mis conversaciones"
+  on public.social_message_hidden for insert
+  with check (
+    auth.uid() = usuario_id
+    and exists (
+      select 1 from public.social_messages m
+      where m.id = mensaje_id and auth.uid() in (m.usuario_a, m.usuario_b)
+    )
+  );
+
+drop policy if exists "Ver lo que he ocultado" on public.social_message_hidden;
+create policy "Ver lo que he ocultado"
+  on public.social_message_hidden for select
+  using (auth.uid() = usuario_id);
+
+drop policy if exists "Deshacer ocultar" on public.social_message_hidden;
+create policy "Deshacer ocultar"
+  on public.social_message_hidden for delete
+  using (auth.uid() = usuario_id);
+
+do $$
+begin
+  alter publication supabase_realtime add table public.social_message_hidden;
+exception when duplicate_object then null;
+end $$;
+
+-- mis_coincidencias() tiene que dejar de contar como "último mensaje"
+-- uno que el propio usuario ha ocultado para sí, y decir cuándo el
+-- último es una nota de voz o un "mensaje eliminado" — antes el cliente
+-- lo adivinaba mirando si el texto venía vacío, y un mensaje eliminado
+-- también llega con el texto vacío, así que se confundían.
+drop function if exists public.mis_coincidencias();
+create or replace function public.mis_coincidencias()
+returns table (
+  user_id uuid,
+  alias text,
+  edad int,
+  avatar_id text,
+  desde timestamptz,
+  ultimo_texto text,
+  ultimo_es_nota boolean,
+  ultimo_eliminado boolean,
+  ultimo_en timestamptz,
+  sin_leer int
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.user_id,
+    p.alias,
+    extract(year from age(p.birthdate))::int,
+    p.avatar_id,
+    m.created_at,
+    (select case when ms.eliminado_en is not null then null else ms.texto end
+      from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and not exists (
+          select 1 from public.social_message_hidden h
+          where h.mensaje_id = ms.id and h.usuario_id = auth.uid()
+        )
+      order by ms.creado_en desc limit 1),
+    (select ms.audio_ruta is not null from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and not exists (
+          select 1 from public.social_message_hidden h
+          where h.mensaje_id = ms.id and h.usuario_id = auth.uid()
+        )
+      order by ms.creado_en desc limit 1),
+    (select ms.eliminado_en is not null from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and not exists (
+          select 1 from public.social_message_hidden h
+          where h.mensaje_id = ms.id and h.usuario_id = auth.uid()
+        )
+      order by ms.creado_en desc limit 1),
+    (select ms.creado_en from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and not exists (
+          select 1 from public.social_message_hidden h
+          where h.mensaje_id = ms.id and h.usuario_id = auth.uid()
+        )
+      order by ms.creado_en desc limit 1),
+    (select count(*)::int from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and ms.autor_id <> auth.uid() and ms.leido_en is null
+        and not exists (
+          select 1 from public.social_message_hidden h
+          where h.mensaje_id = ms.id and h.usuario_id = auth.uid()
+        )
+    )
+  from public.social_matches m
+  join public.social_profiles p
+    on p.user_id = case when m.usuario_a = auth.uid() then m.usuario_b else m.usuario_a end
+  where auth.uid() in (m.usuario_a, m.usuario_b)
+    and p.is_active
+    and not exists (
+      select 1 from public.social_blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = p.user_id)
+         or (b.blocker_id = p.user_id and b.blocked_id = auth.uid())
+    )
+  order by coalesce(
+    (select ms.creado_en from public.social_messages ms
+      where ms.usuario_a = m.usuario_a and ms.usuario_b = m.usuario_b
+        and not exists (
+          select 1 from public.social_message_hidden h
+          where h.mensaje_id = ms.id and h.usuario_id = auth.uid()
+        )
+      order by ms.creado_en desc limit 1),
+    m.created_at
+  ) desc;
+$$;
+
+-- ============================================================
+--  v196 — Panel de moderación para leer las denuncias
+-- ============================================================
+-- Hasta ahora una denuncia se podía crear pero nadie la leía desde la
+-- app: la única manera de verla era entrar a mano en Supabase. Esto
+-- completa el círculo: quien administra puede leerlas, ver la
+-- conversación de por medio (si la hay), sancionar desde ahí mismo, y
+-- dejar la denuncia como resuelta o descartada.
+
+alter table public.social_reports
+  add column if not exists resolucion text,
+  add column if not exists resuelto_por uuid references auth.users on delete set null,
+  add column if not exists resuelto_en timestamptz;
+
+-- El estado ya existía ('pendiente' por defecto). Se cierra el
+-- vocabulario para que el panel no tenga que adivinar qué valores puede
+-- llegar a ver.
+alter table public.social_reports drop constraint if exists social_reports_status_check;
+alter table public.social_reports add constraint social_reports_status_check
+  check (status in ('pendiente', 'resuelta', 'descartada'));
+
+-- Leer y resolver denuncias es cosa de administración. La política de
+-- inserción (arriba del todo, v93) se queda igual: cualquiera crea las
+-- suyas, pero nadie las lee salvo quien modera.
+drop policy if exists "Los administradores leen las denuncias" on public.social_reports;
+create policy "Los administradores leen las denuncias"
+  on public.social_reports for select
+  using (public.es_admin());
+
+drop policy if exists "Los administradores resuelven denuncias" on public.social_reports;
+create policy "Los administradores resuelven denuncias"
+  on public.social_reports for update
+  using (public.es_admin())
+  with check (public.es_admin());
+
+-- La ficha del chat ya avisa de que "lo revisa una persona del equipo
+-- de moderación, que podrá leer esta conversación" (ver ChatConversacion,
+-- botón Denunciar). Sin esta política esa frase era falsa: denunciar no
+-- daba acceso a nada. Es deliberadamente amplia (cualquier administrador
+-- puede leer cualquier conversación, no solo las denunciadas) porque en
+-- un proyecto con un único administrador de confianza, acotarlo más no
+-- añade seguridad real y sí mucha complejidad.
+drop policy if exists "Los administradores leen conversaciones denunciadas" on public.social_messages;
+create policy "Los administradores leen conversaciones denunciadas"
+  on public.social_messages for select
+  using (public.es_admin());
+
+-- Lo mismo para las notas de voz citadas en una denuncia: sin esto, la
+-- fila del mensaje se vería pero el audio no se podría reproducir.
+drop policy if exists "Los administradores oyen notas de conversaciones denunciadas" on storage.objects;
+create policy "Los administradores oyen notas de conversaciones denunciadas"
+  on storage.objects for select
+  using (bucket_id = 'notas-voz' and public.es_admin());
+
+-- Lista de denuncias con el alias de quien denuncia y de quien es
+-- denunciado ya resueltos, y si existe una conversación entre los dos
+-- que se pueda abrir. Mismo patrón que listar_miembros: corta en seco
+-- si quien pregunta no es administrador.
+create or replace function public.listar_denuncias(
+  incluir_resueltas boolean default false,
+  limite int default 100
+)
+returns table (
+  id uuid,
+  created_at timestamptz,
+  reporter_id uuid,
+  reporter_alias text,
+  reported_id uuid,
+  reported_alias text,
+  reason text,
+  details text,
+  status text,
+  resolucion text,
+  resuelto_en timestamptz,
+  hay_conversacion boolean
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.es_admin() then
+    raise exception 'Solo el equipo de moderación puede consultar las denuncias'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  return query
+  select
+    r.id,
+    r.created_at,
+    r.reporter_id,
+    rp.alias,
+    r.reported_id,
+    dp.alias,
+    r.reason,
+    r.details,
+    r.status,
+    r.resolucion,
+    r.resuelto_en,
+    r.reporter_id is not null and exists (
+      select 1 from public.social_matches m
+      where m.usuario_a = least(r.reporter_id, r.reported_id)
+        and m.usuario_b = greatest(r.reporter_id, r.reported_id)
+    )
+  from public.social_reports r
+  left join public.social_profiles rp on rp.user_id = r.reporter_id
+  left join public.social_profiles dp on dp.user_id = r.reported_id
+  where incluir_resueltas or r.status = 'pendiente'
+  order by (r.status = 'pendiente') desc, r.created_at desc
+  limit greatest(1, least(coalesce(limite, 100), 200));
+end;
+$$;
+
+-- Marca una denuncia como resuelta, descartada, o de vuelta a pendiente
+-- (por si se cierra por error). Va por RPC y no por UPDATE directo desde
+-- el cliente para que resuelto_por y resuelto_en no se puedan falsear.
+create or replace function public.resolver_denuncia(
+  denuncia_id uuid,
+  nuevo_estado text,
+  resolucion_texto text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.es_admin() then
+    raise exception 'Solo el equipo de moderación puede resolver denuncias'
+      using errcode = 'insufficient_privilege';
+  end if;
+  if nuevo_estado not in ('resuelta', 'descartada', 'pendiente') then
+    raise exception 'Estado no reconocido: %', nuevo_estado;
+  end if;
+
+  update public.social_reports
+     set status = nuevo_estado,
+         resolucion = nullif(trim(coalesce(resolucion_texto, '')), ''),
+         resuelto_por = auth.uid(),
+         resuelto_en = case when nuevo_estado = 'pendiente' then null else now() end
+   where id = denuncia_id;
+
+  return found;
+end;
+$$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.social_reports;
+exception when duplicate_object then null;
+end $$;
