@@ -24,7 +24,7 @@ import {
   enviarNotaDeVoz,
   engancharConversacion,
   marcarConversacionLeida,
-  mensajesCon,
+  mensajesConEstado,
   ocultarMensajeParaMi,
 } from "@/lib/conectar";
 
@@ -120,9 +120,12 @@ export function ChatConversacion({
       if (!auth.user || !vivo) return;
       setYo(auth.user.id);
 
-      const historial = await mensajesCon(con.user_id);
+      const { mensajes: historial, error: errorCarga } = await mensajesConEstado(con.user_id);
       if (!vivo) return;
       setMensajes(historial);
+      // Un fallo al cargar NO puede parecer una conversación vacía: son
+      // dos cosas muy distintas y la segunda asusta.
+      if (errorCarga) setFallo(errorCarga);
       setReacciones(await reaccionesDe(historial.map((m) => m.id)));
       setCargando(false);
       void marcarConversacionLeida(con.user_id);
@@ -421,6 +424,17 @@ export function ChatConversacion({
         {cargando ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-xs text-muted">Cargando conversación…</p>
+          </div>
+        ) : mensajes.length === 0 && fallo ? (
+          <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+            <p className="text-sm leading-relaxed text-rumor">{fallo}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="pulsable mt-4 rounded-full border border-panel-border px-4 py-2 text-xs text-muted hover:text-foreground"
+            >
+              Reintentar
+            </button>
           </div>
         ) : mensajes.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">

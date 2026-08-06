@@ -223,23 +223,72 @@ function pareja(yo: string, otro: string): { a: string; b: string } {
   return yo < otro ? { a: yo, b: otro } : { a: otro, b: yo };
 }
 
+/**
+ * Los mensajes de una conversación.
+ *
+ * ---------------------------------------------------------------------
+ * EL FALLO DE "SE BORRAN AL SALIR Y ENTRAR" (v199)
+ *
+ * No se borraba nada. Los mensajes estaban en la base de datos —por eso
+ * la lista de conversaciones seguía enseñando el último—, pero esta
+ * consulta fallaba y devolvía vacío, y como el error se tiraba a la
+ * basura, el chat se pintaba en blanco como si no hubiera nada.
+ *
+ * El motivo del fallo: se piden columnas por su nombre, y si la base de
+ * datos no tiene alguna (porque falta ejecutar el SQL de una versión
+ * nueva), Supabase rechaza la consulta ENTERA. Una columna de más y no
+ * se lee ni un mensaje.
+ *
+ * Ahora se hace de dos formas. Primero se piden todas las columnas; si
+ * eso falla, se reintenta con las básicas, que existen desde la primera
+ * versión. Así una base de datos sin actualizar enseña los mensajes
+ * igual, solo sin las funciones nuevas. Y si aun así falla, se devuelve
+ * el error para poder decirlo en pantalla en vez de fingir que la
+ * conversación está vacía.
+ * ---------------------------------------------------------------------
+ */
 export async function mensajesCon(otro: string): Promise<Mensaje[]> {
+  return (await mensajesConEstado(otro)).mensajes;
+}
+
+const COLUMNAS_COMPLETAS =
+  "id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a, audio_ruta, audio_ms, eliminado_en";
+const COLUMNAS_MINIMAS = "id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en";
+
+export async function mensajesConEstado(
+  otro: string
+): Promise<{ mensajes: Mensaje[]; error: string | null }> {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return [];
+  if (!auth.user) return { mensajes: [], error: null };
   const { a, b } = pareja(auth.user.id, otro);
 
-  const { data } = await supabase
-    .from("social_messages")
-    .select(
-      "id, usuario_a, usuario_b, autor_id, texto, creado_en, leido_en, responde_a, audio_ruta, audio_ms, eliminado_en"
-    )
-    .eq("usuario_a", a)
-    .eq("usuario_b", b)
-    .order("creado_en", { ascending: true });
+  const pedir = (columnas: string) =>
+    supabase
+      .from("social_messages")
+      .select(columnas)
+      .eq("usuario_a", a)
+      .eq("usuario_b", b)
+      .order("creado_en", { ascending: true });
 
-  const mensajes = (data as Mensaje[]) ?? [];
-  if (mensajes.length === 0) return mensajes;
+  const primerIntento = await pedir(COLUMNAS_COMPLETAS);
+  let data = primerIntento.data;
+  const error = primerIntento.error;
+
+  if (error) {
+    // Segundo intento con lo imprescindible.
+    const respaldo = await pedir(COLUMNAS_MINIMAS);
+    data = respaldo.data;
+    if (respaldo.error) {
+      return {
+        mensajes: [],
+        error: `No se han podido cargar los mensajes (${respaldo.error.message.slice(0, 90)}). Puede que falte ejecutar el SQL más reciente en Supabase.`,
+      };
+    }
+  }
+
+  const mensajes = (data as unknown as Mensaje[]) ?? [];
+  if (mensajes.length === 0) return { mensajes, error: null };
 
   // Lo que he ocultado "para mí" no debe volver a aparecer, ni en esta
   // conversación ni citado como respuesta a otro mensaje.
@@ -252,7 +301,10 @@ export async function mensajesCon(otro: string): Promise<Mensaje[]> {
       mensajes.map((m) => m.id)
     );
   const idsOcultos = new Set((ocultos ?? []).map((o) => o.mensaje_id as string));
-  return idsOcultos.size === 0 ? mensajes : mensajes.filter((m) => !idsOcultos.has(m.id));
+  return {
+    mensajes: idsOcultos.size === 0 ? mensajes : mensajes.filter((m) => !idsOcultos.has(m.id)),
+    error: null,
+  };
 }
 
 /** Devuelve el error en texto, o null si se envió. */

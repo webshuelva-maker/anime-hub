@@ -118,6 +118,7 @@ let ctxAudio: AudioContext | null = null;
  */
 let candidatosEnEspera: RTCIceCandidateInit[] = [];
 let temporizadorConexion: ReturnType<typeof setTimeout> | null = null;
+let vigilanteAudio: ReturnType<typeof setInterval> | null = null;
 
 function cancelarEsperaDeConexion() {
   if (temporizadorConexion) {
@@ -343,6 +344,49 @@ async function prepararConexion(otroId: string) {
     }
   };
 
+  /*
+   * ---------------------------------------------------------------------
+   * POR QUÉ SE MIRA SI LLEGAN BYTES (arreglo de "uno dice conectando y el
+   * otro va bien")
+   *
+   * Los avisos del navegador sobre el estado de la conexión son
+   * orientativos y NO son simétricos: pasaba que los dos se oían
+   * perfectamente pero en un lado el navegador nunca llegaba a decir
+   * "connected", así que esa pantalla se quedaba en "conectando" para
+   * siempre mientras la otra funcionaba.
+   *
+   * La única prueba que no admite discusión es que estén llegando datos
+   * de audio. Eso se puede consultar directamente: si los bytes
+   * recibidos suben, hay voz llegando, y punto. No depende de qué
+   * navegador sea ni de cómo interprete los estados.
+   * ---------------------------------------------------------------------
+   */
+  const vigilarAudio = () => {
+    if (vigilanteAudio) return;
+    let bytesAnteriores = 0;
+    vigilanteAudio = setInterval(async () => {
+      if (!pc) return;
+      try {
+        const stats = await pc.getStats();
+        let bytes = 0;
+        stats.forEach((informe) => {
+          if (informe.type === "inbound-rtp" && informe.kind === "audio") {
+            bytes += (informe as unknown as { bytesReceived?: number }).bytesReceived ?? 0;
+          }
+        });
+        if (bytes > bytesAnteriores) {
+          bytesAnteriores = bytes;
+          cancelarEsperaDeConexion();
+          arrancarCronometro();
+          if (info.estado !== "en-curso") cambiar({ estado: "en-curso" });
+        }
+      } catch {
+        // Si no se pueden leer las estadísticas, quedan los avisos del
+        // navegador como antes.
+      }
+    }, 600);
+  };
+
   pc.ontrack = (e) => {
     if (!audioRemoto) {
       audioRemoto = new Audio();
@@ -351,6 +395,7 @@ async function prepararConexion(otroId: string) {
     audioRemoto.srcObject = e.streams[0];
     void audioRemoto.play().catch(() => {});
     medirNivel(e.streams[0]);
+    vigilarAudio();
   };
 
   /*
@@ -512,6 +557,10 @@ export function alternarMicrofono(): boolean {
 function terminar(motivo: string | null) {
   cancelarEsperaDeConexion();
   cerrarCanalSalida();
+  if (vigilanteAudio) {
+    clearInterval(vigilanteAudio);
+    vigilanteAudio = null;
+  }
   if (temporizadorTimbre) {
     clearTimeout(temporizadorTimbre);
     temporizadorTimbre = null;

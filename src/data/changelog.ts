@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v199",
+    fecha: "2026-08-06",
+    titulo: "Los mensajes no se iban a ninguna parte",
+    puntos: [
+      "Arreglado el chat que aparecía vacío al volver a entrar: los mensajes estaban ahí, solo que no se cargaban.",
+      "En una llamada, las dos pantallas dicen lo mismo: si os estáis oyendo, las dos ponen que está en curso.",
+    ],
+  },
+  {
     version: "v198",
     fecha: "2026-08-06",
     titulo: "Las llamadas conectan",
