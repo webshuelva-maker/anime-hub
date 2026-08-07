@@ -74,8 +74,35 @@ if (process.env.NEXT_PUBLIC_TURN_URL) {
   });
 }
 
-/** Cuánto se deja sonar antes de darla por no contestada. */
-const TIMBRE_MS = 35_000;
+/**
+ * Cuánto se deja sonar antes de darla por no contestada.
+ *
+ * Subido de 35 a 50 segundos: ahora al otro le llega un aviso al
+ * teléfono, y entre que lo nota, desbloquea y abre la app se van veinte
+ * segundos largos. Si el timbre se corta antes, el aviso no sirve de
+ * nada.
+ */
+const TIMBRE_MS = 50_000;
+
+/**
+ * Cada cuánto se vuelve a mandar la oferta mientras suena.
+ *
+ * ---------------------------------------------------------------------
+ * ESTO ES LO QUE HACE QUE FUNCIONE CON LA APP CERRADA
+ *
+ * Los mensajes de un canal de Supabase no se guardan: si nadie está
+ * escuchando cuando pasan, se pierden. Por eso hacía falta que la otra
+ * persona estuviera dentro de la app EN EL INSTANTE exacto de la
+ * llamada; si abría un segundo después, no había nada esperándole.
+ *
+ * La solución no es guardar la oferta en ningún sitio, sino repetirla:
+ * mientras suena, se manda una y otra vez. Quien abra la app a media
+ * llamada se pone a escuchar y en dos segundos y medio le llega la
+ * siguiente repetición. Sin base de datos, sin estado que limpiar, y si
+ * el que llama cuelga, las repeticiones paran solas.
+ * ---------------------------------------------------------------------
+ */
+const REPETIR_OFERTA_MS = 2500;
 
 /*
  * Cuánto se espera a que la conexión cuaje una vez aceptada.
@@ -107,6 +134,7 @@ let canalPropio: RealtimeChannel | null = null;
 let miId: string | null = null;
 let cronometro: ReturnType<typeof setInterval> | null = null;
 let temporizadorTimbre: ReturnType<typeof setTimeout> | null = null;
+let repetidorOferta: ReturnType<typeof setInterval> | null = null;
 let medidor: ReturnType<typeof setInterval> | null = null;
 let analizador: AnalyserNode | null = null;
 let ctxAudio: AudioContext | null = null;
@@ -262,6 +290,12 @@ export function dejarDeEscuchar() {
 
 async function manejarSeñal(s: Señal) {
   if (s.tipo === "oferta") {
+    // La oferta llega repetida cada pocos segundos mientras suena. Si ya
+    // se está atendiendo la de esa misma persona, se ignora en silencio:
+    // volver a montar la conexión con cada repetición la rompería.
+    if (info.otroId === s.de && info.estado !== "inactiva" && info.estado !== "terminada") {
+      return;
+    }
     // Si ya se está en otra llamada, se rechaza sin molestar.
     if (info.estado !== "inactiva" && info.estado !== "terminada") {
       void enviarSeñal(s.de, { tipo: "rechazo", de: miId! });
@@ -507,7 +541,26 @@ export async function llamarA(otroId: string, alias: string, avatar: string | nu
 
   const oferta = await pc!.createOffer();
   await pc!.setLocalDescription(oferta);
-  await enviarSeñal(otroId, { tipo: "oferta", de: miId, alias, avatar, sdp: oferta });
+  const señalOferta: Señal = { tipo: "oferta", de: miId, alias, avatar, sdp: oferta };
+  await enviarSeñal(otroId, señalOferta);
+
+  // Se repite mientras suene, para que quien abra la app a media llamada
+  // la encuentre esperándole.
+  repetidorOferta = setInterval(() => {
+    if (info.estado !== "llamando") return;
+    void enviarSeñal(otroId, señalOferta);
+  }, REPETIR_OFERTA_MS);
+
+  /*
+   * Y un golpecito en el hombro por el teléfono, para que se entere aunque
+   * tenga la app cerrada. Si falla no pasa nada: la llamada sigue sonando
+   * igual para quien sí la tenga abierta.
+   */
+  void fetch("/api/push/llamada", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ aQuien: otroId, alias: alias }),
+  }).catch(() => {});
 
   // Si no contesta, se corta sola: dejar sonando indefinidamente es de
   // las cosas que más incomodan de una app de llamadas.
@@ -560,6 +613,10 @@ function terminar(motivo: string | null) {
   if (vigilanteAudio) {
     clearInterval(vigilanteAudio);
     vigilanteAudio = null;
+  }
+  if (repetidorOferta) {
+    clearInterval(repetidorOferta);
+    repetidorOferta = null;
   }
   if (temporizadorTimbre) {
     clearTimeout(temporizadorTimbre);

@@ -23,6 +23,16 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v201",
+    fecha: "2026-08-07",
+    titulo: "Las llamadas te encuentran",
+    puntos: [
+      "Ahora te llega un aviso al móvil aunque tengas la app cerrada, y al abrirla la llamada sigue sonando esperándote.",
+      "El timbre dura más, para dar tiempo a coger el teléfono.",
+      "El botón de omitir vuelve a su esquina en el móvil.",
+    ],
+  },
+  {
     version: "v200",
     fecha: "2026-08-06",
     titulo: "Detalles de llamadas y de la entrada",

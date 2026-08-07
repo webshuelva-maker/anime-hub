@@ -414,8 +414,20 @@ export function FirstLoadOverlay({
               En el flujo normal no puede pasar: si el contenido cabe, el
               botón cabe.
             */
-            style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
-            className="mt-8 flex w-full flex-col items-center gap-2 sm:absolute sm:right-6 sm:mt-0 sm:w-auto sm:items-end"
+            /*
+              Abajo a la derecha en todas las pantallas.
+              
+              Antes se salía de la vista en móvil, y al meterlo en el
+              flujo normal acabó en el centro, que tampoco es su sitio.
+              Vuelve a ir posicionado, pero con dos cambios que son los
+              que arreglan lo de que se saliera: el hueco de abajo se
+              calcula con max() en vez de sumando —sumar el área segura a
+              1,5rem lo empujaba de más en los teléfonos que la
+              declaran— y la caja se ancla también por la derecha, para
+              que el texto de ayuda no la estire hacia fuera.
+            */
+            style={{ bottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+            className="absolute right-4 flex max-w-[70vw] flex-col items-end gap-2 sm:right-6 sm:max-w-none"
             onMouseEnter={() => setSkipHovered(true)}
             onMouseLeave={() => setSkipHovered(false)}
           >
@@ -444,9 +456,10 @@ export function FirstLoadOverlay({
             </motion.button>
 
             {/* En móvil no hay ratón, así que la explicación no puede
-                depender de pasar por encima: se enseña siempre, debajo. */}
-            <p className="max-w-[260px] text-center text-[11px] leading-snug text-muted sm:hidden">
-              Puedes entrar ya; seguir esperando trae más noticias de una sentada.
+                depender de pasar por encima: se enseña siempre, debajo del
+                botón y alineada con él. */}
+            <p className="text-right text-[11px] leading-snug text-muted sm:hidden">
+              Puedes entrar ya
             </p>
           </motion.div>
         )}

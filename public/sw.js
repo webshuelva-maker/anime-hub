@@ -27,6 +27,10 @@ self.addEventListener("push", (event) => {
   }
 
   const titulo = datos.titulo || "Anime Hub";
+  // Una llamada no es un aviso más: suena distinto, no se descarta sola y
+  // trae su propio botón para contestar.
+  const esLlamada = datos.tipo === "llamada";
+
   const opciones = {
     body: datos.cuerpo || "Tienes un aviso nuevo.",
     icon: "/icon-192.png",
@@ -35,7 +39,12 @@ self.addEventListener("push", (event) => {
     // de apilar diez notificaciones del mismo ticket.
     tag: datos.etiqueta || "anime-hub",
     data: { url: datos.url || "/" },
-    vibrate: [80, 40, 80],
+    vibrate: esLlamada ? [200, 100, 200, 100, 200, 100, 200] : [80, 40, 80],
+    // Una llamada se queda en pantalla hasta que se toca: si se
+    // desvaneciera sola, para cuando miras el teléfono ya no está.
+    requireInteraction: esLlamada,
+    renotify: esLlamada,
+    actions: esLlamada ? [{ action: "contestar", title: "Contestar" }] : undefined,
   };
 
   event.waitUntil(self.registration.showNotification(titulo, opciones));
