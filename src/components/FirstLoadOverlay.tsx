@@ -403,8 +403,19 @@ export function FirstLoadOverlay({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
+            /*
+              En móvil va en el flujo normal, debajo del contenido; en
+              pantalla grande, flotando abajo a la derecha.
+              
+              Estaba siempre colocado por posición absoluta contra el
+              borde inferior, y en móvil acababa fuera de la vista: entre
+              el área segura del teléfono, la barra del navegador y la
+              barra inferior de la app, ese borde no es donde uno cree.
+              En el flujo normal no puede pasar: si el contenido cabe, el
+              botón cabe.
+            */
             style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
-            className="absolute right-5 flex flex-col items-end gap-2 sm:right-6"
+            className="mt-8 flex w-full flex-col items-center gap-2 sm:absolute sm:right-6 sm:mt-0 sm:w-auto sm:items-end"
             onMouseEnter={() => setSkipHovered(true)}
             onMouseLeave={() => setSkipHovered(false)}
           >
@@ -415,7 +426,7 @@ export function FirstLoadOverlay({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ duration: 0.25 }}
-                  className="max-w-[190px] rounded-lg border border-panel-border bg-panel px-3 py-2 text-right text-[11px] leading-snug text-muted shadow-lg"
+                  className="hidden max-w-[190px] rounded-lg border border-panel-border bg-panel px-3 py-2 text-right text-[11px] leading-snug text-muted shadow-lg sm:block"
                 >
                   Esperar un poco más trae más noticias, y ya ordenadas según tus gustos
                 </motion.span>
@@ -431,6 +442,12 @@ export function FirstLoadOverlay({
             >
               Omitir →
             </motion.button>
+
+            {/* En móvil no hay ratón, así que la explicación no puede
+                depender de pasar por encima: se enseña siempre, debajo. */}
+            <p className="max-w-[260px] text-center text-[11px] leading-snug text-muted sm:hidden">
+              Puedes entrar ya; seguir esperando trae más noticias de una sentada.
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v200",
+    fecha: "2026-08-06",
+    titulo: "Detalles de llamadas y de la entrada",
+    puntos: [
+      "La pantalla de llamada ya no desaparece de un tirón: se va como llegó.",
+      "El botón de omitir vuelve a verse en el móvil.",
+    ],
+  },
+  {
     version: "v199",
     fecha: "2026-08-06",
     titulo: "Los mensajes no se iban a ninguna parte",

@@ -66,8 +66,26 @@ export function LlamadaDeVoz() {
     if (info.estado === "terminada" && info.motivoFin) playError();
   }, [info.estado, info.motivoFin]);
 
-  if (!enNavegador || info.estado === "inactiva") return null;
+  /*
+   * ---------------------------------------------------------------------
+   * POR QUÉ NO SE SALE ANTES DE TIEMPO (arreglo de la salida sin animar)
+   *
+   * Aquí había un "if (inactiva) return null" justo antes de dibujar. Y
+   * eso, aunque parezca inofensivo, se carga la animación de salida:
+   * AnimatePresence solo puede acompañar a un elemento mientras se va si
+   * SIGUE MONTADO durante la despedida. Devolviendo null se quita todo de
+   * golpe —el AnimatePresence incluido— y no queda nadie para animar
+   * nada. De ahí lo que se veía: "Pepe ha colgado" entraba con su
+   * animación y luego desaparecía de un tirón.
+   *
+   * Ahora el componente se queda siempre montado y es AnimatePresence
+   * quien decide, con la condición dentro. Cuesta un elemento vacío en el
+   * documento y a cambio la pantalla se va como llegó.
+   * ---------------------------------------------------------------------
+   */
+  if (!enNavegador) return null;
 
+  const visible = info.estado !== "inactiva";
   const entrante = info.estado === "entrante";
   const hablando = info.estado === "en-curso";
   const terminada = info.estado === "terminada";
@@ -84,12 +102,22 @@ export function LlamadaDeVoz() {
 
   return createPortal(
     <AnimatePresence>
+      {visible && (
       <motion.div
         key="llamada"
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.3 }}
+        animate={{ opacity: 1, transition: { duration: 0.3 } }}
+        /*
+         * La salida es más larga que la entrada a propósito: una llamada
+         * que se cierra de golpe se siente como un corte, y aquí acaba de
+         * pasar algo —te han colgado— que merece un momento de respiro.
+         * Se aleja un pelín mientras se va, como si se apartara.
+         */
+        exit={{
+          opacity: 0,
+          scale: 1.02,
+          transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] },
+        }}
         className="fixed inset-0 z-[95] flex flex-col items-center justify-center px-6"
         style={{ background: "color-mix(in srgb, var(--background) 97%, transparent)" }}
       >
@@ -225,6 +253,7 @@ export function LlamadaDeVoz() {
           </p>
         )}
       </motion.div>
+      )}
     </AnimatePresence>,
     document.body
   );
