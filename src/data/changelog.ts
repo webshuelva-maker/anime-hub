@@ -23,6 +23,15 @@ export interface EntradaNovedades {
 
 export const NOVEDADES: EntradaNovedades[] = [
   {
+    version: "v202",
+    fecha: "2026-08-07",
+    titulo: "Ahora sí te avisamos",
+    puntos: [
+      "Puedes activar los avisos del móvil desde Conectar: sin ellos, los mensajes y las llamadas solo se notan con la app abierta.",
+      "Las llamadas ya no entran encima de la pantalla de carga: esperan a que termine.",
+    ],
+  },
+  {
     version: "v201",
     fecha: "2026-08-07",
     titulo: "Las llamadas te encuentran",

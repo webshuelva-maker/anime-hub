@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DescubrirPerfiles } from "./DescubrirPerfiles";
 import { MensajesLista } from "./MensajesLista";
+import { InvitacionAvisos } from "./InvitacionAvisos";
 import { playToggle } from "@/lib/sound";
 import { misCoincidencias } from "@/lib/conectar";
 
@@ -110,7 +111,13 @@ export function ConectarShell({ perfil }: { perfil: ReactNode }) {
         ))}
       </div>
 
+      {/* Se pide aquí, con las conversaciones delante: nada más entrar en
+          la app la pregunta no se entiende y se responde que no. */}
       <div className="mt-6">
+        <InvitacionAvisos />
+      </div>
+
+      <div className="mt-2">
         <AnimatePresence mode="wait">
           <motion.div
             key={pestana}

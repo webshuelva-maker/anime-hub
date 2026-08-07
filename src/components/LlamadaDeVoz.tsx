@@ -16,6 +16,7 @@ import {
   rechazarLlamada,
 } from "@/lib/llamadas";
 import { createClient } from "@/lib/supabase/client";
+import { cuandoLaAppEsteLista } from "@/lib/arranque";
 import { playError, playToggle } from "@/lib/sound";
 import { vibrar } from "@/lib/haptics";
 
@@ -46,16 +47,30 @@ export function LlamadaDeVoz() {
 
   useEffect(() => escucharLlamada(setInfo), []);
 
-  // Ponerse a la escucha en cuanto haya sesión.
+  /*
+   * A la escucha SOLO cuando la app ha terminado de arrancar, más un
+   * segundo de margen.
+   *
+   * Una llamada ocupa la pantalla entera, y si entra encima de la
+   * pantalla de carga son dos cosas peleándose por el mismo sitio. No se
+   * pierde ninguna por esperar: quien llama repite la oferta cada dos
+   * segundos y medio, así que la que estuviera sonando llega igual en
+   * cuanto se empieza a escuchar.
+   */
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
     let vivo = true;
-    (async () => {
-      const { data } = await createClient().auth.getUser();
-      if (data.user && vivo) ponerseAlaEscucha(data.user.id);
-    })();
+
+    const cancelar = cuandoLaAppEsteLista(() => {
+      void (async () => {
+        const { data } = await createClient().auth.getUser();
+        if (data.user && vivo) ponerseAlaEscucha(data.user.id);
+      })();
+    }, 1000);
+
     return () => {
       vivo = false;
+      cancelar();
     };
   }, []);
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { marcarCargaEnCurso, marcarCargaTerminada } from "@/lib/arranque";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ANIME_TRIVIA } from "@/lib/trivia";
@@ -208,6 +209,9 @@ export function FirstLoadOverlay({
 
   const cerrar = useCallback(() => {
     document.documentElement.classList.remove("arrancando");
+    // Avisa a quien espere a que la app esté lista: por ejemplo las
+    // llamadas, que no deben entrar encima de esta pantalla.
+    marcarCargaTerminada();
     onCompleteRef.current();
   }, []);
 
@@ -294,6 +298,12 @@ export function FirstLoadOverlay({
   }, []);
 
   const [skipHovered, setSkipHovered] = useState(false);
+
+  // Se avisa de que hay carga en curso en cuanto se monta, para que quien
+  // espere sepa que efectivamente hay algo por lo que esperar.
+  useEffect(() => {
+    marcarCargaEnCurso();
+  }, []);
 
   return (
     <motion.div
